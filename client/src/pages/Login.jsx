@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { StickyNote, Brain, MousePointer2, Eye, EyeOff, Send, Loader2 } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { StickyNote, Brain, Eye, EyeOff, Loader2, Sparkles } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -52,12 +52,24 @@ export default function Login() {
         initial={{ x: -60, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ type: 'spring', stiffness: 200, damping: 28 }}
-        className="hidden lg:flex relative w-1/2 flex-col justify-between bg-[#171448] p-10 xl:p-14 overflow-hidden"
+        className="hidden lg:flex relative w-1/2 flex-col justify-between bg-[#151327] p-10 xl:p-14 overflow-hidden"
       >
+        <div className="absolute inset-0 mesh-aurora opacity-70 pointer-events-none" style={{ '--color-primary-container': '#3b2f8f', '--color-secondary-container': '#14544c', '--color-tertiary-container': '#7f3a2d' }} />
+        <div className="absolute inset-0 bg-gradient-to-br from-[#2a1d6b]/40 via-transparent to-[#0f0d1c] pointer-events-none" />
+        <div className="absolute inset-0 opacity-[0.04] pointer-events-none" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")', backgroundSize: '200px 200px' }} />
+
         <div className="relative z-10 max-w-[28rem]">
-          <h1 className="font-display text-[2.6rem] leading-[1.1] font-bold text-white tracking-tight">
-            Master your craft <br />
-            <span className="text-primary-container">together.</span>
+          <div className="flex items-center gap-2.5 mb-8">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#c3b8ff] to-[#7fd8c9] flex items-center justify-center shadow-lg shadow-black/30">
+              <Sparkles size={18} className="text-[#241877]" />
+            </div>
+            <span className="font-display text-lg font-bold text-white">StudySync</span>
+          </div>
+
+          <h1 className="font-display text-[2.6rem] leading-[1.05] font-bold text-white tracking-tight">
+            Master your craft
+            <br />
+            <span className="text-[#c3b8ff]">together.</span>
           </h1>
           <p className="mt-5 text-sm leading-relaxed text-white/50 max-w-[24rem]">
             An infinite canvas where ideas meet. Collaborate in real-time, study
@@ -69,50 +81,29 @@ export default function Login() {
           <motion.div
             animate={{ y: [0, -6, 0] }}
             transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-            className="w-64 rounded-2xl bg-primary-container p-4 shadow-lg shadow-black/20 -rotate-2"
+            className="w-64 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 p-4 shadow-lg shadow-black/20 -rotate-2"
           >
-            <StickyNote size={16} className="text-on-primary-container/60 mb-2" />
-            <p className="text-xs leading-relaxed font-medium text-on-primary-container">
+            <StickyNote size={16} className="text-[#c3b8ff] mb-2" />
+            <p className="text-xs leading-relaxed font-medium text-white/85">
               Biology Quiz Prep: Focus on cellular respiration tomorrow!
             </p>
           </motion.div>
           <motion.div
             animate={{ y: [0, -8, 0] }}
             transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 1.2 }}
-            className="w-64 rounded-2xl bg-tertiary-container p-4 shadow-lg shadow-black/20 rotate-2 ml-10"
+            className="w-64 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 p-4 shadow-lg shadow-black/20 rotate-2 ml-10"
           >
-            <Brain size={16} className="text-on-tertiary-container/60 mb-2" />
-            <p className="text-xs leading-relaxed font-medium text-on-tertiary-container">
+            <Brain size={16} className="text-[#7fd8c9] mb-2" />
+            <p className="text-xs leading-relaxed font-medium text-white/85">
               Brainstorming session for the final project at 4PM.
             </p>
           </motion.div>
         </div>
 
-        <motion.div
-          animate={{ x: [0, 14, -6, 0], y: [0, -10, 6, 0] }}
-          transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
-          className="absolute top-48 right-24 z-20"
-        >
-          <MousePointer2 size={18} className="text-secondary -rotate-12" fill="currentColor" />
-          <span className="mt-1 inline-block rounded-full bg-secondary px-2.5 py-0.5 text-[10px] font-semibold text-white">
-            Alex M.
-          </span>
-        </motion.div>
-        <motion.div
-          animate={{ x: [0, -10, 12, 0], y: [0, 8, -8, 0] }}
-          transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut', delay: 0.8 }}
-          className="absolute top-72 right-48 z-20"
-        >
-          <MousePointer2 size={18} className="text-[#FF4262] rotate-12" fill="currentColor" />
-          <span className="mt-1 inline-block rounded-full bg-[#FF4262] px-2.5 py-0.5 text-[10px] font-semibold text-white">
-            Sarah K.
-          </span>
-        </motion.div>
-
         <div className="relative z-10 flex items-center gap-3">
           <div className="flex -space-x-2">
             {['A', 'M', 'K'].map((init, i) => (
-              <div key={i} className="w-8 h-8 rounded-full border-2 border-[#171448] bg-secondary-container flex items-center justify-center text-[10px] font-bold text-on-secondary-container font-display">
+              <div key={i} className="w-8 h-8 rounded-full border-2 border-[#151327] bg-gradient-to-br from-[#c3b8ff] to-[#7fd8c9] flex items-center justify-center text-[10px] font-bold text-[#151327] font-display">
                 {init}
               </div>
             ))}
@@ -122,8 +113,8 @@ export default function Login() {
           </p>
         </div>
 
-        <div className="absolute bottom-0 left-0 w-72 h-72 bg-primary-container/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute top-20 right-10 w-40 h-40 bg-tertiary/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-72 h-72 bg-[#c3b8ff]/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-20 right-10 w-40 h-40 bg-[#7fd8c9]/10 rounded-full blur-3xl pointer-events-none" />
       </motion.div>
 
       {/* Right panel — form */}
@@ -136,18 +127,18 @@ export default function Login() {
         <div className="absolute inset-0 dot-grid opacity-30 pointer-events-none" />
 
         <div className="relative z-10 w-full max-w-[24rem]">
-          <div className="flex items-center gap-2.5 mb-10">
-            <div className="w-9 h-9 rounded-xl bg-primary-container flex items-center justify-center">
-              <Send size={18} className="text-on-primary-container" />
+          <div className="flex items-center gap-2.5 mb-10 lg:hidden">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-tertiary flex items-center justify-center">
+              <Sparkles size={18} className="text-on-primary" />
             </div>
             <span className="font-display text-lg font-bold text-on-surface">StudySync</span>
           </div>
 
-          <div className="relative flex w-full rounded-full bg-surface-container-high p-1 mb-8">
+          <div className="relative flex w-full rounded-full bg-surface-container-high p-1 mb-8 hairline">
             <motion.div
               layout
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-              className="absolute top-1 bottom-1 w-[calc(50%-2px)] rounded-full bg-primary-container shadow-sm"
+              className="absolute top-1 bottom-1 w-[calc(50%-2px)] rounded-full bg-gradient-to-r from-primary to-tertiary shadow-sm"
               style={{ left: isLogin ? '4px' : 'calc(50% + 0px)' }}
             />
             {['Sign In', 'Create Account'].map((tab, i) => (
@@ -156,7 +147,7 @@ export default function Login() {
                 onClick={() => { setIsLogin(i === 0); setError('') }}
                 className="relative z-10 flex-1 py-2 text-sm font-semibold rounded-full transition-colors"
               >
-                <span className={isLogin === (i === 0) ? 'text-on-primary-container' : 'text-on-surface/50'}>
+                <span className={isLogin === (i === 0) ? 'text-on-primary' : 'text-on-surface/50'}>
                   {tab}
                 </span>
               </button>
@@ -216,7 +207,7 @@ export default function Login() {
               {!isLogin && (
                 <motion.div variants={fieldVariants}>
                   <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Full Name</label>
-                  <div className="flex items-center rounded-2xl border border-outline-variant/50 bg-surface-container-lowest px-4 py-3 transition-all focus-within:border-primary-container focus-within:shadow-[0_0_0_3px_rgba(255,208,47,0.15)]">
+                  <div className="flex items-center rounded-2xl border border-outline-variant/50 bg-surface-container-lowest px-4 py-3 transition-all focus-within:border-primary focus-within:shadow-[0_0_0_3px_rgba(91,70,214,0.15)]">
                     <input
                       type="text"
                       value={name}
@@ -230,7 +221,7 @@ export default function Login() {
 
               <motion.div variants={fieldVariants}>
                 <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Email</label>
-                <div className="flex items-center rounded-2xl border border-outline-variant/50 bg-surface-container-lowest px-4 py-3 transition-all focus-within:border-primary-container focus-within:shadow-[0_0_0_3px_rgba(255,208,47,0.15)]">
+                <div className="flex items-center rounded-2xl border border-outline-variant/50 bg-surface-container-lowest px-4 py-3 transition-all focus-within:border-primary focus-within:shadow-[0_0_0_3px_rgba(91,70,214,0.15)]">
                   <input
                     type="email"
                     value={email}
@@ -243,7 +234,7 @@ export default function Login() {
 
               <motion.div variants={fieldVariants}>
                 <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Password</label>
-                <div className="flex items-center rounded-2xl border border-outline-variant/50 bg-surface-container-lowest px-4 py-3 transition-all focus-within:border-primary-container focus-within:shadow-[0_0_0_3px_rgba(255,208,47,0.15)]">
+                <div className="flex items-center rounded-2xl border border-outline-variant/50 bg-surface-container-lowest px-4 py-3 transition-all focus-within:border-primary focus-within:shadow-[0_0_0_3px_rgba(91,70,214,0.15)]">
                   <input
                     type={showPw ? 'text' : 'password'}
                     value={password}
@@ -275,7 +266,7 @@ export default function Login() {
                   disabled={submitting}
                   whileHover={{ scale: 1.005 }}
                   whileTap={{ scale: 0.985 }}
-                  className="w-full py-3 rounded-2xl bg-primary-container text-on-primary-fixed text-sm font-semibold overflow-hidden shadow-sm hover:shadow-md transition-shadow flex items-center justify-center gap-2 disabled:opacity-60"
+                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-primary to-tertiary text-on-primary text-sm font-semibold overflow-hidden shadow-lg shadow-primary/20 hover:shadow-primary/35 transition-shadow flex items-center justify-center gap-2 disabled:opacity-60"
                 >
                   {submitting ? <Loader2 size={16} className="animate-spin" /> : null}
                   {isLogin ? 'Sign In' : 'Create Account'}

@@ -113,7 +113,7 @@ export default function Home() {
         <div className="grid grid-cols-12 gap-6">
           {/* Whiteboard Preview */}
           <motion.div
-            className="col-span-12 lg:col-span-8 bg-white rounded-3xl border border-outline-variant/30 overflow-hidden shadow-sm"
+            className="col-span-12 lg:col-span-8 bg-surface-container-low rounded-3xl hairline overflow-hidden shadow-sm"
             initial={{ opacity: 0, y: 32 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-60px' }}
@@ -121,7 +121,7 @@ export default function Home() {
           >
             <div className="canvas-grid h-72 md:h-96 relative p-6">
               {/* Floating toolbar */}
-              <div className="absolute top-6 left-1/2 -translate-x-1/2 flex gap-1 bg-white rounded-2xl shadow-md px-2 py-1 border border-outline-variant/20">
+              <div className="absolute top-6 left-1/2 -translate-x-1/2 flex gap-1 bg-surface-container-low rounded-2xl shadow-md px-2 py-1 hairline">
                 {[Pencil, Type, Square, StickyNote].map((Icon, i) => (
                   <button
                     key={i}
@@ -158,8 +158,8 @@ export default function Home() {
                 {['JS', 'AM', 'Me'].map((init, i) => (
                   <div
                     key={init}
-                    className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white ring-2 ring-white ${
-                      i === 0 ? 'bg-tertiary' : i === 1 ? 'bg-green-400' : 'bg-primary'
+                    className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white ring-2 ring-surface ${
+                      i === 0 ? 'bg-tertiary' : i === 1 ? 'bg-secondary' : 'bg-primary'
                     }`}
                   >
                     {init}
@@ -173,7 +173,7 @@ export default function Home() {
           <div className="col-span-12 lg:col-span-4 flex flex-col gap-6">
             {/* Chat Preview */}
             <motion.div
-              className="bg-white rounded-3xl border border-outline-variant/30 p-6 shadow-sm flex-1 flex flex-col"
+              className="bg-surface-container-low rounded-3xl hairline p-6 shadow-sm flex-1 flex flex-col"
               initial={{ opacity: 0, y: 32 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: '-60px' }}
@@ -236,7 +236,7 @@ export default function Home() {
           {features.map((feat, i) => (
             <motion.div
               key={feat.title}
-              className="bg-white border border-outline-variant/30 rounded-3xl p-8 group cursor-default"
+              className="bg-surface-container-low hairline rounded-3xl p-8 group cursor-default"
               initial={{ opacity: 0, y: 24 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: '-40px' }}

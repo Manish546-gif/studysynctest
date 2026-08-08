@@ -496,8 +496,8 @@ export default function Dashboard() {
               className="fixed inset-0 flex items-center justify-center z-50 p-4"
             >
               <div className="bg-surface rounded-[24px] shadow-2xl w-full max-w-[28rem] p-8 text-center" onClick={(e) => e.stopPropagation()}>
-                <div className="w-16 h-16 rounded-2xl bg-green-100 flex items-center justify-center mx-auto mb-4">
-                  <Check size={32} className="text-green-600" />
+                <div className="w-16 h-16 rounded-2xl bg-success-container flex items-center justify-center mx-auto mb-4">
+                  <Check size={32} className="text-on-success-container" />
                 </div>
                 <h2 className="font-display text-lg font-bold text-on-surface mb-1">Room Created!</h2>
                 <p className="text-sm text-on-surface/50 mb-6">Share this code with others to join</p>
@@ -510,7 +510,7 @@ export default function Dashboard() {
                       onClick={copyCode}
                       className="w-10 h-10 rounded-xl flex items-center justify-center bg-surface-container-high text-on-surface/60 hover:text-on-surface transition-colors"
                     >
-                      {codeCopied ? <Check size={18} className="text-green-600" /> : <Copy size={18} />}
+                      {codeCopied ? <Check size={18} className="text-on-success-container" /> : <Copy size={18} />}
                     </button>
                   </div>
                 </div>

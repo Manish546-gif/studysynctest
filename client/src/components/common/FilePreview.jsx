@@ -48,7 +48,7 @@ function formatTime(value) {
 function FileIcon({ category, size = 20 }) {
   if (category === 'image') return <Image size={size} className="text-blue-500" />
   if (category === 'pdf') return <FileText size={size} className="text-red-500" />
-  if (category === 'text') return <FileText size={size} className="text-green-600" />
+  if (category === 'text') return <FileText size={size} className="text-success" />
   return <File size={size} className="text-on-surface/40" />
 }
 

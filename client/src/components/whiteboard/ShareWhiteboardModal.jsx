@@ -103,7 +103,7 @@ export default function ShareWhiteboardModal({ board, onClose }) {
               </button>
             </form>
             {message && (
-              <p className={`text-xs mt-2 ${status === 'error' ? 'text-error' : 'text-green-600'}`}>{message}</p>
+              <p className={`text-xs mt-2 ${status === 'error' ? 'text-error' : 'text-success'}`}>{message}</p>
             )}
           </div>
 

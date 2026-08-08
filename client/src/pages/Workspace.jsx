@@ -231,7 +231,7 @@ export default function Workspace() {
         >
           <KeyRound size={13} />
           <span className="font-mono tracking-widest">{room.code}</span>
-          {codeCopied ? <Check size={13} className="text-green-600" /> : <Copy size={13} />}
+          {codeCopied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
         </button>
 
         {codeCopied && (
@@ -239,7 +239,7 @@ export default function Workspace() {
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0 }}
-            className="text-xs text-green-600 font-medium"
+            className="text-xs text-success font-medium"
           >
             Copied!
           </motion.span>

@@ -173,7 +173,7 @@ export default function WhiteboardEditor() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           className={`text-xs font-medium ${
-            saveState === 'error' ? 'text-error' : saveState === 'saving' ? 'text-on-surface/40' : 'text-green-600'
+            saveState === 'error' ? 'text-error' : saveState === 'saving' ? 'text-on-surface/40' : 'text-success'
           }`}
         >
           {saveLabel}

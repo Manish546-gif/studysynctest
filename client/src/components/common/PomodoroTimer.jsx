@@ -135,7 +135,7 @@ export default function PomodoroTimer({ isOpen, onToggle }) {
     : 'Ready'
 
   const phaseColor = phase === 'work' || phase === 'paused' ? 'text-primary'
-    : 'text-green-600'
+    : 'text-success'
 
   if (!isOpen) {
     return (
@@ -272,7 +272,7 @@ export default function PomodoroTimer({ isOpen, onToggle }) {
               strokeDasharray={circumference}
               strokeDashoffset={dashOffset}
               className={`transition-all duration-1000 ${
-                phase === 'work' || phase === 'paused' ? 'text-primary' : 'text-green-500'
+                phase === 'work' || phase === 'paused' ? 'text-primary' : 'text-success'
               }`}
             />
           </svg>
@@ -318,7 +318,7 @@ export default function PomodoroTimer({ isOpen, onToggle }) {
           <button
             onClick={phase === 'paused' || phase === 'idle' ? handleStart : handlePause}
             className={`w-14 h-14 rounded-2xl flex items-center justify-center text-on-primary shadow-lg hover:shadow-xl transition-all ${
-              phase === 'work' ? 'bg-primary' : phase === 'paused' ? 'bg-primary' : 'bg-green-600'
+              phase === 'work' ? 'bg-primary' : phase === 'paused' ? 'bg-primary' : 'bg-success'
             }`}
           >
             {phase === 'paused' || phase === 'idle' ? <Play size={22} /> : <Pause size={22} />}

@@ -1,8 +1,8 @@
 const THEME_KEY = 'studysync-theme'
-const FONT_KEY = 'studysync-font'
+const FONT_KEY = 'studysync-font-v2'
 
 export const FONT_FAMILIES = {
-  inter: 'Inter, sans-serif',
+  dmsans: '"DM Sans", sans-serif',
   playfair: '"Playfair Display", serif',
   jetbrains: '"JetBrains Mono", monospace',
 }
@@ -28,18 +28,18 @@ export function applyTheme(id) {
 export function getStoredFont() {
   try {
     const id = localStorage.getItem(FONT_KEY)
-    return id && FONT_FAMILIES[id] ? id : 'inter'
+    return id && FONT_FAMILIES[id] ? id : 'dmsans'
   } catch {
-    return 'inter'
+    return 'dmsans'
   }
 }
 
 export function applyFont(id) {
-  const family = FONT_FAMILIES[id] || FONT_FAMILIES.inter
+  const family = FONT_FAMILIES[id] || FONT_FAMILIES.dmsans
   document.documentElement.style.setProperty('--font-body', family)
   document.documentElement.style.setProperty('--font-display', family)
   try {
-    localStorage.setItem(FONT_KEY, id in FONT_FAMILIES ? id : 'inter')
+    localStorage.setItem(FONT_KEY, id in FONT_FAMILIES ? id : 'dmsans')
   } catch {
     // ignore storage errors
   }

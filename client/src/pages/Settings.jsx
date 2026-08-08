@@ -12,13 +12,13 @@ const tabs = [
 ]
 
 const themes = [
-  { id: 'light', label: 'Collaborative Light', previewBg: '#fff8f0' },
-  { id: 'dark', label: 'Midnight Focus', previewBg: '#1a1a2e' },
-  { id: 'retro', label: 'Retro Study', previewBg: '#f5e6d3' },
+  { id: 'light', label: 'Aurora Light', previewBg: '#f7f5f0' },
+  { id: 'dark', label: 'Midnight Ink', previewBg: '#171620' },
+  { id: 'retro', label: 'Meadow Study', previewBg: '#f3f1e4' },
 ]
 
 const fonts = [
-  { id: 'inter', label: 'Inter', family: 'Inter, sans-serif', sample: 'The quick brown fox' },
+  { id: 'dmsans', label: 'DM Sans', family: '"DM Sans", sans-serif', sample: 'The quick brown fox' },
   { id: 'playfair', label: 'Playfair Display', family: '"Playfair Display", serif', sample: 'The quick brown fox' },
   { id: 'jetbrains', label: 'JetBrains Mono', family: '"JetBrains Mono", monospace', sample: 'const hello = "world"' },
 ]
