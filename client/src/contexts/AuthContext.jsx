@@ -1,7 +1,19 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { api } from '../services/api';
+import { api, isNetworkError } from '../services/api';
 
 const AuthContext = createContext(null);
+
+function cacheUser(user) {
+  if (user) localStorage.setItem('cachedUser', JSON.stringify(user));
+}
+
+function readCachedUser() {
+  try {
+    return JSON.parse(localStorage.getItem('cachedUser') || 'null');
+  } catch {
+    return null;
+  }
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -11,14 +23,24 @@ export function AuthProvider({ children }) {
     const token = localStorage.getItem('token');
     if (!token) { setLoading(false); return; }
     api.getMe()
-      .then((data) => setUser(data.user))
-      .catch(() => localStorage.removeItem('token'))
+      .then((data) => { cacheUser(data.user); setUser(data.user); })
+      .catch((err) => {
+        if (isNetworkError(err)) {
+          const cached = readCachedUser();
+          if (cached) setUser(cached);
+          else localStorage.removeItem('token');
+        } else {
+          localStorage.removeItem('token');
+          localStorage.removeItem('cachedUser');
+        }
+      })
       .finally(() => setLoading(false));
   }, []);
 
   const login = useCallback(async (email, password) => {
     const data = await api.login({ email, password });
     localStorage.setItem('token', data.token);
+    cacheUser(data.user);
     setUser(data.user);
     return data.user;
   }, []);
@@ -26,6 +48,7 @@ export function AuthProvider({ children }) {
   const register = useCallback(async (name, email, password) => {
     const data = await api.register({ name, email, password });
     localStorage.setItem('token', data.token);
+    cacheUser(data.user);
     setUser(data.user);
     return data.user;
   }, []);
@@ -33,18 +56,21 @@ export function AuthProvider({ children }) {
   const googleLogin = useCallback(async (credential) => {
     const data = await api.googleLogin(credential);
     localStorage.setItem('token', data.token);
+    cacheUser(data.user);
     setUser(data.user);
     return data.user;
   }, []);
 
   const updateUser = useCallback(async (body) => {
     const data = await api.updateMe(body);
+    cacheUser(data.user);
     setUser(data.user);
     return data.user;
   }, []);
 
   const logout = useCallback(() => {
     localStorage.removeItem('token');
+    localStorage.removeItem('cachedUser');
     setUser(null);
   }, []);
 

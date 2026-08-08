@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import AppLayout from './components/layout/AppLayout'
+import SyncBanner from './components/common/SyncBanner'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -32,20 +33,23 @@ function GuestRoute({ children }) {
 
 function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
-      <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-        <Route path="/" element={<Home />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/workspace/:roomId" element={<Workspace />} />
-        <Route path="/whiteboards" element={<MyWhiteboards />} />
-        <Route path="/whiteboards/:id" element={<WhiteboardEditor />} />
-        <Route path="/history" element={<History />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/calendar" element={<Calendar />} />
-      </Route>
-    </Routes>
+    <>
+      <SyncBanner />
+      <Routes>
+        <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
+        <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+          <Route path="/" element={<Home />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/workspace/:roomId" element={<Workspace />} />
+          <Route path="/whiteboards" element={<MyWhiteboards />} />
+          <Route path="/whiteboards/:id" element={<WhiteboardEditor />} />
+          <Route path="/history" element={<History />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/calendar" element={<Calendar />} />
+        </Route>
+      </Routes>
+    </>
   )
 }
 

@@ -87,7 +87,9 @@ export default function MyWhiteboards() {
       setBoardDesc('')
       setBoardNotebook('')
       setCreateBoardOpen(false)
-      navigate(`/whiteboards/${data.whiteboard._id}`)
+      if (!data.whiteboard.pending) {
+        navigate(`/whiteboards/${data.whiteboard._id}`)
+      }
     } catch (err) {
       alert(err.message)
     } finally {
