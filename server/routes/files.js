@@ -103,10 +103,37 @@ router.get('/:roomId/download/:storedName', auth, async (req, res) => {
     const gfsFile = await findGridFSFile(req.params.storedName);
     if (!gfsFile) return res.status(404).json({ error: 'File not found' });
 
+    const total = gfsFile.length;
     res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
     res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(file.fileName)}"`);
+    res.setHeader('Accept-Ranges', 'bytes');
 
     const bucket = getBucket();
+
+    const range = req.headers.range;
+    if (range) {
+      const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+      if (match) {
+        let start = match[1] ? parseInt(match[1], 10) : 0;
+        let end = match[2] ? Math.min(parseInt(match[2], 10), total - 1) : total - 1;
+        if (!Number.isFinite(start)) start = 0;
+        if (start > end || start >= total) {
+          res.setHeader('Content-Range', `bytes */${total}`);
+          return res.status(416).json({ error: 'Range not satisfiable' });
+        }
+        res.status(206);
+        res.setHeader('Content-Range', `bytes ${start}-${end}/${total}`);
+        res.setHeader('Content-Length', end - start + 1);
+        const partial = bucket.openDownloadStream(gfsFile._id, { start, end: end + 1 });
+        partial.on('error', () => {
+          if (!res.headersSent) res.status(500).json({ error: 'Failed to stream file' });
+        });
+        partial.pipe(res);
+        return;
+      }
+    }
+
+    res.setHeader('Content-Length', total);
     const downloadStream = bucket.openDownloadStream(gfsFile._id);
     downloadStream.on('error', () => {
       if (!res.headersSent) res.status(500).json({ error: 'Failed to stream file' });

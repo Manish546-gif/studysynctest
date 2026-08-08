@@ -7,9 +7,11 @@ export const useSyncStore = create((set) => ({
   online: typeof navigator === 'undefined' ? true : navigator.onLine,
   queueCount: 0,
   syncing: false,
+  lastError: null,
   setOnline: (online) => set({ online }),
   setQueueCount: (n) => set({ queueCount: n }),
   setSyncing: (s) => set({ syncing: s }),
+  setLastError: (e) => set({ lastError: e }),
 }))
 
 export function isNetworkError(err) {
@@ -52,9 +54,9 @@ export async function flushSync() {
         const res = await replayOp(op)
         if (!res.ok) throw new Error(`Replay failed: ${res.status}`)
         await removeOp(op.id)
-        useSyncStore.getState().setQueueCount(await countOps())
       } catch (err) {
         if (isNetworkError(err) || err?.message?.startsWith('Replay failed: 5') || err?.message === 'Replay failed: 429') {
+          useSyncStore.getState().setLastError({ path: op.path, message: err.message, attempts: (op.attempts || 0) + 1 })
           break
         }
         const attempts = (op.attempts || 0) + 1
@@ -63,8 +65,10 @@ export async function flushSync() {
         } else {
           await bumpAttempt(op.id, attempts)
         }
-        useSyncStore.getState().setQueueCount(await countOps())
       }
+      const remaining = await countOps()
+      useSyncStore.getState().setQueueCount(remaining)
+      if (remaining === 0) useSyncStore.getState().setLastError(null)
     }
   } finally {
     useSyncStore.getState().setSyncing(false)

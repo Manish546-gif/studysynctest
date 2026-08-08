@@ -2,13 +2,31 @@ import { registerSW } from 'virtual:pwa-register';
 import { create } from 'zustand';
 import { flushSync, initSyncWatchers } from './sync';
 
+function isDismissed() {
+  try {
+    return sessionStorage.getItem('pwaBannerDismissed') === '1';
+  } catch {
+    return false;
+  }
+}
+
 export const usePwaStore = create((set) => ({
   offlineReady: false,
   canInstall: false,
   installHint: '',
+  dismissed: typeof sessionStorage !== 'undefined' && isDismissed(),
   setOfflineReady: (v) => set({ offlineReady: v }),
   setCanInstall: (v) => set({ canInstall: v }),
   setInstallHint: (v) => set({ installHint: v }),
+  setDismissed: (v) => {
+    try {
+      if (v) sessionStorage.setItem('pwaBannerDismissed', '1');
+      else sessionStorage.removeItem('pwaBannerDismissed');
+    } catch {
+      /* ignore */
+    }
+    set({ dismissed: v });
+  },
 }));
 
 let installPrompt = null;
