@@ -1,0 +1,203 @@
+@import "tailwindcss";
+
+@theme {
+  --color-surface: #fff8f0;
+  --color-on-surface: #1f1b11;
+  --color-on-background: #1f1b11;
+  --color-background: #fff8f0;
+  --color-primary: #745c00;
+  --color-primary-container: #ffd02f;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #715900;
+  --color-on-primary-fixed: #241a00;
+  --color-on-primary-fixed-variant: #574500;
+  --color-primary-fixed: #ffe089;
+  --color-primary-fixed-dim: #efc11c;
+  --color-inverse-primary: #efc11c;
+  --color-secondary: #5b588f;
+  --color-secondary-container: #c4c0fe;
+  --color-on-secondary: #ffffff;
+  --color-on-secondary-container: #4f4d82;
+  --color-on-secondary-fixed: #171448;
+  --color-on-secondary-fixed-variant: #434176;
+  --color-secondary-fixed: #e3dfff;
+  --color-secondary-fixed-dim: #c4c0fe;
+  --color-tertiary: #264aea;
+  --color-tertiary-container: #cdd3ff;
+  --color-on-tertiary: #ffffff;
+  --color-on-tertiary-container: #2348e7;
+  --color-on-tertiary-fixed: #00115a;
+  --color-on-tertiary-fixed-variant: #0030c7;
+  --color-tertiary-fixed: #dee0ff;
+  --color-tertiary-fixed-dim: #bac3ff;
+  --color-outline: #7f7660;
+  --color-outline-variant: #d1c5ac;
+  --color-surface-variant: #ebe1d1;
+  --color-surface-dim: #e2d9c9;
+  --color-surface-bright: #fff8f0;
+  --color-surface-container: #f6eddc;
+  --color-surface-container-low: #fcf3e2;
+  --color-surface-container-high: #f0e7d7;
+  --color-surface-container-highest: #ebe1d1;
+  --color-surface-container-lowest: #ffffff;
+  --color-inverse-surface: #353025;
+  --color-inverse-on-surface: #f9f0df;
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-on-error: #ffffff;
+  --color-on-error-container: #93000a;
+
+  --font-display: 'Plus Jakarta Sans', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+}
+
+:root[data-theme="dark"] {
+  --color-surface: #1a1a2e;
+  --color-on-surface: #e8e6f0;
+  --color-on-background: #e8e6f0;
+  --color-background: #1a1a2e;
+  --color-primary: #ffd02f;
+  --color-primary-container: #433a00;
+  --color-on-primary: #241a00;
+  --color-on-primary-container: #ffe089;
+  --color-on-primary-fixed: #241a00;
+  --color-on-primary-fixed-variant: #574500;
+  --color-primary-fixed: #ffe089;
+  --color-primary-fixed-dim: #efc11c;
+  --color-inverse-primary: #745c00;
+  --color-secondary: #c4c0fe;
+  --color-secondary-container: #434176;
+  --color-on-secondary: #171448;
+  --color-on-secondary-container: #e3dfff;
+  --color-on-secondary-fixed: #171448;
+  --color-on-secondary-fixed-variant: #434176;
+  --color-secondary-fixed: #e3dfff;
+  --color-secondary-fixed-dim: #c4c0fe;
+  --color-tertiary: #bac3ff;
+  --color-tertiary-container: #3a4aa0;
+  --color-on-tertiary: #00115a;
+  --color-on-tertiary-container: #dee0ff;
+  --color-on-tertiary-fixed: #00115a;
+  --color-on-tertiary-fixed-variant: #0030c7;
+  --color-tertiary-fixed: #dee0ff;
+  --color-tertiary-fixed-dim: #bac3ff;
+  --color-outline: #9c95a8;
+  --color-outline-variant: #4a4658;
+  --color-surface-variant: #2a2a3e;
+  --color-surface-dim: #161628;
+  --color-surface-bright: #1a1a2e;
+  --color-surface-container: #1f1f34;
+  --color-surface-container-low: #1c1c30;
+  --color-surface-container-high: #23233a;
+  --color-surface-container-highest: #2a2a42;
+  --color-surface-container-lowest: #151525;
+  --color-inverse-surface: #e8e6f0;
+  --color-inverse-on-surface: #1a1a2e;
+  --color-error: #ffb4ab;
+  --color-error-container: #93000a;
+  --color-on-error: #690005;
+  --color-on-error-container: #ffdad6;
+}
+
+:root[data-theme="retro"] {
+  --color-surface: #f5e6d3;
+  --color-on-surface: #4a3b2a;
+  --color-on-background: #4a3b2a;
+  --color-background: #f5e6d3;
+  --color-primary: #8a5a2b;
+  --color-primary-container: #f0c890;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #5a3a12;
+  --color-on-primary-fixed: #3c2a10;
+  --color-on-primary-fixed-variant: #5a3a12;
+  --color-primary-fixed: #ffdfb0;
+  --color-primary-fixed-dim: #e0b070;
+  --color-inverse-primary: #ffd99a;
+  --color-secondary: #6a5a3f;
+  --color-secondary-container: #e5d3b0;
+  --color-on-secondary: #ffffff;
+  --color-on-secondary-container: #4a3b1f;
+  --color-on-secondary-fixed: #241a08;
+  --color-on-secondary-fixed-variant: #4a3b1f;
+  --color-secondary-fixed: #f0e0bf;
+  --color-secondary-fixed-dim: #e5d3b0;
+  --color-tertiary: #7a6a3a;
+  --color-tertiary-container: #e8daa0;
+  --color-on-tertiary: #ffffff;
+  --color-on-tertiary-container: #4a3a10;
+  --color-on-tertiary-fixed: #241a05;
+  --color-on-tertiary-fixed-variant: #5a4a1a;
+  --color-tertiary-fixed: #f5ecbc;
+  --color-tertiary-fixed-dim: #e8daa0;
+  --color-outline: #8a7a5f;
+  --color-outline-variant: #d8c3a0;
+  --color-surface-variant: #ebdcc4;
+  --color-surface-dim: #e8d9c2;
+  --color-surface-bright: #f5e6d3;
+  --color-surface-container: #f0e2cc;
+  --color-surface-container-low: #f3e5d0;
+  --color-surface-container-high: #e8d8c0;
+  --color-surface-container-highest: #e2d2ba;
+  --color-surface-container-lowest: #faf0e0;
+  --color-inverse-surface: #4a3b2a;
+  --color-inverse-on-surface: #f5e6d3;
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-on-error: #ffffff;
+  --color-on-error-container: #93000a;
+}
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: var(--font-body);
+    background-color: var(--color-surface);
+    color: var(--color-on-surface);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background-color: var(--color-primary-container);
+    color: var(--color-on-primary-container);
+  }
+}
+
+@layer utilities {
+  .canvas-grid {
+    background-image: radial-gradient(var(--color-outline-variant) 0.5px, transparent 0.5px);
+    background-size: 24px 24px;
+  }
+
+  .dot-grid {
+    background-image: radial-gradient(var(--color-outline-variant) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-outline-variant);
+  border-radius: 10px;
+}

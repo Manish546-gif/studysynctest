@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+.DS_Store
+Thumbs.db
+.playwright-mcp/
+*.png
+stitch_studysync_collaborative_platform/
+server/uploads/
+session-*.md
