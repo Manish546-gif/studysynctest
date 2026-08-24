@@ -5,6 +5,7 @@ import AppLayout from './components/layout/AppLayout'
 import SyncBanner from './components/common/SyncBanner'
 import Home from './pages/Home'
 import Login from './pages/Login'
+import GoogleCallback from './pages/GoogleCallback'
 import Dashboard from './pages/Dashboard'
 import Workspace from './pages/Workspace'
 import History from './pages/History'
@@ -41,6 +42,7 @@ function App() {
       <SyncBanner />
       <Routes>
         <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
+        <Route path="/google-callback" element={<GoogleCallback />} />
         <Route element={<ProtectedRoute><NotificationProvider><AppLayout /></NotificationProvider></ProtectedRoute>}>
           <Route path="/" element={<Home />} />
           <Route path="/dashboard" element={<Dashboard />} />

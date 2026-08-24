@@ -52,6 +52,42 @@ const avatarUpload = multer({
 
 const generateToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
+// Shared Google sign-in: find existing user by googleId/email or create one.
+async function findOrCreateGoogleUser({ googleId, email, name, picture }) {
+  let user = await User.findOne({ $or: [{ googleId }, { email }] });
+
+  let avatarUrl = user?.avatar || '';
+  if (picture && (!user || !user.avatar || user.avatar.startsWith('https://'))) {
+    try {
+      avatarUrl = await downloadGoogleAvatar(picture, user?._id || googleId);
+    } catch {
+      avatarUrl = user?.avatar || '';
+    }
+  }
+
+  if (user) {
+    user.googleId = googleId;
+    user.avatar = avatarUrl || user.avatar || '';
+    await user.save();
+  } else {
+    user = await User.create({ name, email, googleId, avatar: avatarUrl || '' });
+  }
+  return user;
+}
+
+function isAllowedRedirectUri(redirectUri) {
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean)
+    : null;
+  if (!allowedOrigins || allowedOrigins.includes('*')) return true;
+  try {
+    const origin = new URL(redirectUri).origin;
+    return allowedOrigins.some((o) => o === origin || new URL(o).origin === origin);
+  } catch {
+    return false;
+  }
+}
+
 router.post('/register', async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -126,6 +162,58 @@ router.post('/avatar', auth, (req, res) => {
   });
 });
 
+// OAuth authorization-code exchange (redirect flow — no popups, no third-party cookies).
+router.post('/google/exchange', async (req, res) => {
+  try {
+    const { code, redirectUri } = req.body;
+    if (!code || !redirectUri) {
+      return res.status(400).json({ error: 'code and redirectUri are required' });
+    }
+    if (!isAllowedRedirectUri(redirectUri)) {
+      return res.status(400).json({ error: 'Redirect URI not allowed' });
+    }
+    if (!process.env.GOOGLE_CLIENT_SECRET) {
+      return res.status(500).json({ error: 'Server missing GOOGLE_CLIENT_SECRET' });
+    }
+
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+      }),
+    });
+    if (!tokenRes.ok) {
+      const detail = await tokenRes.text();
+      console.error('Google token exchange failed:', detail);
+      return res.status(401).json({ error: 'Google authorization failed' });
+    }
+    const { access_token } = await tokenRes.json();
+
+    const infoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${access_token}` },
+    });
+    if (!infoRes.ok) {
+      return res.status(401).json({ error: 'Failed to fetch Google profile' });
+    }
+    const profile = await infoRes.json();
+
+    const user = await findOrCreateGoogleUser({
+      googleId: profile.sub,
+      email: profile.email,
+      name: profile.name,
+      picture: profile.picture,
+    });
+    res.json({ user, token: generateToken(user._id) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/google', async (req, res) => {
   try {
     const { credential } = req.body;
@@ -136,26 +224,12 @@ router.post('/google', async (req, res) => {
       audience: process.env.GOOGLE_CLIENT_ID,
     });
     const payload = ticket.getPayload();
-    const { sub: googleId, email, name, picture } = payload;
-
-    let user = await User.findOne({ $or: [{ googleId }, { email }] });
-
-    let avatarUrl = user?.avatar || '';
-    if (picture && (!user || !user.avatar || user.avatar.startsWith('https://'))) {
-      try {
-        avatarUrl = await downloadGoogleAvatar(picture, user?._id || googleId);
-      } catch {
-        avatarUrl = user?.avatar || '';
-      }
-    }
-
-    if (user) {
-      user.googleId = googleId;
-      user.avatar = avatarUrl || user.avatar || '';
-      await user.save();
-    } else {
-      user = await User.create({ name, email, googleId, avatar: avatarUrl || '' });
-    }
+    const user = await findOrCreateGoogleUser({
+      googleId: payload.sub,
+      email: payload.email,
+      name: payload.name,
+      picture: payload.picture,
+    });
 
     const token = generateToken(user._id);
     res.json({ user, token });

@@ -62,6 +62,14 @@ export function AuthProvider({ children }) {
     return data.user;
   }, []);
 
+  const googleExchange = useCallback(async (code, redirectUri) => {
+    const data = await api.googleExchange(code, redirectUri);
+    localStorage.setItem('token', data.token);
+    cacheUser(data.user);
+    setUser(data.user);
+    return data.user;
+  }, []);
+
   const updateUser = useCallback(async (body) => {
     if (body && body._id) {
       cacheUser(body);
@@ -81,7 +89,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, googleLogin, updateUser, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, googleLogin, googleExchange, updateUser, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -102,6 +102,7 @@ export const api = {
   register: (body) => request('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
   login: (body) => request('/auth/login', { method: 'POST', body: JSON.stringify(body) }),
   googleLogin: (credential) => request('/auth/google', { method: 'POST', body: JSON.stringify({ credential }) }),
+  googleExchange: (code, redirectUri) => request('/auth/google/exchange', { method: 'POST', body: JSON.stringify({ code, redirectUri }) }),
   getMe: () => request('/auth/me'),
   updateMe: (body) => request('/auth/me', { method: 'PUT', body: JSON.stringify(body) }),
   uploadAvatar: async (file) => {

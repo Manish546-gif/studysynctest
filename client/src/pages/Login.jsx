@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { StickyNote, Brain, Eye, EyeOff, Loader2, Sparkles } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../contexts/AuthContext'
 
 const fieldVariants = {
@@ -24,8 +23,29 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const { login, register, googleLogin } = useAuth()
+  const { login, register } = useAuth()
   const navigate = useNavigate()
+
+  // Full-page redirect OAuth: no popup, no third-party cookies required.
+  const startGoogleLogin = () => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+    if (!clientId) {
+      setError('Google sign-in is not configured')
+      return
+    }
+    const state = (crypto.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`)
+    sessionStorage.setItem('google_oauth_state', state)
+    const redirectUri = `${window.location.origin}/google-callback`
+    const url =
+      'https://accounts.google.com/o/oauth2/v2/auth' +
+      `?client_id=${encodeURIComponent(clientId)}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      '&response_type=code' +
+      '&scope=' + encodeURIComponent('openid email profile') +
+      '&prompt=select_account' +
+      `&state=${encodeURIComponent(state)}`
+    window.location.assign(url)
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -141,25 +161,23 @@ export default function Login() {
             ))}
           </div>
 
-          {/* Google login */}
+          {/* Google login — full-page redirect flow (popup/cookie-proof) */}
           <motion.div variants={stagger} initial="hidden" animate="visible">
             <motion.div variants={fieldVariants} className="w-full flex justify-center">
-              <GoogleLogin
-                onSuccess={async (credentialResponse) => {
-                  try {
-                    setError('')
-                    await googleLogin(credentialResponse.credential)
-                    navigate('/dashboard')
-                  } catch (err) {
-                    setError(err.message)
-                  }
-                }}
-                onError={() => setError('Google sign-in failed')}
-                theme="outline"
-                shape="pill"
-                size="large"
-                text="continue_with"
-              />
+              <button
+                type="button"
+                onClick={startGoogleLogin}
+                disabled={submitting}
+                className="flex items-center justify-center gap-3 w-full max-w-[20rem] py-2.5 rounded-full border border-outline-variant/60 bg-surface-container text-sm font-semibold text-on-surface hover:bg-surface-container-high transition-colors disabled:opacity-50"
+              >
+                <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+                  <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+                  <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+                  <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+                  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+                </svg>
+                Continue with Google
+              </button>
             </motion.div>
           </motion.div>
 
