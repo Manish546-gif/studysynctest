@@ -52,7 +52,7 @@ function VideoTile({ stream, name, isLocal, muted, mirror, presenting, onClick, 
   return (
     <div
       onClick={onClick}
-      className={`relative rounded-xl min-w-80 min-h-40 overflow-hidden bg-surface-container-high aspect-video transition-all ${
+      className={`relative rounded-xl min-w-[16rem] min-h-[9rem] max-h-[18rem] overflow-hidden bg-surface-container-high aspect-video transition-all ${
         active
           ? 'border-2 border-primary ring-2 ring-primary/30'
           : 'border border-outline-variant/20'
@@ -171,7 +171,7 @@ export default function Workspace() {
     stopMedia,
   } = useWebRTC(socketRef, roomId, user?.id)
 
-  // Discord-style stage: spotlight one stream (auto = active presenter, or pinned by click)
+
   const [pinnedId, setPinnedId] = useState(null) // 'local' | socketId | null
   const stageRef = useRef(null)
   const stageVideoRef = useRef(null)
@@ -696,7 +696,7 @@ export default function Workspace() {
               </>
             ) : (
               <div className="flex-1 overflow-y-auto">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-5xl mx-auto">
+                <div className="flex flex-wrap gap-3 justify-center content-start max-w-5xl mx-auto">
                   {/* Local video */}
                   <VideoTile
                     stream={localStream}
@@ -729,7 +729,7 @@ export default function Workspace() {
                   {displayMembers
                     .filter((m) => m._id !== user?.id && !remoteUserIds.some((sid) => remoteStreams[sid]))
                     .map((member, i) => (
-                      <div key={member._id || i} className="rounded-xl overflow-hidden bg-surface-container-high border border-outline-variant/20 aspect-video flex items-center justify-center">
+                      <div key={member._id || i} className="rounded-xl overflow-hidden bg-surface-container-high border border-outline-variant/20 min-w-[16rem] min-h-[9rem] aspect-video flex items-center justify-center">
                         <div className="flex flex-col items-center gap-2">
                           <div className={`w-14 h-14 rounded-2xl ${memberColors[i % memberColors.length]} flex items-center justify-center`}>
                             <span className="text-lg font-bold text-white">{member.name?.charAt(0)?.toUpperCase()}</span>
