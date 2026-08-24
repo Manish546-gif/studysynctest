@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { Smile, Hand } from 'lucide-react'
 
 const EMOJIS = ['👍', '❤️', '😂', '🎉', '🤔', '👀', '🔥', '✨', '👏', '💯']
 
@@ -18,29 +19,29 @@ export default function ReactionPicker({ onReaction, onToggleHand }) {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className="p-2 rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition text-xl"
+        className="w-12 h-12 rounded-2xl flex items-center justify-center bg-surface-container-high text-on-surface hover:bg-surface-container-high/80 transition-all duration-200"
         title="Reactions"
       >
-        😊
+        <Smile size={20} />
       </button>
       {open && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-gray-800 border border-white/10 rounded-xl p-2 flex gap-1 shadow-2xl z-50">
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-surface-container-high border border-outline-variant/20 rounded-xl p-2 flex gap-1 shadow-2xl z-50">
           {EMOJIS.map((emoji) => (
             <button
               key={emoji}
               onClick={() => { onReaction(emoji); setOpen(false) }}
-              className="text-2xl hover:bg-white/10 rounded-lg w-10 h-10 flex items-center justify-center transition hover:scale-125"
+              className="text-xl hover:bg-surface-container rounded-lg w-10 h-10 flex items-center justify-center transition hover:scale-110"
             >
               {emoji}
             </button>
           ))}
-          <div className="border-l border-white/10 mx-1" />
+          <div className="border-l border-outline-variant/30 mx-1" />
           <button
             onClick={() => { onToggleHand(); setOpen(false) }}
-            className="text-2xl hover:bg-white/10 rounded-lg w-10 h-10 flex items-center justify-center transition"
+            className="hover:bg-surface-container rounded-lg w-10 h-10 flex items-center justify-center transition text-on-surface/70 hover:text-on-surface"
             title="Raise Hand"
           >
-            ✋
+            <Hand size={20} />
           </button>
         </div>
       )}

@@ -19,7 +19,6 @@ import {
   Trash2,
   BarChart3,
   BookOpen,
-  Globe,
   PenTool,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -300,12 +299,6 @@ export default function Dashboard() {
             <BookOpen size={22} className="text-on-tertiary-container" />
           </div>
           <span className="text-sm font-semibold text-on-surface">Flashcards</span>
-        </Link>
-        <Link to="/rooms/public" className="bg-surface-container-low rounded-2xl p-4 flex flex-col items-center gap-2 hover:bg-surface-container transition group">
-          <div className="w-12 h-12 rounded-xl bg-secondary-container flex items-center justify-center group-hover:scale-105 transition">
-            <Globe size={22} className="text-on-secondary-container" />
-          </div>
-          <span className="text-sm font-semibold text-on-surface">Public Rooms</span>
         </Link>
         <Link to="/whiteboards" className="bg-surface-container-low rounded-2xl p-4 flex flex-col items-center gap-2 hover:bg-surface-container transition group">
           <div className="w-12 h-12 rounded-xl bg-success-container flex items-center justify-center group-hover:scale-105 transition">

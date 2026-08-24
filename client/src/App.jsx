@@ -15,7 +15,6 @@ import Calendar from './pages/Calendar'
 import MyWhiteboards from './pages/MyWhiteboards'
 import WhiteboardEditor from './pages/WhiteboardEditor'
 import StudyStats from './pages/StudyStats'
-import PublicRoomDirectory from './pages/PublicRoomDirectory'
 import Flashcards from './pages/Flashcards'
 
 function ProtectedRoute({ children }) {
@@ -56,7 +55,6 @@ function App() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/stats" element={<StudyStats />} />
-          <Route path="/rooms/public" element={<PublicRoomDirectory />} />
           <Route path="/flashcards" element={<Flashcards />} />
         </Route>
         <Route

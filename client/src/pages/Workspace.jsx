@@ -27,6 +27,8 @@ import {
   Maximize,
   Settings,
   Link2,
+  Eye,
+  SplitSquareHorizontal,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -117,7 +119,6 @@ export default function Workspace() {
   const whiteboardResizing = useRef(false)
   const [chatOpen, setChatOpen] = useState(false)
   const [membersOpen, setMembersOpen] = useState(false)
-  const [inviteOpen, setInviteOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsName, setSettingsName] = useState('')
   const [settingsTag, setSettingsTag] = useState('Study')
@@ -278,7 +279,7 @@ export default function Workspace() {
     setSettingsSaved(false)
     setChatOpen(false)
     setMembersOpen(false)
-    setInviteOpen(false)
+    setInviteLinkOpen(false)
     setSettingsOpen(true)
   }
 
@@ -954,45 +955,6 @@ export default function Workspace() {
           )}
         </AnimatePresence>
 
-        {/* Invite sidebar */}
-        <AnimatePresence>
-          {inviteOpen && (
-            <motion.div
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 320, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="bg-surface-container-low border-l border-outline-variant/20 flex flex-col overflow-hidden shrink-0"
-            >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant/20">
-                <span className="text-sm font-semibold text-on-surface">Invite Members</span>
-                <button onClick={() => setInviteOpen(false)} className="w-7 h-7 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors">
-                  <X size={16} />
-                </button>
-              </div>
-              <div className="flex-1 p-4 flex flex-col items-center justify-center text-center gap-4">
-                <div className="w-20 h-20 rounded-2xl bg-tertiary-container flex items-center justify-center">
-                  <KeyRound size={32} className="text-on-tertiary-container" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-on-surface mb-1">Share Room Code</p>
-                  <p className="text-xs text-on-surface/40">Send this code to others so they can join</p>
-                </div>
-                <div className="w-full bg-surface rounded-xl p-4 border border-outline-variant/20">
-                  <p className="text-3xl font-mono font-bold text-on-surface tracking-[0.3em] text-center">{room.code}</p>
-                </div>
-                <button
-                  onClick={copyCode}
-                  className="w-full py-3 rounded-xl bg-primary-container text-on-primary-container text-sm font-semibold flex items-center justify-center gap-2 hover:shadow-sm transition-shadow"
-                >
-                  {codeCopied ? <Check size={16} /> : <Copy size={16} />}
-                  {codeCopied ? 'Copied to Clipboard!' : 'Copy Code'}
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         {/* Room settings sidebar */}
         <AnimatePresence>
           {settingsOpen && (
@@ -1173,7 +1135,7 @@ export default function Workspace() {
         <button
           onClick={() => {
             if (whiteboardOpen) { toggleWbPanel('chat'); return; }
-            setChatOpen((v) => !v); setMembersOpen(false); setInviteOpen(false); setSettingsOpen(false);
+            setChatOpen((v) => !v); setMembersOpen(false); setSettingsOpen(false);
           }}
           className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
             whiteboardOpen ? (wbPanelTab === 'chat' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80')
@@ -1187,7 +1149,7 @@ export default function Workspace() {
         <button
           onClick={() => {
             if (whiteboardOpen) { toggleWbPanel('members'); return; }
-            setMembersOpen((v) => !v); setChatOpen(false); setInviteOpen(false); setSettingsOpen(false);
+            setMembersOpen((v) => !v); setChatOpen(false); setSettingsOpen(false);
           }}
           className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
             whiteboardOpen ? (wbPanelTab === 'members' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80')
@@ -1199,14 +1161,8 @@ export default function Workspace() {
         </button>
 
         <button
-          onClick={() => {
-            if (whiteboardOpen) { toggleWbPanel('invite'); return; }
-            setInviteOpen((v) => !v); setChatOpen(false); setMembersOpen(false); setSettingsOpen(false);
-          }}
-          className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
-            whiteboardOpen ? (wbPanelTab === 'invite' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80')
-              : (inviteOpen ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80')
-          }`}
+          onClick={() => setInviteLinkOpen(true)}
+          className="w-12 h-12 rounded-2xl flex items-center justify-center bg-surface-container-high text-on-surface hover:bg-surface-container-high/80 transition-all duration-200"
           title="Invite"
         >
           <UserPlus size={20} />
@@ -1270,19 +1226,20 @@ export default function Workspace() {
         <ReactionPicker onReaction={sendReaction} onToggleHand={toggleHand} />
 
         {viewerCount > 0 && (
-          <div className="flex items-center gap-1 px-2 py-1 bg-green-600/20 text-green-400 rounded-lg text-xs font-medium" title="Screen share viewers">
-            👁 {viewerCount}
+          <div className="flex items-center gap-1 px-2.5 py-1.5 bg-success/10 text-success rounded-xl text-xs font-medium" title="Screen share viewers">
+            <Eye size={14} />
+            <span>{viewerCount}</span>
           </div>
         )}
 
         <button
           onClick={() => setBreakoutOpen(!breakoutOpen)}
-          className={`w-10 h-10 rounded-xl flex items-center justify-center transition text-sm ${
-            breakoutOpen ? 'bg-primary text-on-primary' : 'bg-white/5 text-white/60 hover:bg-white/10'
+          className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
+            breakoutOpen ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80'
           }`}
           title="Breakout Rooms"
         >
-          🔀
+          <SplitSquareHorizontal size={20} />
         </button>
 
         <div className="w-px h-8 bg-outline-variant/30 mx-1" />
