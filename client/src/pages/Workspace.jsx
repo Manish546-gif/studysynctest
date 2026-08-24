@@ -52,7 +52,7 @@ function VideoTile({ stream, name, isLocal, muted, mirror, presenting, onClick, 
   return (
     <div
       onClick={onClick}
-      className={`relative rounded-xl overflow-hidden bg-surface-container-high aspect-video transition-all ${
+      className={`relative rounded-xl min-w-80 min-h-40 overflow-hidden bg-surface-container-high aspect-video transition-all ${
         active
           ? 'border-2 border-primary ring-2 ring-primary/30'
           : 'border border-outline-variant/20'
