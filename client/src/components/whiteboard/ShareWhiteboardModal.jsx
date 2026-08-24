@@ -1,15 +1,23 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { X } from 'lucide-react'
+import { X, Globe, Eye, Pencil, Link2 } from 'lucide-react'
 import { api } from '../../services/api'
+
+const LINK_OPTIONS = [
+  { value: 'none', label: 'Off', icon: X },
+  { value: 'view', label: 'Can view', icon: Eye },
+  { value: 'edit', label: 'Can edit', icon: Pencil },
+]
 
 export default function ShareWhiteboardModal({ board, onClose }) {
   const [email, setEmail] = useState('')
+  const [role, setRole] = useState('editor')
   const [status, setStatus] = useState('')
   const [message, setMessage] = useState('')
   const [copied, setCopied] = useState(false)
   const [currentBoard, setCurrentBoard] = useState(board)
 
+  const entries = currentBoard.sharedWith || []
   const shareUrl = `${window.location.origin}/whiteboards/${board._id}`
 
   const copyLink = () => {
@@ -24,10 +32,32 @@ export default function ShareWhiteboardModal({ board, onClose }) {
     setStatus('sharing')
     setMessage('')
     try {
-      const data = await api.shareWhiteboard(board._id, email.trim())
+      const data = await api.shareWhiteboard(board._id, email.trim(), role)
       setCurrentBoard(data.whiteboard)
       setEmail('')
-      setMessage(`Shared with ${email.trim()}`)
+      setMessage(`Shared with ${email.trim()} (${role})`)
+      setStatus('')
+    } catch (err) {
+      setMessage(err.message)
+      setStatus('error')
+    }
+  }
+
+  const handleRoleChange = async (userId, newRole) => {
+    try {
+      const data = await api.setShareRole(board._id, userId, newRole)
+      setCurrentBoard(data.whiteboard)
+    } catch (err) {
+      setMessage(err.message)
+      setStatus('error')
+    }
+  }
+
+  const handleLinkAccess = async (access) => {
+    try {
+      const data = await api.setLinkAccess(board._id, access)
+      setCurrentBoard(data.whiteboard)
+      setMessage('')
       setStatus('')
     } catch (err) {
       setMessage(err.message)
@@ -72,16 +102,45 @@ export default function ShareWhiteboardModal({ board, onClose }) {
 
         <div className="p-5 space-y-5">
           <div>
-            <p className="text-xs font-medium text-on-surface/50 mb-2">Shareable link</p>
-            <div className="flex items-center gap-2 bg-surface rounded-xl border border-outline-variant/20 p-2 pl-3">
-              <p className="flex-1 text-xs text-on-surface/70 truncate">{shareUrl}</p>
-              <button
-                onClick={copyLink}
-                className="px-3 py-1.5 bg-primary-container text-on-primary-container rounded-lg text-xs font-semibold hover:shadow-sm transition-shadow shrink-0"
-              >
-                {copied ? 'Copied!' : 'Copy'}
-              </button>
+            <div className="flex items-center gap-1.5 mb-2">
+              <Globe size={12} className="text-on-surface/40" />
+              <p className="text-xs font-medium text-on-surface/50">Anyone with the link</p>
             </div>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 flex-1 min-w-0 bg-surface rounded-xl border border-outline-variant/20 p-2 pl-3">
+                <Link2 size={13} className="text-on-surface/30 shrink-0" />
+                <p className="flex-1 text-xs text-on-surface/70 truncate">{shareUrl}</p>
+                <button
+                  onClick={copyLink}
+                  className="px-3 py-1.5 bg-primary-container text-on-primary-container rounded-lg text-xs font-semibold hover:shadow-sm transition-shadow shrink-0"
+                >
+                  {copied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center gap-1 bg-surface rounded-xl border border-outline-variant/20 p-1">
+              {LINK_OPTIONS.map(({ value, label, icon: Icon }) => (
+                <button
+                  key={value}
+                  onClick={() => handleLinkAccess(value)}
+                  disabled={currentBoard.linkAccess === value}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                    currentBoard.linkAccess === value
+                      ? 'bg-primary-container text-on-primary-container'
+                      : 'text-on-surface/50 hover:bg-surface-container-high'
+                  }`}
+                >
+                  <Icon size={12} /> {label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-on-surface/30 mt-1.5">
+              {currentBoard.linkAccess === 'none'
+                ? 'Only people you invite can open this board.'
+                : currentBoard.linkAccess === 'view'
+                  ? 'Signed-in users with the link can view this board.'
+                  : 'Signed-in users with the link can view and edit this board.'}
+            </p>
           </div>
 
           <div>
@@ -94,12 +153,20 @@ export default function ShareWhiteboardModal({ board, onClose }) {
                 placeholder="friend@example.com"
                 className="flex-1 px-4 py-2.5 rounded-xl border border-outline-variant/40 bg-surface-container-lowest text-sm text-on-surface placeholder:text-on-surface/25 outline-none focus:border-primary-container"
               />
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="h-[42px] px-2 rounded-xl border border-outline-variant/40 bg-surface-container-lowest text-xs text-on-surface outline-none cursor-pointer focus:border-primary-container"
+              >
+                <option value="editor">Editor</option>
+                <option value="viewer">Viewer</option>
+              </select>
               <button
                 type="submit"
                 disabled={!email.trim() || status === 'sharing'}
                 className="px-4 py-2.5 bg-primary text-on-primary rounded-xl text-sm font-semibold disabled:opacity-50"
               >
-                {status === 'sharing' ? 'Sharing...' : 'Share'}
+                {status === 'sharing' ? '...' : 'Share'}
               </button>
             </form>
             {message && (
@@ -109,27 +176,39 @@ export default function ShareWhiteboardModal({ board, onClose }) {
 
           <div>
             <p className="text-xs font-medium text-on-surface/50 mb-2">
-              Shared with ({currentBoard.sharedWith?.length || 0})
+              Shared with ({entries.length})
             </p>
-            {currentBoard.sharedWith?.length ? (
+            {entries.length ? (
               <div className="space-y-2">
-                {(currentBoard.sharedWith || []).map((u) => (
-                  <div key={u._id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-surface-container transition-colors">
-                    <div className="w-8 h-8 rounded-xl bg-secondary-container text-on-secondary-container flex items-center justify-center text-xs font-bold shrink-0">
-                      {u.name?.charAt(0)?.toUpperCase() || '?'}
+                {entries.map((e) => {
+                  const u = e.user || {}
+                  return (
+                    <div key={u._id || String(u)} className="flex items-center gap-3 p-2 rounded-xl hover:bg-surface-container transition-colors">
+                      <div className="w-8 h-8 rounded-xl bg-secondary-container text-on-secondary-container flex items-center justify-center text-xs font-bold shrink-0">
+                        {u.name?.charAt(0)?.toUpperCase() || '?'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-on-surface truncate">{u.name}</p>
+                        <p className="text-[11px] text-on-surface/40 truncate">{u.email}</p>
+                      </div>
+                      <select
+                        value={e.role || 'editor'}
+                        onChange={(ev) => handleRoleChange(u._id, ev.target.value)}
+                        className="h-8 px-1.5 rounded-lg border border-outline-variant/30 bg-surface-container-lowest text-[11px] text-on-surface/70 outline-none cursor-pointer"
+                        title="Change role"
+                      >
+                        <option value="editor">Editor</option>
+                        <option value="viewer">Viewer</option>
+                      </select>
+                      <button
+                        onClick={() => handleRemove(u._id)}
+                        className="text-xs text-error/70 hover:text-error transition-colors shrink-0"
+                      >
+                        Remove
+                      </button>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-on-surface truncate">{u.name}</p>
-                      <p className="text-[11px] text-on-surface/40 truncate">{u.email}</p>
-                    </div>
-                    <button
-                      onClick={() => handleRemove(u._id)}
-                      className="text-xs text-error/70 hover:text-error transition-colors shrink-0"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             ) : (
               <p className="text-xs text-on-surface/30">Not shared with anyone yet.</p>

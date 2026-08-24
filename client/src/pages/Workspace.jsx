@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -7,6 +7,7 @@ import {
   Video,
   VideoOff,
   Monitor,
+  MonitorOff,
   MessageCircle,
   Pencil,
   PhoneOff,
@@ -39,7 +40,7 @@ import ConfirmationModal from '../components/common/ConfirmationModal'
 
 const ROOM_TAGS = ['Study', 'Project', 'Review', 'Homework', 'Exam Prep', 'Discussion']
 
-function VideoTile({ stream, name, isLocal, muted, mirror }) {
+function VideoTile({ stream, name, isLocal, muted, mirror, presenting, onClick, active, contain }) {
   const videoRef = useRef(null)
 
   useEffect(() => {
@@ -49,20 +50,33 @@ function VideoTile({ stream, name, isLocal, muted, mirror }) {
   }, [stream])
 
   return (
-    <div className="relative rounded-2xl overflow-hidden bg-surface-container-high border border-outline-variant/20 aspect-video">
+    <div
+      onClick={onClick}
+      className={`relative rounded-xl overflow-hidden bg-surface-container-high aspect-video transition-all ${
+        active
+          ? 'border-2 border-primary ring-2 ring-primary/30'
+          : 'border border-outline-variant/20'
+      } ${onClick ? 'cursor-pointer hover:border-primary/50' : ''}`}
+    >
       {stream ? (
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted={muted}
-          className={`w-full h-full object-cover ${mirror ? '-scale-x-100' : ''}`}
+          className={`w-full h-full ${contain ? 'object-contain' : 'object-cover'} ${mirror ? '-scale-x-100' : ''}`}
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center">
           <div className="w-14 h-14 rounded-2xl bg-primary-container flex items-center justify-center">
             <span className="text-lg font-bold text-on-primary-container">{name?.charAt(0)?.toUpperCase()}</span>
           </div>
+        </div>
+      )}
+      {presenting && (
+        <div className="absolute top-2 left-2 flex items-center gap-1 bg-primary text-on-primary rounded-lg px-2 py-1">
+          <Monitor size={11} />
+          <span className="text-[10px] font-bold">Presenting</span>
         </div>
       )}
       <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/50 backdrop-blur-sm rounded-lg px-2 py-1">
@@ -141,6 +155,7 @@ export default function Workspace() {
     emitTypingStop,
     emitFileUploaded,
     emitFileDeleted,
+    screenSharers,
   } = useSocket(roomId)
 
   const {
@@ -148,10 +163,18 @@ export default function Workspace() {
     remoteStreams,
     micOn,
     camOn,
+    screenSharing,
+    screenStream,
     toggleMic,
     toggleCam,
+    toggleScreenShare,
     stopMedia,
   } = useWebRTC(socketRef, roomId, user?.id)
+
+  // Discord-style stage: spotlight one stream (auto = active presenter, or pinned by click)
+  const [pinnedId, setPinnedId] = useState(null) // 'local' | socketId | null
+  const stageRef = useRef(null)
+  const stageVideoRef = useRef(null)
 
   useEffect(() => {
     if (!roomId) return
@@ -269,9 +292,61 @@ export default function Workspace() {
     'bg-orange-500', 'bg-pink-500', 'bg-teal-500', 'bg-red-500',
   ]
 
+  const allMembers = room?.members || []
+  const displayMembers = roomUsers.length > 0 ? roomUsers : allMembers
+  const remoteUserIds = Object.keys(remoteStreams)
+
+  // Stage resolution: pinned tile wins, otherwise auto-follow the active
+  // presenter (local share takes priority). Remotes count as presenters only
+  // once their stream has actually arrived.
+  const presenterIds = useMemo(() => {
+    const ids = [];
+    if (screenSharing && (screenStream || localStream)) ids.push('local');
+    Object.keys(screenSharers).forEach((sid) => {
+      if (remoteStreams[sid] && !ids.includes(sid)) ids.push(sid);
+    });
+    return ids;
+  }, [screenSharing, screenStream, localStream, screenSharers, remoteStreams]);
+
+  const pinnedValid =
+    pinnedId === 'local'
+      ? !!(localStream || screenSharing)
+      : !!(pinnedId && remoteStreams[pinnedId]);
+  const stageTarget = pinnedValid ? pinnedId : presenterIds.length > 0 ? presenterIds[0] : null;
+  const stageIsLocal = stageTarget === 'local';
+  const stageStream = stageIsLocal
+    ? (screenSharing && screenStream ? screenStream : localStream)
+    : (stageTarget ? remoteStreams[stageTarget] : null);
+  const stageActive = !!stageStream;
+  const stageName = stageIsLocal
+    ? `${user?.name || 'You'} (You)`
+    : screenSharers[stageTarget] || displayMembers.find((m) => roomUsers.some((u) => u._id === m._id) && remoteUserIds.includes(stageTarget))?.name || 'Participant';
+
+  // Drop stale pins (stream died / media stopped) and leave fullscreen.
+  useEffect(() => {
+    if (pinnedId === 'local' && !localStream && !screenSharing) setPinnedId(null);
+    else if (pinnedId && pinnedId !== 'local' && !remoteStreams[pinnedId]) setPinnedId(null);
+  }, [pinnedId, remoteStreams, localStream, screenSharing]);
+
+  useEffect(() => {
+    if (!stageActive && document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, [stageActive]);
+
+  const toggleStageFullscreen = () => {
+    const el = stageRef.current
+    if (!el) return
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {})
+    } else if (el.requestFullscreen) {
+      el.requestFullscreen().catch(() => {})
+    }
+  }
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
+      <div className="flex items-center justify-center min-h-screen bg-surface">
         <Loader2 size={32} className="animate-spin text-primary" />
       </div>
     )
@@ -279,7 +354,7 @@ export default function Workspace() {
 
   if (error || !room) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh]">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-surface">
         <p className="text-on-surface/50 mb-4">{error || 'Room not found'}</p>
         <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 px-4 py-2 bg-primary-container text-on-primary-container rounded-xl text-sm font-semibold">
           <ArrowLeft size={16} /> Back to Dashboard
@@ -288,13 +363,10 @@ export default function Workspace() {
     )
   }
 
-  const allMembers = room.members || []
-  const displayMembers = roomUsers.length > 0 ? roomUsers : allMembers
-  const remoteUserIds = Object.keys(remoteStreams)
   const isHost = room.host?._id === user?.id
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)]">
+    <div className="flex flex-col h-screen bg-surface">
       {/* Top Header */}
       <div className="flex items-center gap-3 px-4 lg:px-6 py-3 bg-surface border-b border-outline-variant/20 shrink-0">
         <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-sm text-on-surface/50 hover:text-on-surface transition-colors">
@@ -528,49 +600,148 @@ export default function Workspace() {
 
         {/* Center */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 p-4 overflow-y-auto">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-5xl mx-auto">
-              {/* Local video */}
-              <VideoTile
-                stream={localStream}
-                name={user?.name || 'You'}
-                isLocal={true}
-                muted={true}
-                mirror={true}
-              />
+          <div className="flex-1 p-4 flex flex-col gap-3 min-h-0 max-w-6xl w-full mx-auto">
+            {stageActive ? (
+              <>
+                {/* Switcher: pick which shared screen to watch */}
+                {presenterIds.length > 1 && (
+                  <div className="shrink-0 flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-medium text-on-surface/50">Shared screens:</span>
+                    {presenterIds.map((pid) => (
+                      <button
+                        key={pid}
+                        onClick={() => setPinnedId(pid)}
+                        className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                          stageTarget === pid
+                            ? 'bg-primary text-on-primary'
+                            : 'bg-surface-container-high text-on-surface hover:bg-surface-container-highest'
+                        }`}
+                      >
+                        <Monitor size={11} />
+                        {pid === 'local' ? 'You' : screenSharers[pid] || 'Participant'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {/* Stage: spotlighted stream */}
+                <div
+                  ref={stageRef}
+                  onDoubleClick={toggleStageFullscreen}
+                  className="relative flex-1 min-h-0 rounded-2xl overflow-hidden bg-black border border-outline-variant/20"
+                >
+                  <video
+                    ref={(node) => {
+                      stageVideoRef.current = node
+                      if (node && stageStream && node.srcObject !== stageStream) {
+                        node.srcObject = stageStream
+                      }
+                    }}
+                    autoPlay
+                    playsInline
+                    muted={stageIsLocal}
+                    className="w-full h-full object-contain"
+                  />
+                  <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/50 backdrop-blur-sm rounded-lg px-2.5 py-1.5 pointer-events-none">
+                    <Monitor size={12} className="text-white" />
+                    <span className="text-xs font-medium text-white">{stageName}</span>
+                  </div>
+                  <button
+                    onClick={toggleStageFullscreen}
+                    className="absolute top-3 right-3 w-8 h-8 rounded-lg flex items-center justify-center bg-black/50 text-white hover:bg-black/70 transition-colors"
+                    title={document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen'}
+                  >
+                    <Maximize size={14} />
+                  </button>
+                  <button
+                    onClick={() => setPinnedId(null)}
+                    className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/50 backdrop-blur-sm text-white text-xs font-semibold hover:bg-black/70 transition-colors"
+                    title="Back to gallery"
+                  >
+                    <X size={13} /> Exit spotlight
+                  </button>
+                </div>
 
-                {/* Remote videos */}
-                {remoteUserIds.map((socketId) => {
-                  const remoteUser = displayMembers.find((m) => {
-                    const socketUser = roomUsers.find((u) => u._id === m._id)
-                    return socketUser
-                  })
-                  return (
+                {/* Filmstrip of cameras */}
+                <div className="shrink-0 flex gap-3 overflow-x-auto pb-1">
+                  <div className="w-44 shrink-0">
+                    <VideoTile
+                      stream={localStream}
+                      name={user?.name || 'You'}
+                      isLocal={true}
+                      muted={true}
+                      mirror={!screenSharing}
+                      presenting={screenSharing}
+                      active={stageTarget === 'local'}
+                      onClick={() => setPinnedId(stageTarget === 'local' ? null : 'local')}
+                    />
+                  </div>
+                  {remoteUserIds.map((socketId) => (
+                    <div key={socketId} className="w-44 shrink-0">
+                      <VideoTile
+                        stream={remoteStreams[socketId]}
+                        name={
+                          displayMembers.find((m) =>
+                            roomUsers.some((u) => u._id === m._id)
+                          )?.name || 'Participant'
+                        }
+                        isLocal={false}
+                        muted={false}
+                        presenting={!!screenSharers[socketId]}
+                        active={stageTarget === socketId}
+                        onClick={() => setPinnedId(stageTarget === socketId ? null : socketId)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 overflow-y-auto">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-5xl mx-auto">
+                  {/* Local video */}
+                  <VideoTile
+                    stream={localStream}
+                    name={user?.name || 'You'}
+                    isLocal={true}
+                    muted={true}
+                    mirror={!screenSharing}
+                    presenting={screenSharing}
+                    onClick={() => setPinnedId('local')}
+                  />
+
+                  {/* Remote videos */}
+                  {remoteUserIds.map((socketId) => (
                     <VideoTile
                       key={socketId}
                       stream={remoteStreams[socketId]}
-                      name={remoteUser?.name || 'Participant'}
+                      name={
+                        displayMembers.find((m) =>
+                          roomUsers.some((u) => u._id === m._id)
+                        )?.name || 'Participant'
+                      }
                       isLocal={false}
                       muted={false}
+                      presenting={!!screenSharers[socketId]}
+                      onClick={() => setPinnedId(socketId)}
                     />
-                  )
-                })}
-
-                {/* Audio-only participants (no video stream) */}
-                {displayMembers
-                  .filter((m) => m._id !== user?.id && !remoteUserIds.some((sid) => remoteStreams[sid]))
-                  .map((member, i) => (
-                    <div key={member._id || i} className="rounded-2xl overflow-hidden bg-surface-container-high border border-outline-variant/20 aspect-video flex items-center justify-center">
-                      <div className="flex flex-col items-center gap-2">
-                        <div className={`w-14 h-14 rounded-2xl ${memberColors[i % memberColors.length]} flex items-center justify-center`}>
-                          <span className="text-lg font-bold text-white">{member.name?.charAt(0)?.toUpperCase()}</span>
-                        </div>
-                        <span className="text-xs text-on-surface/50">{member.name}</span>
-                      </div>
-                    </div>
                   ))}
+
+                  {/* Audio-only participants (no video stream) */}
+                  {displayMembers
+                    .filter((m) => m._id !== user?.id && !remoteUserIds.some((sid) => remoteStreams[sid]))
+                    .map((member, i) => (
+                      <div key={member._id || i} className="rounded-xl overflow-hidden bg-surface-container-high border border-outline-variant/20 aspect-video flex items-center justify-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <div className={`w-14 h-14 rounded-2xl ${memberColors[i % memberColors.length]} flex items-center justify-center`}>
+                            <span className="text-lg font-bold text-white">{member.name?.charAt(0)?.toUpperCase()}</span>
+                          </div>
+                          <span className="text-xs text-on-surface/50">{member.name}</span>
+                        </div>
+                      </div>
+                    ))}
+                </div>
               </div>
-            </div>
+            )}
+          </div>
         </div>
 
         {/* Right Sidebar: Chat */}
@@ -887,10 +1058,15 @@ export default function Workspace() {
         </button>
 
         <button
-          className="w-12 h-12 rounded-2xl flex items-center justify-center bg-surface-container-high text-on-surface hover:bg-surface-container-high/80 transition-all duration-200"
-          title="Share screen"
+          onClick={toggleScreenShare}
+          className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
+            screenSharing
+              ? 'bg-primary text-on-primary'
+              : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80'
+          }`}
+          title={screenSharing ? 'Stop sharing' : 'Share screen'}
         >
-          <Monitor size={20} />
+          {screenSharing ? <MonitorOff size={20} /> : <Monitor size={20} />}
         </button>
 
         <div className="w-px h-8 bg-outline-variant/30 mx-1" />

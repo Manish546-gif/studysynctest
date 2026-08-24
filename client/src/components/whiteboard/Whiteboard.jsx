@@ -53,6 +53,7 @@ export default function Whiteboard({
   livePaths = [],
   boardName,
   standalone,
+  readOnly = false,
   canvasRef: externalCanvasRef,
   pomodoroOpen,
   onTogglePomodoro,
@@ -317,6 +318,7 @@ export default function Whiteboard({
 
   // Mouse events
   const handleMouseDown = (e) => {
+    if (readOnly) return;
     if (e.button === 1 || spaceRef.current || activeTool === 'select') {
       setIsPanning(true);
       lastMouseRef.current = { x: e.clientX, y: e.clientY };
@@ -504,7 +506,7 @@ export default function Whiteboard({
     <div className="flex h-full w-full">
       {/* Left toolbar */}
       <div className="w-14 bg-surface-container-low border-r border-outline-variant/30 flex flex-col items-center py-3 gap-1 shrink-0 z-20">
-        {tools.map((tool) => {
+        {!readOnly && tools.map((tool) => {
           const Icon = tool.icon;
           const active = activeTool === tool.id;
           return (
@@ -531,6 +533,7 @@ export default function Whiteboard({
         })}
 
         {/* Color picker trigger */}
+        {!readOnly && (
         <div className="relative mt-2">
           <button
             onClick={() => { setShowColorPicker(!showColorPicker); setShowStrokePicker(false); }}
@@ -560,8 +563,10 @@ export default function Whiteboard({
             )}
           </AnimatePresence>
         </div>
+        )}
 
         {/* Stroke width trigger */}
+        {!readOnly && (
         <div className="relative">
           <button
             onClick={() => { setShowStrokePicker(!showStrokePicker); setShowColorPicker(false); }}
@@ -593,6 +598,7 @@ export default function Whiteboard({
             )}
           </AnimatePresence>
         </div>
+        )}
 
         <div className="flex-1" />
 
@@ -698,13 +704,15 @@ export default function Whiteboard({
           {fullScreen ? <Maximize size={16} className="rotate-90" /> : <Maximize size={16} />}
         </button>
 
-        <button
-          onClick={onClear}
-          className="w-10 h-10 rounded-xl flex items-center justify-center text-on-surface/30 hover:bg-error-container hover:text-error transition-colors mt-1"
-          title="Clear board"
-        >
-          <Trash2 size={16} />
-        </button>
+        {onClear && (
+          <button
+            onClick={onClear}
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-on-surface/30 hover:bg-error-container hover:text-error transition-colors mt-1"
+            title="Clear board"
+          >
+            <Trash2 size={16} />
+          </button>
+        )}
       </div>
 
       {/* Main canvas */}

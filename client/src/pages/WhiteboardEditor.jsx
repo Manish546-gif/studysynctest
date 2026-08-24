@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Loader2, Undo2, Share2, Pencil, Check, X } from 'lucide-react'
+import { ArrowLeft, Loader2, Undo2, Redo2, Share2, Pencil, Check, X } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import Whiteboard from '../components/whiteboard/Whiteboard'
 import ShareWhiteboardModal from '../components/whiteboard/ShareWhiteboardModal'
+import CommentLayer from '../components/whiteboard/CommentLayer'
 
 export default function WhiteboardEditor() {
   const { id } = useParams()
@@ -20,16 +21,22 @@ export default function WhiteboardEditor() {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const [shareOpen, setShareOpen] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
+  const [myRole, setMyRole] = useState('viewer')
+  const [comments, setComments] = useState([])
 
   const actionsRef = useRef([])
   const saveTimerRef = useRef(null)
   const unmountedRef = useRef(false)
+  const redoStackRef = useRef([])
 
   useEffect(() => {
     unmountedRef.current = false
     api.getWhiteboard(id)
       .then((data) => {
         setBoard(data.whiteboard)
+        setMyRole(data.role || 'viewer')
+        setComments(data.whiteboard.comments || [])
         const initial = data.whiteboard.actions || []
         actionsRef.current = initial
         setActions(initial)
@@ -61,17 +68,58 @@ export default function WhiteboardEditor() {
   }, [persist])
 
   const handleDraw = useCallback((action) => {
+    redoStackRef.current = []
+    setCanRedo(false)
     updateActions((prev) => [...prev, action])
   }, [updateActions])
 
   const handleClear = useCallback(() => {
     if (!confirm('Clear the whiteboard? This cannot be undone.')) return
+    redoStackRef.current = []
+    setCanRedo(false)
     updateActions([])
   }, [updateActions])
 
+  const undoRef = useRef(() => {})
+  const redoRef = useRef(() => {})
+
   const handleUndo = useCallback(() => {
-    updateActions((prev) => prev.slice(0, -1))
+    updateActions((prev) => {
+      if (!prev.length) return prev
+      redoStackRef.current.push(prev[prev.length - 1])
+      if (redoStackRef.current.length > 100) redoStackRef.current.shift()
+      setCanRedo(true)
+      return prev.slice(0, -1)
+    })
   }, [updateActions])
+
+  const handleRedo = useCallback(() => {
+    const next = redoStackRef.current.pop()
+    if (!next) return
+    setCanRedo(redoStackRef.current.length > 0)
+    updateActions((prev) => [...prev, next])
+  }, [updateActions])
+
+  useEffect(() => {
+    undoRef.current = handleUndo
+    redoRef.current = handleRedo
+  }, [handleUndo, handleRedo])
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      const key = e.key.toLowerCase()
+      if (key !== 'z' && key !== 'y') return
+      const t = e.target
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (editingTitle) return
+      e.preventDefault()
+      if ((key === 'z' && e.shiftKey) || key === 'y') redoRef.current()
+      else undoRef.current()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [editingTitle])
 
   useEffect(() => {
     return () => {
@@ -82,7 +130,18 @@ export default function WhiteboardEditor() {
     }
   }, [id])
 
-  const isOwner = board && String(board.owner?._id || board.owner) === String(user?.id)
+  const isOwner = myRole === 'owner'
+  const canEditContent = myRole === 'owner' || myRole === 'editor' || myRole === 'link-editor'
+
+  const handleAddComment = useCallback(async (payload) => {
+    const data = await api.addWhiteboardComment(id, payload)
+    setComments(data.whiteboard.comments || [])
+  }, [id])
+
+  const handleDeleteComment = useCallback(async (commentId) => {
+    const data = await api.deleteWhiteboardComment(id, commentId)
+    setComments(data.whiteboard.comments || [])
+  }, [id])
 
   const handleRename = async (e) => {
     e.preventDefault()
@@ -180,13 +239,31 @@ export default function WhiteboardEditor() {
         </motion.span>
 
         <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={handleUndo}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-container-high text-on-surface rounded-xl text-xs font-semibold hover:bg-surface-container-high/80 transition-colors"
-            title="Undo last action"
-          >
-            <Undo2 size={14} /> Undo
-          </button>
+          {canEditContent && (
+            <>
+              <button
+                onClick={() => undoRef.current()}
+                disabled={!actions.length}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-container-high text-on-surface rounded-xl text-xs font-semibold hover:bg-surface-container-high/80 transition-colors disabled:opacity-40 disabled:hover:bg-surface-container-high"
+                title="Undo (Ctrl+Z)"
+              >
+                <Undo2 size={14} /> Undo
+              </button>
+              <button
+                onClick={() => redoRef.current()}
+                disabled={!canRedo}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-container-high text-on-surface rounded-xl text-xs font-semibold hover:bg-surface-container-high/80 transition-colors disabled:opacity-40 disabled:hover:bg-surface-container-high"
+                title="Redo (Ctrl+Shift+Z)"
+              >
+                <Redo2 size={14} /> Redo
+              </button>
+            </>
+          )}
+          {!canEditContent && (
+            <span className="text-[10px] px-2 py-1 rounded-lg bg-tertiary-container/60 text-on-tertiary-container font-medium">
+              View only
+            </span>
+          )}
           {isOwner && (
             <button
               onClick={() => setShareOpen(true)}
@@ -207,9 +284,24 @@ export default function WhiteboardEditor() {
           remoteCursors={{}}
           actions={actions}
           onDraw={handleDraw}
-          onClear={handleClear}
+          onClear={canEditContent ? handleClear : undefined}
+          readOnly={!canEditContent}
           fullScreen
           onToggleFullScreen={() => navigate('/whiteboards')}
+        />
+        <CommentLayer
+          comments={comments}
+          participants={[
+            { id: String(board.owner?._id || board.owner), name: board.owner?.name || '' },
+            ...(board.sharedWith || []).map((e) => ({
+              id: String(e.user?._id || e.user),
+              name: e.user?.name || '',
+            })),
+          ]}
+          currentUserId={String(user?.id)}
+          isOwner={isOwner}
+          onAdd={handleAddComment}
+          onDelete={handleDeleteComment}
         />
       </div>
 

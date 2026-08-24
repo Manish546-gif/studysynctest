@@ -13,6 +13,7 @@ export function useSocket(roomId) {
   const [messages, setMessages] = useState([]);
   const [roomFiles, setRoomFiles] = useState([]);
   const [typingUsers, setTypingUsers] = useState([]);
+  const [screenSharers, setScreenSharers] = useState({});
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -115,6 +116,27 @@ export function useSocket(roomId) {
       setRoomFiles((prev) => prev.filter((f) => f._id !== data.fileId));
     });
 
+    socket.on('screen-share-changed', (data) => {
+      setScreenSharers((prev) => {
+        const next = { ...prev };
+        if (data.sharing) next[data.socketId] = data.userName || true;
+        else delete next[data.socketId];
+        return next;
+      });
+    });
+
+    // Snapshot of already-active sharers, sent to late joiners.
+    socket.on('screen-sharers', (sharers) => {
+      if (!Array.isArray(sharers)) return;
+      setScreenSharers(() => {
+        const next = {};
+        sharers.forEach(({ socketId, userName }) => {
+          if (socketId) next[socketId] = userName || true;
+        });
+        return next;
+      });
+    });
+
     return () => {
       socket.emit('leave-room', roomId);
       socket.disconnect();
@@ -126,6 +148,7 @@ export function useSocket(roomId) {
       setMessages([]);
       setRoomFiles([]);
       setTypingUsers([]);
+      setScreenSharers({});
     };
   }, [roomId]);
 
@@ -189,6 +212,7 @@ export function useSocket(roomId) {
     roomFiles,
     setRoomFiles,
     typingUsers,
+    screenSharers,
     emitDraw,
     emitMove,
     emitCursor,

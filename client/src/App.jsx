@@ -44,7 +44,6 @@ function App() {
         <Route element={<ProtectedRoute><NotificationProvider><AppLayout /></NotificationProvider></ProtectedRoute>}>
           <Route path="/" element={<Home />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/workspace/:roomId" element={<Workspace />} />
           <Route path="/whiteboards" element={<MyWhiteboards />} />
           <Route path="/whiteboards/:id" element={<WhiteboardEditor />} />
           <Route path="/history" element={<History />} />
@@ -52,6 +51,16 @@ function App() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/calendar" element={<Calendar />} />
         </Route>
+        <Route
+          path="/workspace/:roomId"
+          element={
+            <ProtectedRoute>
+              <NotificationProvider>
+                <Workspace />
+              </NotificationProvider>
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </>
   )

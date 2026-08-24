@@ -135,10 +135,18 @@ export const api = {
   saveWhiteboardActions: (id, actions) =>
     request(`/whiteboards/${id}/actions`, { method: 'PUT', body: JSON.stringify({ actions }) }),
   deleteWhiteboard: (id) => request(`/whiteboards/${id}`, { method: 'DELETE' }),
-  shareWhiteboard: (id, email) =>
-    request(`/whiteboards/${id}/share`, { method: 'POST', body: JSON.stringify({ email }) }),
+  shareWhiteboard: (id, email, role = 'editor') =>
+    request(`/whiteboards/${id}/share`, { method: 'POST', body: JSON.stringify({ email, role }) }),
+  setShareRole: (id, userId, role) =>
+    request(`/whiteboards/${id}/share/${userId}`, { method: 'PUT', body: JSON.stringify({ role }) }),
+  setLinkAccess: (id, access) =>
+    request(`/whiteboards/${id}/link`, { method: 'POST', body: JSON.stringify({ access }) }),
   unshareWhiteboard: (id, userId) =>
     request(`/whiteboards/${id}/share`, { method: 'DELETE', body: JSON.stringify({ userId }) }),
+  addWhiteboardComment: (id, body) =>
+    request(`/whiteboards/${id}/comments`, { method: 'POST', body: JSON.stringify(body) }),
+  deleteWhiteboardComment: (id, commentId) =>
+    request(`/whiteboards/${id}/comments/${commentId}`, { method: 'DELETE' }),
 
   getNotebooks: () => request('/notebooks'),
   createNotebook: (name) => request('/notebooks', { method: 'POST', body: JSON.stringify({ name }) }),

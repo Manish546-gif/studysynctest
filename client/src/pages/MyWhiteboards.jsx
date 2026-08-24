@@ -8,6 +8,7 @@ import {
   PenTool,
   Trash2,
   Share2,
+  Search,
   X,
   ExternalLink,
   Layers,
@@ -56,6 +57,7 @@ export default function MyWhiteboards() {
   const [shareBoard, setShareBoard] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [search, setSearch] = useState('')
 
   const load = useCallback(() => {
     setLoading(true)
@@ -73,9 +75,27 @@ export default function MyWhiteboards() {
 
   const myId = String(user?.id)
 
-  const owned = boards.filter((b) => String(b.owner?._id || b.owner) === myId)
-  const shared = boards.filter((b) => String(b.owner?._id || b.owner) !== myId)
+  const q = search.trim().toLowerCase()
+  const matchBoard = (b) =>
+    !q ||
+    b.title?.toLowerCase().includes(q) ||
+    b.description?.toLowerCase().includes(q)
+
+  const ownedBoards = boards.filter((b) => String(b.owner?._id || b.owner) === myId)
+  const shared = boards.filter((b) => String(b.owner?._id || b.owner) !== myId).filter(matchBoard)
+  const owned = ownedBoards.filter(matchBoard)
   const unfiled = owned.filter((b) => !b.notebook)
+  const visibleNotebooks = notebooks.filter(
+    (nb) =>
+      !q ||
+      nb.name?.toLowerCase().includes(q) ||
+      ownedBoards.some((b) => String(b.notebook) === String(nb._id) && matchBoard(b))
+  )
+  const searchEmpty =
+    q &&
+    !shared.length &&
+    !owned.length &&
+    !visibleNotebooks.length
 
   const openCreateBoard = () => {
     setBoardError('')
@@ -188,6 +208,33 @@ export default function MyWhiteboards() {
 
       {error && <p className="text-sm text-error mb-6">{error}</p>}
 
+      {!loading && (
+        <div className="relative mb-8 max-w-md">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface/30 pointer-events-none" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search whiteboards and notebooks..."
+            className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-outline-variant/30 bg-surface-container-lowest text-sm text-on-surface placeholder:text-on-surface/25 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
+          />
+          {q && (
+            <button
+              onClick={() => setSearch('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface/30 hover:text-on-surface transition-colors"
+              title="Clear search"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {searchEmpty && (
+        <p className="text-sm text-on-surface/40 mb-6">
+          No whiteboards or notebooks match "{search.trim()}".
+        </p>
+      )}
+
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <SkeletonCard />
@@ -221,16 +268,18 @@ export default function MyWhiteboards() {
               <Folder size={16} className="text-on-surface/40" />
               <h2 className="font-display text-sm font-bold text-on-surface uppercase tracking-wider">Notebooks</h2>
             </div>
-            {notebooks.length === 0 ? (
-              <button
-                onClick={() => openCreateNotebook()}
-                className="w-full border-2 border-dashed border-outline-variant/40 rounded-2xl p-6 flex items-center justify-center gap-2 text-on-surface/40 hover:border-primary hover:text-primary transition-colors"
-              >
-                <Folder size={18} /> Create your first notebook to organize boards
-              </button>
+            {visibleNotebooks.length === 0 ? (
+              q ? null : (
+                <button
+                  onClick={() => openCreateNotebook()}
+                  className="w-full border-2 border-dashed border-outline-variant/40 rounded-2xl p-6 flex items-center justify-center gap-2 text-on-surface/40 hover:border-primary hover:text-primary transition-colors"
+                >
+                  <Folder size={18} /> Create your first notebook to organize boards
+                </button>
+              )
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {notebooks.map((nb) => {
+                {visibleNotebooks.map((nb) => {
                   const nbBoards = owned.filter((b) => String(b.notebook) === String(nb._id))
                   return (
                     <div
@@ -282,12 +331,14 @@ export default function MyWhiteboards() {
               <h2 className="font-display text-sm font-bold text-on-surface uppercase tracking-wider">Whiteboards</h2>
             </div>
             {unfiled.length === 0 ? (
-              <button
-                onClick={() => openCreateBoard()}
-                className="w-full border-2 border-dashed border-outline-variant/40 rounded-2xl p-6 flex items-center justify-center gap-2 text-on-surface/40 hover:border-primary hover:text-primary transition-colors"
-              >
-                <Plus size={18} /> Create your first whiteboard
-              </button>
+              q ? null : (
+                <button
+                  onClick={() => openCreateBoard()}
+                  className="w-full border-2 border-dashed border-outline-variant/40 rounded-2xl p-6 flex items-center justify-center gap-2 text-on-surface/40 hover:border-primary hover:text-primary transition-colors"
+                >
+                  <Plus size={18} /> Create your first whiteboard
+                </button>
+              )
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {unfiled.map((wb) => (
@@ -494,7 +545,7 @@ function BoardCard({ board, isOwner, notebooks = [], onOpen, onDelete, onShare, 
           </>
         ) : (
           <span className="text-[10px] px-2 py-1 rounded-lg bg-tertiary-container/60 text-on-tertiary-container font-medium">
-            Viewer
+            {board.myRole === 'editor' || board.myRole === 'link-editor' ? 'Editor' : 'Viewer'}
           </span>
         )}
       </div>
