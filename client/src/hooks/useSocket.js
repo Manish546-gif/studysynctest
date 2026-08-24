@@ -12,6 +12,7 @@ export function useSocket(roomId) {
   const [livePaths, setLivePaths] = useState({});
   const [messages, setMessages] = useState([]);
   const [roomFiles, setRoomFiles] = useState([]);
+  const [typingUsers, setTypingUsers] = useState([]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -25,7 +26,10 @@ export function useSocket(roomId) {
       socket.emit('join-room', roomId);
     });
 
-    socket.on('disconnect', () => setConnected(false));
+    socket.on('disconnect', () => {
+      setConnected(false);
+      setTypingUsers([]);
+    });
 
     socket.on('room-users', (users) => setRoomUsers(users));
 
@@ -33,6 +37,17 @@ export function useSocket(roomId) {
 
     socket.on('chat-message', (message) => {
       setMessages((prev) => [...prev, message]);
+    });
+
+    socket.on('user-typing', (data) => {
+      setTypingUsers((prev) => {
+        if (prev.some((u) => u.userId === data.userId)) return prev;
+        return [...prev, { userId: data.userId, name: data.name }];
+      });
+    });
+
+    socket.on('user-stopped-typing', (data) => {
+      setTypingUsers((prev) => prev.filter((u) => u.userId !== data.userId));
     });
 
     socket.on('whiteboard-state', (actions) => setRemoteActions(actions));
@@ -110,6 +125,7 @@ export function useSocket(roomId) {
       setLivePaths({});
       setMessages([]);
       setRoomFiles([]);
+      setTypingUsers([]);
     };
   }, [roomId]);
 
@@ -153,6 +169,14 @@ export function useSocket(roomId) {
     socketRef.current?.emit('file-deleted', { fileId });
   }, []);
 
+  const emitTypingStart = useCallback(() => {
+    socketRef.current?.emit('typing-start');
+  }, []);
+
+  const emitTypingStop = useCallback(() => {
+    socketRef.current?.emit('typing-stop');
+  }, []);
+
   return {
     socket: socketRef,
     connected,
@@ -164,6 +188,7 @@ export function useSocket(roomId) {
     messages,
     roomFiles,
     setRoomFiles,
+    typingUsers,
     emitDraw,
     emitMove,
     emitCursor,
@@ -174,5 +199,7 @@ export function useSocket(roomId) {
     emitMessage,
     emitFileUploaded,
     emitFileDeleted,
+    emitTypingStart,
+    emitTypingStop,
   };
 }

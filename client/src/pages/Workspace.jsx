@@ -24,6 +24,7 @@ import {
   FileText,
   PenTool,
   Maximize,
+  Settings,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -34,6 +35,9 @@ import WhiteboardPanel from '../components/whiteboard/WhiteboardPanel'
 import PomodoroTimer from '../components/common/PomodoroTimer'
 import ScreenRecorder from '../components/common/ScreenRecorder'
 import FilePreview from '../components/common/FilePreview'
+import ConfirmationModal from '../components/common/ConfirmationModal'
+
+const ROOM_TAGS = ['Study', 'Project', 'Review', 'Homework', 'Exam Prep', 'Discussion']
 
 function VideoTile({ stream, name, isLocal, muted, mirror }) {
   const videoRef = useRef(null)
@@ -94,6 +98,14 @@ export default function Workspace() {
   const [chatOpen, setChatOpen] = useState(false)
   const [membersOpen, setMembersOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsName, setSettingsName] = useState('')
+  const [settingsTag, setSettingsTag] = useState('Study')
+  const [savingSettings, setSavingSettings] = useState(false)
+  const [settingsSaved, setSettingsSaved] = useState(false)
+  const [settingsError, setSettingsError] = useState('')
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deletingRoom, setDeletingRoom] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
   const [chatInput, setChatInput] = useState('')
   const [pomodoroOpen, setPomodoroOpen] = useState(false)
@@ -101,6 +113,8 @@ export default function Workspace() {
   const [filePreviewOpen, setFilePreviewOpen] = useState(false)
   const [recording, setRecording] = useState(false)
   const chatScrollRef = useRef(null)
+  const typingTimeoutRef = useRef(null)
+  const isTypingRef = useRef(false)
   const halfScreenCanvasRef = useRef(null)
   const fullScreenCanvasRef = useRef(null)
 
@@ -122,6 +136,9 @@ export default function Workspace() {
     emitMessage,
     roomFiles,
     setRoomFiles,
+    typingUsers,
+    emitTypingStart,
+    emitTypingStop,
     emitFileUploaded,
     emitFileDeleted,
   } = useSocket(roomId)
@@ -146,7 +163,7 @@ export default function Workspace() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
-  }, [roomId])
+  }, [roomId, setRoomFiles])
 
   const handleDraw = useCallback((action) => {
     emitDraw(action)
@@ -162,21 +179,81 @@ export default function Workspace() {
   }
 
   const handleDeleteRoom = async () => {
-    if (!confirm('Delete this room? This cannot be undone.')) return
+    setDeletingRoom(true)
     try {
       await api.deleteRoom(roomId)
+      stopMedia()
       navigate('/dashboard')
     } catch (err) {
       alert(err.message)
+      setDeletingRoom(false)
+    }
+  }
+
+  const openSettings = () => {
+    if (!room) return
+    setSettingsName(room.name || '')
+    setSettingsTag(room.tag || 'Study')
+    setSettingsError('')
+    setSettingsSaved(false)
+    setChatOpen(false)
+    setMembersOpen(false)
+    setInviteOpen(false)
+    setSettingsOpen(true)
+  }
+
+  const handleSaveSettings = async () => {
+    if (!settingsName.trim()) return
+    setSavingSettings(true)
+    setSettingsError('')
+    try {
+      const data = await api.updateRoom(roomId, { name: settingsName.trim(), tag: settingsTag })
+      setRoom(data.room)
+      setSettingsSaved(true)
+      setTimeout(() => setSettingsSaved(false), 2000)
+    } catch (err) {
+      setSettingsError(err.message)
+    } finally {
+      setSavingSettings(false)
     }
   }
 
   const handleSendChat = (e) => {
     e.preventDefault()
     if (!chatInput.trim()) return
+    clearTimeout(typingTimeoutRef.current)
+    if (isTypingRef.current) {
+      isTypingRef.current = false
+      emitTypingStop()
+    }
     emitMessage(chatInput.trim())
     setChatInput('')
   }
+
+  const handleChatKeyDown = useCallback(() => {
+    if (!isTypingRef.current) {
+      isTypingRef.current = true
+      emitTypingStart()
+    }
+    clearTimeout(typingTimeoutRef.current)
+    typingTimeoutRef.current = setTimeout(() => {
+      isTypingRef.current = false
+      emitTypingStop()
+    }, 2000)
+  }, [emitTypingStart, emitTypingStop])
+
+  useEffect(() => () => clearTimeout(typingTimeoutRef.current), [])
+
+  const formatTypingIndicator = () => {
+    if (typingUsers.length === 0) return null
+    const names = typingUsers.map((u) => u.name).filter(Boolean)
+    if (names.length === 0) return null
+    return names.length === 1
+      ? `${names[0]} is typing...`
+      : `${names.join(', ')} are typing...`
+  }
+
+  const typingLabel = formatTypingIndicator()
 
   const toggleWbPanel = (tab) => {
     setWbPanelTab((cur) => (cur === tab ? null : tab))
@@ -214,6 +291,7 @@ export default function Workspace() {
   const allMembers = room.members || []
   const displayMembers = roomUsers.length > 0 ? roomUsers : allMembers
   const remoteUserIds = Object.keys(remoteStreams)
+  const isHost = room.host?._id === user?.id
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
@@ -224,6 +302,13 @@ export default function Workspace() {
         </button>
         <div className="w-px h-5 bg-outline-variant/30" />
         <h1 className="text-sm font-semibold text-on-surface">{room.name}</h1>
+        <button
+          onClick={openSettings}
+          className="w-7 h-7 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container hover:text-on-surface transition-colors"
+          title="Room settings"
+        >
+          <Settings size={14} />
+        </button>
 
         <button
           onClick={copyCode}
@@ -234,16 +319,18 @@ export default function Workspace() {
           {codeCopied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
         </button>
 
-        {codeCopied && (
-          <motion.span
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0 }}
-            className="text-xs text-success font-medium"
-          >
-            Copied!
-          </motion.span>
-        )}
+        <AnimatePresence>
+          {codeCopied && (
+            <motion.span
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0 }}
+              className="text-xs text-success font-medium"
+            >
+              Copied!
+            </motion.span>
+          )}
+        </AnimatePresence>
 
         <div className="ml-auto flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-error animate-pulse'}`} />
@@ -315,6 +402,8 @@ export default function Workspace() {
                   chatInput={chatInput}
                   setChatInput={setChatInput}
                   onSendChat={handleSendChat}
+                  onChatKeyDown={handleChatKeyDown}
+                  typingUsers={typingUsers}
                   chatScrollRef={chatScrollRef}
                   user={user}
                   members={displayMembers}
@@ -401,6 +490,8 @@ export default function Workspace() {
                     chatInput={chatInput}
                     setChatInput={setChatInput}
                     onSendChat={handleSendChat}
+                    onChatKeyDown={handleChatKeyDown}
+                    typingUsers={typingUsers}
                     chatScrollRef={chatScrollRef}
                     user={user}
                     members={displayMembers}
@@ -421,7 +512,6 @@ export default function Workspace() {
               }}
               onPointerMove={(e) => {
                 if (!whiteboardResizing.current) return;
-                const rect = e.currentTarget.parentElement.getBoundingClientRect();
                 const container = e.currentTarget.parentElement.parentElement.getBoundingClientRect();
                 const pct = ((e.clientX - container.left) / container.width) * 100;
                 setWhiteboardWidth(Math.min(85, Math.max(25, pct)));
@@ -540,6 +630,7 @@ export default function Workspace() {
                   <input
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={handleChatKeyDown}
                     placeholder="Type a message..."
                     className="flex-1 bg-transparent text-sm text-on-surface placeholder:text-on-surface/30 outline-none"
                   />
@@ -547,6 +638,9 @@ export default function Workspace() {
                     <Send size={16} />
                   </button>
                 </div>
+                {typingLabel && (
+                  <p className="text-on-surface/40 text-xs italic mt-1.5 px-1">{typingLabel}</p>
+                )}
               </form>
             </motion.div>
           )}
@@ -628,6 +722,99 @@ export default function Workspace() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Room settings sidebar */}
+        <AnimatePresence>
+          {settingsOpen && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 320, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="bg-surface-container-low border-l border-outline-variant/20 flex flex-col overflow-hidden shrink-0"
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant/20">
+                <span className="text-sm font-semibold text-on-surface">Room Settings</span>
+                <button onClick={() => setSettingsOpen(false)} className="w-7 h-7 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-5">
+                <div>
+                  <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Room Name</label>
+                  <input
+                    value={settingsName}
+                    onChange={(e) => setSettingsName(e.target.value)}
+                    disabled={!isHost}
+                    placeholder="Room name"
+                    className="w-full rounded-xl border border-outline-variant/50 bg-surface-container-lowest px-3 py-2.5 text-sm text-on-surface placeholder:text-on-surface/30 outline-none focus:border-primary transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Tag</label>
+                  <div className={`flex flex-wrap gap-1.5 ${!isHost ? 'pointer-events-none opacity-60' : ''}`}>
+                    {ROOM_TAGS.map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        disabled={!isHost}
+                        onClick={() => setSettingsTag(tag)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                          settingsTag === tag
+                            ? 'bg-primary text-on-primary'
+                            : 'bg-surface-container-high text-on-surface/60 hover:bg-surface-container hover:text-on-surface'
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {!isHost && (
+                  <p className="text-xs text-on-surface/40 leading-relaxed">
+                    Only the host can edit these settings.
+                  </p>
+                )}
+
+                {isHost && (
+                  <>
+                    {settingsError && <p className="text-xs text-error">{settingsError}</p>}
+                    <button
+                      onClick={handleSaveSettings}
+                      disabled={savingSettings || !settingsName.trim()}
+                      className="w-full py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:shadow-md transition-shadow disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {savingSettings ? (
+                        <Loader2 size={15} className="animate-spin" />
+                      ) : settingsSaved ? (
+                        <Check size={15} />
+                      ) : (
+                        <Settings size={15} />
+                      )}
+                      {savingSettings ? 'Saving...' : settingsSaved ? 'Saved!' : 'Save Changes'}
+                    </button>
+
+                    <div className="rounded-xl border border-error/30 bg-error-container/30 p-4">
+                      <p className="text-sm font-semibold text-error mb-1">Danger Zone</p>
+                      <p className="text-xs text-on-surface/50 leading-relaxed mb-3">
+                        Deleting this room removes it for all members. This cannot be undone.
+                      </p>
+                      <button
+                        onClick={() => setDeleteConfirmOpen(true)}
+                        className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-error text-white text-xs font-semibold hover:shadow-md transition-shadow"
+                      >
+                        <Trash2 size={13} />
+                        Delete Room
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Floating panels */}
@@ -661,6 +848,17 @@ export default function Workspace() {
           />
         )}
       </AnimatePresence>
+
+      <ConfirmationModal
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        onConfirm={handleDeleteRoom}
+        title="Delete Room"
+        message="This room will be permanently deleted for you and all members. This cannot be undone."
+        confirmText="Delete Room"
+        confirmVariant="danger"
+        loading={deletingRoom}
+      />
 
       {/* Bottom Control Bar */}
       <div className="flex items-center justify-center gap-3 px-6 py-4 bg-surface border-t border-outline-variant/20 shrink-0">
@@ -700,7 +898,7 @@ export default function Workspace() {
         <button
           onClick={() => {
             if (whiteboardOpen) { toggleWbPanel('chat'); return; }
-            setChatOpen((v) => !v); setMembersOpen(false); setInviteOpen(false);
+            setChatOpen((v) => !v); setMembersOpen(false); setInviteOpen(false); setSettingsOpen(false);
           }}
           className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
             whiteboardOpen ? (wbPanelTab === 'chat' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80')
@@ -714,7 +912,7 @@ export default function Workspace() {
         <button
           onClick={() => {
             if (whiteboardOpen) { toggleWbPanel('members'); return; }
-            setMembersOpen((v) => !v); setChatOpen(false); setInviteOpen(false);
+            setMembersOpen((v) => !v); setChatOpen(false); setInviteOpen(false); setSettingsOpen(false);
           }}
           className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
             whiteboardOpen ? (wbPanelTab === 'members' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80')
@@ -728,7 +926,7 @@ export default function Workspace() {
         <button
           onClick={() => {
             if (whiteboardOpen) { toggleWbPanel('invite'); return; }
-            setInviteOpen((v) => !v); setChatOpen(false); setMembersOpen(false);
+            setInviteOpen((v) => !v); setChatOpen(false); setMembersOpen(false); setSettingsOpen(false);
           }}
           className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
             whiteboardOpen ? (wbPanelTab === 'invite' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80')
@@ -781,7 +979,7 @@ export default function Workspace() {
         <button
           onClick={() => {
             if (whiteboardOpen) { toggleWbPanel('files'); return; }
-            setFilePreviewOpen((v) => !v); setPomodoroOpen(false); setRecorderOpen(false);
+            setFilePreviewOpen((v) => !v); setPomodoroOpen(false); setRecorderOpen(false); setSettingsOpen(false);
           }}
           className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
             whiteboardOpen ? (wbPanelTab === 'files' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80')

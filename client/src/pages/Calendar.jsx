@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Clock, Users, Loader2, ArrowRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock, Users, ArrowRight } from 'lucide-react'
 import { api } from '../services/api'
+import Skeleton from '../components/common/Skeleton'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -136,8 +137,9 @@ export default function Calendar() {
           </h3>
 
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 size={20} className="animate-spin text-primary" />
+            <div className="space-y-3">
+              <Skeleton className="h-28 w-full" />
+              <Skeleton className="h-28 w-full" />
             </div>
           ) : selectedSessions.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">

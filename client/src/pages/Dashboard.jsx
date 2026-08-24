@@ -20,6 +20,8 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../services/api'
+import { SkeletonRoomCard } from '../components/common/Skeleton'
+import ConfirmationModal from '../components/common/ConfirmationModal'
 
 const container = {
   hidden: { opacity: 0 },
@@ -83,11 +85,14 @@ export default function Dashboard() {
   const [newRoomName, setNewRoomName] = useState('')
   const [newRoomDesc, setNewRoomDesc] = useState('')
   const [creatingRoom, setCreatingRoom] = useState(false)
+  const [createError, setCreateError] = useState('')
   const [joinCode, setJoinCode] = useState('')
   const [joining, setJoining] = useState(false)
   const [joinError, setJoinError] = useState('')
   const [createdRoom, setCreatedRoom] = useState(null)
   const [codeCopied, setCodeCopied] = useState(false)
+  const [deleteTargetId, setDeleteTargetId] = useState(null)
+  const [deletingRoom, setDeletingRoom] = useState(false)
 
   useEffect(() => {
     api.getRooms()
@@ -120,10 +125,17 @@ export default function Dashboard() {
     return () => ctx.revert()
   }, [rooms.length, createdRooms.length])
 
+  useEffect(() => {
+    if (modal !== 'created') return
+    const timer = setTimeout(() => setModal(null), 5000)
+    return () => clearTimeout(timer)
+  }, [modal])
+
   const handleCreateRoom = async (e) => {
     e.preventDefault()
     if (!newRoomName.trim()) return
     setCreatingRoom(true)
+    setCreateError('')
     try {
       const data = await api.createRoom({ name: newRoomName.trim(), description: newRoomDesc.trim() })
       setRooms((prev) => [data.room, ...prev])
@@ -132,7 +144,7 @@ export default function Dashboard() {
       setCreatedRoom(data.room)
       setModal('created')
     } catch (err) {
-      alert(err.message)
+      setCreateError(err.message || 'Failed to create room')
     } finally {
       setCreatingRoom(false)
     }
@@ -162,13 +174,17 @@ export default function Dashboard() {
     navigate(`/workspace/${roomId}`)
   }
 
-  const handleDeleteRoom = async (roomId) => {
-    if (!confirm('Delete this room? This cannot be undone.')) return
+  const handleDeleteRoom = async () => {
+    if (!deleteTargetId) return
+    setDeletingRoom(true)
     try {
-      await api.deleteRoom(roomId)
-      setRooms((prev) => prev.filter((r) => r._id !== roomId))
+      await api.deleteRoom(deleteTargetId)
+      setRooms((prev) => prev.filter((r) => r._id !== deleteTargetId))
+      setDeleteTargetId(null)
     } catch (err) {
       alert(err.message)
+    } finally {
+      setDeletingRoom(false)
     }
   }
 
@@ -208,7 +224,7 @@ export default function Dashboard() {
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <button
-                onClick={() => { setModal('create'); setCreatedRoom(null); }}
+                onClick={() => { setModal('create'); setCreatedRoom(null); setCreateError(''); }}
                 className="flex items-center gap-2 px-5 py-2.5 bg-inverse-surface text-surface rounded-xl text-sm font-semibold hover:shadow-lg transition-shadow"
               >
                 <Pencil size={15} />
@@ -275,19 +291,22 @@ export default function Dashboard() {
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 size={24} className="animate-spin text-primary" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <SkeletonRoomCard />
+              <SkeletonRoomCard />
             </div>
           ) : rooms.length === 0 ? (
-            <div className="text-center py-16 bg-surface-container-low rounded-[20px]">
-              <Users size={40} className="mx-auto text-on-surface/20 mb-3" />
-              <p className="text-sm text-on-surface/40 mb-1">No rooms yet</p>
-              <p className="text-xs text-on-surface/25 mb-4">Create a room or join one with a code</p>
+            <div className="text-center py-20 bg-surface-container-low rounded-[20px] hairline">
+              <div className="w-16 h-16 rounded-2xl bg-primary-container/50 flex items-center justify-center mx-auto mb-4">
+                <Users size={28} className="text-on-primary-container/60" />
+              </div>
+              <p className="font-display text-base font-bold text-on-surface mb-1">No rooms yet</p>
+              <p className="text-sm text-on-surface/40 mb-6 max-w-[240px] mx-auto">Create your first study room or join one with a code to get started.</p>
               <div className="flex justify-center gap-3">
-                <button onClick={() => setModal('create')} className="px-4 py-2 bg-primary-container text-on-primary-container rounded-xl text-xs font-semibold hover:shadow-sm transition-shadow">
+                <button onClick={() => { setModal('create'); setCreateError(''); }} className="px-5 py-2.5 bg-primary text-on-primary rounded-xl text-sm font-semibold hover:shadow-md hover:shadow-primary/20 transition-shadow">
                   Create Room
                 </button>
-                <button onClick={() => setModal('join')} className="px-4 py-2 bg-surface-container-high text-on-surface rounded-xl text-xs font-semibold hover:shadow-sm transition-shadow">
+                <button onClick={() => setModal('join')} className="px-5 py-2.5 bg-surface-container-high text-on-surface rounded-xl text-sm font-semibold border border-outline-variant/40 hover:bg-surface-container-high/80 transition-colors">
                   Join with Code
                 </button>
               </div>
@@ -299,10 +318,16 @@ export default function Dashboard() {
                   key={room._id}
                   whileHover={{ y: -4 }}
                   transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-                  className="bg-surface-container-low rounded-[20px] overflow-hidden cursor-pointer group"
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`Join ${room.name}`}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && e.target === e.currentTarget) handleJoinRoom(room._id)
+                  }}
+                  className="bg-surface-container-low rounded-[20px] overflow-hidden cursor-pointer group focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                   onClick={() => navigate(`/workspace/${room._id}`)}
                 >
-                  <div className="relative h-40 overflow-hidden bg-gradient-to-br from-primary-container/30 to-secondary-container/30 flex items-center justify-center">
+                  <div className="relative h-40 overflow-hidden bg-primary-container/30 flex items-center justify-center">
                     <Pencil size={48} className="text-on-surface/10" />
                     <span className={`absolute top-3 left-3 px-2.5 py-1 rounded-lg text-[11px] font-semibold ${TAG_COLORS[idx % TAG_COLORS.length]}`}>
                       {room.tag || 'Study'}
@@ -313,7 +338,7 @@ export default function Dashboard() {
                     </div>
                     {room.host?._id === user?.id && (
                       <button
-                        onClick={(e) => { e.stopPropagation(); handleDeleteRoom(room._id); }}
+                        onClick={(e) => { e.stopPropagation(); setDeleteTargetId(room._id); }}
                         className="absolute bottom-3 right-3 w-8 h-8 rounded-lg bg-error-container/80 backdrop-blur-sm flex items-center justify-center text-error opacity-0 group-hover:opacity-100 transition-opacity"
                       >
                         <Trash2 size={14} />
@@ -440,7 +465,7 @@ export default function Dashboard() {
               <div className="bg-surface rounded-[24px] shadow-2xl w-full max-w-[28rem] p-6" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="font-display text-lg font-bold text-on-surface">Create New Room</h2>
-                  <button onClick={() => setModal(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors">
+                  <button onClick={() => setModal(null)} aria-label="Close" className="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors">
                     <X size={18} />
                   </button>
                 </div>
@@ -466,6 +491,9 @@ export default function Dashboard() {
                       className="w-full rounded-2xl border border-outline-variant/50 bg-surface-container-lowest px-4 py-3 text-sm text-on-surface placeholder:text-on-surface/30 outline-none resize-none focus:border-primary-container transition-colors"
                     />
                   </div>
+                  {createError && (
+                    <p className="text-xs text-error">{createError}</p>
+                  )}
                   <button
                     type="submit"
                     disabled={creatingRoom || !newRoomName.trim()}
@@ -508,6 +536,7 @@ export default function Dashboard() {
                     <span className="font-mono text-4xl font-bold text-on-surface tracking-[0.3em]">{createdRoom.code}</span>
                     <button
                       onClick={copyCode}
+                      aria-label={codeCopied ? 'Room code copied' : 'Copy room code'}
                       className="w-10 h-10 rounded-xl flex items-center justify-center bg-surface-container-high text-on-surface/60 hover:text-on-surface transition-colors"
                     >
                       {codeCopied ? <Check size={18} className="text-on-success-container" /> : <Copy size={18} />}
@@ -552,7 +581,7 @@ export default function Dashboard() {
               <div className="bg-surface rounded-[24px] shadow-2xl w-full max-w-[28rem] p-6" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="font-display text-lg font-bold text-on-surface">Join Room</h2>
-                  <button onClick={() => setModal(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors">
+                  <button onClick={() => setModal(null)} aria-label="Close" className="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors">
                     <X size={18} />
                   </button>
                 </div>
@@ -586,6 +615,17 @@ export default function Dashboard() {
           </>
         )}
       </AnimatePresence>
+
+      <ConfirmationModal
+        open={!!deleteTargetId}
+        onClose={() => setDeleteTargetId(null)}
+        onConfirm={handleDeleteRoom}
+        title="Delete Room"
+        message="This room will be permanently deleted for you and all members. This cannot be undone."
+        confirmText="Delete"
+        confirmVariant="danger"
+        loading={deletingRoom}
+      />
     </motion.div>
   )
 }

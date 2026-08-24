@@ -24,7 +24,7 @@ function formatMessageTime(value) {
 }
 
 export default function WhiteboardPanel({
-  isOpen,
+  _isOpen,
   onClose,
   activeTab,
   onTabChange,
@@ -37,6 +37,8 @@ export default function WhiteboardPanel({
   chatInput,
   setChatInput,
   onSendChat,
+  onChatKeyDown,
+  typingUsers,
   chatScrollRef,
   user,
   members,
@@ -177,6 +179,7 @@ export default function WhiteboardPanel({
                 <input
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={onChatKeyDown}
                   placeholder="Type a message..."
                   className="flex-1 bg-transparent text-sm text-on-surface placeholder:text-on-surface/30 outline-none"
                 />
@@ -184,6 +187,13 @@ export default function WhiteboardPanel({
                   <Send size={16} />
                 </button>
               </div>
+              {typingUsers?.length > 0 && (
+                <p className="text-on-surface/40 text-xs italic mt-1.5 px-1">
+                  {typingUsers.length === 1
+                    ? `${typingUsers[0].name} is typing...`
+                    : `${typingUsers.map((u) => u.name).join(', ')} are typing...`}
+                </p>
+              )}
             </form>
           </>
         )}

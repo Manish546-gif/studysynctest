@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { User, Bell, Palette, Shield, Camera, Check, Loader2 } from 'lucide-react'
+import { User, Bell, Palette, Shield, Check, Loader2, Camera } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { useNotifications } from '../contexts/NotificationContext'
+import { api } from '../services/api'
 import { applyTheme, applyFont, getStoredTheme, getStoredFont } from '../utils/appearance'
 
 const tabs = [
@@ -29,11 +31,24 @@ const sectionVariants = {
   exit: { opacity: 0, y: -8, transition: { duration: 0.2 } },
 }
 
+function timeAgo(date) {
+  const diff = Date.now() - new Date(date).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'Just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
 function AccountSection() {
   const { user, updateUser } = useAuth()
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef(null)
 
   const nameParts = (user?.name || '').split(' ')
   const [firstName, setFirstName] = useState(nameParts[0] || '')
@@ -45,6 +60,22 @@ function AccountSection() {
     .join('')
     .toUpperCase()
     .slice(0, 2)
+
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    setError('')
+    try {
+      const data = await api.uploadAvatar(file)
+      await updateUser(data.user)
+    } catch (err) {
+      setError(err.message || 'Failed to upload image')
+    } finally {
+      setUploading(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
 
   const handleSave = async (e) => {
     e.preventDefault()
@@ -70,13 +101,33 @@ function AccountSection() {
     <motion.div variants={sectionVariants} initial="hidden" animate="visible" exit="exit" className="space-y-8">
       {/* Profile card */}
       <div className="flex items-center gap-5 p-5 bg-surface-container-low rounded-2xl">
-        <div className="relative">
-          <div className="w-16 h-16 rounded-full bg-primary-container flex items-center justify-center text-xl font-bold font-display text-on-primary-container">
-            {initials}
-          </div>
-          <button className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-surface border border-outline-variant/30 flex items-center justify-center text-on-surface/50 hover:text-on-surface transition-colors">
-            <Camera size={12} />
+        <div className="relative group">
+          {user?.avatar ? (
+            <img src={user.avatar} alt={user.name} className="w-16 h-16 rounded-full object-cover" />
+          ) : (
+            <div className="w-16 h-16 rounded-full bg-primary-container flex items-center justify-center text-xl font-bold font-display text-on-primary-container">
+              {initials}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="absolute inset-0 w-16 h-16 rounded-full bg-inverse-surface/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity disabled:opacity-50"
+          >
+            {uploading ? (
+              <Loader2 size={18} className="animate-spin text-surface" />
+            ) : (
+              <Camera size={18} className="text-surface" />
+            )}
           </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+            onChange={handleAvatarUpload}
+            className="hidden"
+          />
         </div>
         <div className="min-w-0">
           <p className="font-display text-lg font-bold text-on-surface truncate">{user?.name || 'Member'}</p>
@@ -92,7 +143,7 @@ function AccountSection() {
             <input
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-outline-variant/40 bg-surface-container-lowest text-sm text-on-surface outline-none focus:border-primary-container transition-colors"
+              className="w-full px-4 py-3 rounded-xl border border-outline-variant/40 bg-surface-container-lowest text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
             />
           </div>
           <div>
@@ -100,7 +151,7 @@ function AccountSection() {
             <input
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-outline-variant/40 bg-surface-container-lowest text-sm text-on-surface outline-none focus:border-primary-container transition-colors"
+              className="w-full px-4 py-3 rounded-xl border border-outline-variant/40 bg-surface-container-lowest text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
             />
           </div>
         </div>
@@ -110,7 +161,7 @@ function AccountSection() {
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl border border-outline-variant/40 bg-surface-container-lowest text-sm text-on-surface outline-none focus:border-primary-container transition-colors"
+              className="w-full px-4 py-3 rounded-xl border border-outline-variant/40 bg-surface-container-lowest text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
           />
         </div>
 
@@ -214,7 +265,81 @@ function AppearanceSection() {
   )
 }
 
-function Placeholder({ title }) {
+function NotificationsSection() {
+  const { notifications, unreadCount, markAllRead } = useNotifications()
+  const prefs = JSON.parse(localStorage.getItem('notifPrefs') || '{}')
+  const [roomJoined, setRoomJoined] = useState(prefs.roomJoined !== false)
+  const [fileUploaded, setFileUploaded] = useState(prefs.fileUploaded !== false)
+  const [whiteboardShared, setWhiteboardShared] = useState(prefs.whiteboardShared !== false)
+
+  const savePref = (key, value) => {
+    if (key === 'roomJoined') setRoomJoined(value)
+    else if (key === 'fileUploaded') setFileUploaded(value)
+    else if (key === 'whiteboardShared') setWhiteboardShared(value)
+    localStorage.setItem('notifPrefs', JSON.stringify({ roomJoined: key === 'roomJoined' ? value : roomJoined, fileUploaded: key === 'fileUploaded' ? value : fileUploaded, whiteboardShared: key === 'whiteboardShared' ? value : whiteboardShared }))
+  }
+
+  const toggles = [
+    { key: 'roomJoined', label: 'Room joins', desc: 'When someone joins your study room', value: roomJoined },
+    { key: 'fileUploaded', label: 'File uploads', desc: 'When someone uploads a file', value: fileUploaded },
+    { key: 'whiteboardShared', label: 'Whiteboard shares', desc: 'When someone shares a whiteboard with you', value: whiteboardShared },
+  ]
+
+  return (
+    <motion.div variants={sectionVariants} initial="hidden" animate="visible" exit="exit" className="space-y-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-display text-sm font-bold text-on-surface">Notification preferences</h3>
+          <p className="text-xs text-on-surface/40 mt-0.5">Choose which notifications you receive</p>
+        </div>
+        {unreadCount > 0 && (
+          <button onClick={markAllRead} className="text-xs font-medium text-primary hover:text-primary/80 transition-colors">
+            Mark all read ({unreadCount})
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-1">
+        {toggles.map((t) => (
+          <label key={t.key} className="flex items-center justify-between p-4 rounded-xl border border-outline-variant/20 hover:border-outline-variant/40 transition-colors cursor-pointer">
+            <div>
+              <p className="text-sm font-medium text-on-surface">{t.label}</p>
+              <p className="text-xs text-on-surface/40 mt-0.5">{t.desc}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => savePref(t.key, !t.value)}
+              className={`relative w-10 h-6 rounded-full transition-colors ${t.value ? 'bg-primary' : 'bg-outline-variant/40'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-surface shadow transition-transform ${t.value ? 'translate-x-4' : ''}`} />
+            </button>
+          </label>
+        ))}
+      </div>
+
+      <div>
+        <h3 className="font-display text-sm font-bold text-on-surface mb-3">Recent notifications</h3>
+        {notifications.length === 0 ? (
+          <p className="text-sm text-on-surface/35 py-6 text-center">No notifications yet</p>
+        ) : (
+          <div className="space-y-1">
+            {notifications.slice(0, 5).map((n) => (
+              <div key={n._id} className={`flex items-center gap-3 p-3 rounded-xl ${!n.read ? 'bg-primary/5' : ''}`}>
+                <div className={`w-2 h-2 rounded-full shrink-0 ${!n.read ? 'bg-primary' : 'bg-transparent'}`} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-on-surface/70 truncate">{n.title}</p>
+                  <p className="text-[11px] text-on-surface/30">{timeAgo(n.createdAt)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </motion.div>
+  )
+}
+
+function PrivacyPlaceholder() {
   return (
     <motion.div
       variants={sectionVariants}
@@ -224,9 +349,9 @@ function Placeholder({ title }) {
       className="flex flex-col items-center justify-center py-20 text-center"
     >
       <div className="w-16 h-16 rounded-2xl bg-surface-container-high flex items-center justify-center mb-4">
-        <Bell size={24} className="text-on-surface/20" />
+        <Shield size={24} className="text-on-surface/20" />
       </div>
-      <p className="font-display text-base font-bold text-on-surface/50 mb-1">{title}</p>
+      <p className="font-display text-base font-bold text-on-surface/50 mb-1">Privacy & Security</p>
       <p className="text-sm text-on-surface/30">Coming soon</p>
     </motion.div>
   )
@@ -275,8 +400,8 @@ export default function Settings() {
           <AnimatePresence mode="wait">
             {activeTab === 'account' && <AccountSection key="account" />}
             {activeTab === 'appearance' && <AppearanceSection key="appearance" />}
-            {activeTab === 'notifications' && <Placeholder key="notifications" title="Notifications" />}
-            {activeTab === 'privacy' && <Placeholder key="privacy" title="Privacy & Security" />}
+            {activeTab === 'notifications' && <NotificationsSection key="notifications" />}
+            {activeTab === 'privacy' && <PrivacyPlaceholder key="privacy" />}
           </AnimatePresence>
         </div>
       </div>

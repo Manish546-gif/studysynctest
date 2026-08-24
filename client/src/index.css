@@ -207,17 +207,8 @@
     background-size: 24px 24px;
   }
 
-  .mesh-aurora {
-    background-image:
-      radial-gradient(ellipse 70% 55% at 12% 8%, color-mix(in srgb, var(--color-primary-container) 65%, transparent) 0%, transparent 60%),
-      radial-gradient(ellipse 55% 50% at 92% 18%, color-mix(in srgb, var(--color-secondary-container) 50%, transparent) 0%, transparent 60%),
-      radial-gradient(ellipse 65% 55% at 72% 92%, color-mix(in srgb, var(--color-tertiary-container) 40%, transparent) 0%, transparent 60%);
-  }
-
   .mesh-card {
-    background-image:
-      radial-gradient(ellipse 90% 70% at 85% 0%, color-mix(in srgb, var(--color-primary-container) 70%, transparent) 0%, transparent 55%),
-      radial-gradient(ellipse 70% 60% at 10% 100%, color-mix(in srgb, var(--color-secondary-container) 45%, transparent) 0%, transparent 55%);
+    background-color: var(--color-surface-container-high);
   }
 
   .press {
@@ -256,4 +247,13 @@
 ::-webkit-scrollbar-thumb {
   background: var(--color-outline-variant);
   border-radius: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -12,14 +12,9 @@ import {
   Plus,
   Maximize,
   Trash2,
-  Undo2,
   Users,
   MessageCircle,
   FileText,
-  Upload,
-  Send,
-  ChevronLeft,
-  ChevronRight,
   Timer,
   Video,
   UserPlus,
@@ -39,7 +34,7 @@ const tools = [
 ];
 
 export default function Whiteboard({
-  roomId,
+  _roomId,
   connected,
   roomUsers,
   remoteCursors,
@@ -47,10 +42,10 @@ export default function Whiteboard({
   onDraw,
   onCursor,
   onClear,
-  onUndo,
+  _onUndo,
   onLivePath,
   onLivePathEnd,
-  onLeave,
+  _onLeave,
   onToggleChat,
   chatOpen,
   fullScreen,
@@ -72,7 +67,7 @@ export default function Whiteboard({
 }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
-  const textInputRef = useRef(null);
+  const _textInputRef = useRef(null);
 
   const [activeTool, setActiveTool] = useState('pen');
   const [color, setColor] = useState('#1f1b11');
@@ -113,7 +108,7 @@ export default function Whiteboard({
   }, [pan, zoom]);
 
   // Canvas to screen coords
-  const canvasToScreen = useCallback((cx, cy) => ({
+  const _canvasToScreen = useCallback((cx, cy) => ({
     x: cx * zoom + pan.x,
     y: cy * zoom + pan.y,
   }), [pan, zoom]);
@@ -188,7 +183,7 @@ export default function Whiteboard({
     }
 
     ctx.restore();
-  }, [allActions, pan, zoom, isDrawing, currentPath, activeTool, color, strokeWidth, drawGrid]);
+  }, [allActions, pan, zoom, isDrawing, currentPath, activeTool, color, strokeWidth, drawGrid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function drawAction(ctx, action) {
     if (action.type === 'pen' && action.points?.length > 0) {

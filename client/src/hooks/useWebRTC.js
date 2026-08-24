@@ -7,7 +7,7 @@ const ICE_SERVERS = {
   ],
 };
 
-export function useWebRTC(socketRef, roomId, localUserId) {
+export function useWebRTC(socketRef, roomId, _localUserId) {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState({});
   const [micOn, setMicOn] = useState(false);
@@ -31,7 +31,7 @@ export function useWebRTC(socketRef, roomId, localUserId) {
     }
   }, []);
 
-  const createPeer = useCallback((remoteSocketId, stream, isInitiator) => {
+  const createPeer = useCallback((remoteSocketId, stream, _isInitiator) => {
     if (peersRef.current[remoteSocketId]) return peersRef.current[remoteSocketId];
 
     const pc = new RTCPeerConnection(ICE_SERVERS);
@@ -91,7 +91,7 @@ export function useWebRTC(socketRef, roomId, localUserId) {
     const socket = socketRef.current;
     if (!socket || !roomId) return;
 
-    socket.on('webrtc-user-joined', async ({ socketId, userId }) => {
+    socket.on('webrtc-user-joined', async ({ socketId, userId: _userId }) => {
       if (socketId === socket.id) return;
       const stream = localStreamRef.current;
       if (stream) {

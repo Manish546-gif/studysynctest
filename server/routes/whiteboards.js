@@ -4,6 +4,7 @@ const Whiteboard = require('../models/Whiteboard');
 const Notebook = require('../models/Notebook');
 const User = require('../models/User');
 const auth = require('../middleware/auth');
+const { notify } = require('../notify');
 
 function ownerId(board) {
   return String(board.owner?._id || board.owner);
@@ -140,6 +141,14 @@ router.post('/:id/share', auth, async (req, res) => {
       board.sharedWith.push(target._id);
       await board.save();
     }
+
+    notify(target._id, {
+      type: 'whiteboard_shared',
+      title: `${req.user.name} shared "${board.name}" with you`,
+      body: 'You have a new shared whiteboard',
+      from: req.user._id,
+    });
+
     res.json({ whiteboard: board });
   } catch (err) {
     res.status(500).json({ error: err.message });

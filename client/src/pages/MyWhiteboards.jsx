@@ -9,13 +9,15 @@ import {
   Trash2,
   Share2,
   X,
-  Loader2,
   ExternalLink,
   Layers,
+  Loader2,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import ShareWhiteboardModal from '../components/whiteboard/ShareWhiteboardModal'
+import { SkeletonCard } from '../components/common/Skeleton'
+import ConfirmationModal from '../components/common/ConfirmationModal'
 
 function timeAgo(value) {
   if (!value) return ''
@@ -45,12 +47,15 @@ export default function MyWhiteboards() {
   const [boardDesc, setBoardDesc] = useState('')
   const [boardNotebook, setBoardNotebook] = useState('')
   const [creatingBoard, setCreatingBoard] = useState(false)
+  const [boardError, setBoardError] = useState('')
 
   const [createNotebookOpen, setCreateNotebookOpen] = useState(false)
   const [notebookName, setNotebookName] = useState('')
   const [creatingNotebook, setCreatingNotebook] = useState(false)
-
+  const [notebookError, setNotebookError] = useState('')
   const [shareBoard, setShareBoard] = useState(null)
+  const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -72,10 +77,21 @@ export default function MyWhiteboards() {
   const shared = boards.filter((b) => String(b.owner?._id || b.owner) !== myId)
   const unfiled = owned.filter((b) => !b.notebook)
 
+  const openCreateBoard = () => {
+    setBoardError('')
+    setCreateBoardOpen(true)
+  }
+
+  const openCreateNotebook = () => {
+    setNotebookError('')
+    setCreateNotebookOpen(true)
+  }
+
   const handleCreateBoard = async (e) => {
     e.preventDefault()
     if (!boardTitle.trim()) return
     setCreatingBoard(true)
+    setBoardError('')
     try {
       const data = await api.createWhiteboard({
         title: boardTitle.trim(),
@@ -91,7 +107,7 @@ export default function MyWhiteboards() {
         navigate(`/whiteboards/${data.whiteboard._id}`)
       }
     } catch (err) {
-      alert(err.message)
+      setBoardError(err.message || 'Failed to create whiteboard')
     } finally {
       setCreatingBoard(false)
     }
@@ -101,36 +117,37 @@ export default function MyWhiteboards() {
     e.preventDefault()
     if (!notebookName.trim()) return
     setCreatingNotebook(true)
+    setNotebookError('')
     try {
       const data = await api.createNotebook(notebookName.trim())
       setNotebooks((prev) => [data.notebook, ...prev])
       setNotebookName('')
       setCreateNotebookOpen(false)
     } catch (err) {
-      alert(err.message)
+      setNotebookError(err.message || 'Failed to create notebook')
     } finally {
       setCreatingNotebook(false)
     }
   }
 
-  const handleDeleteBoard = async (id) => {
-    if (!confirm('Delete this whiteboard? This cannot be undone.')) return
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirm) return
+    const { type, id } = deleteConfirm
+    setDeleting(true)
     try {
-      await api.deleteWhiteboard(id)
-      setBoards((prev) => prev.filter((b) => b._id !== id))
+      if (type === 'notebook') {
+        await api.deleteNotebook(id)
+        setNotebooks((prev) => prev.filter((n) => n._id !== id))
+        setBoards((prev) => prev.map((b) => (String(b.notebook) === String(id) ? { ...b, notebook: null } : b)))
+      } else {
+        await api.deleteWhiteboard(id)
+        setBoards((prev) => prev.filter((b) => b._id !== id))
+      }
+      setDeleteConfirm(null)
     } catch (err) {
       alert(err.message)
-    }
-  }
-
-  const handleDeleteNotebook = async (id) => {
-    if (!confirm('Delete this notebook? Its whiteboards will be moved to the main list.')) return
-    try {
-      await api.deleteNotebook(id)
-      setNotebooks((prev) => prev.filter((n) => n._id !== id))
-      setBoards((prev) => prev.map((b) => (String(b.notebook) === String(id) ? { ...b, notebook: null } : b)))
-    } catch (err) {
-      alert(err.message)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -144,7 +161,7 @@ export default function MyWhiteboards() {
   }
 
   const inputCls =
-    'w-full px-4 py-2.5 rounded-xl border border-outline-variant/40 bg-surface-container-lowest text-sm text-on-surface placeholder:text-on-surface/25 outline-none focus:border-primary-container'
+    'w-full px-4 py-2.5 rounded-xl border border-outline-variant/40 bg-surface-container-lowest text-sm text-on-surface placeholder:text-on-surface/25 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors'
 
   return (
     <div className="p-6 md:p-12 max-w-6xl mx-auto">
@@ -155,13 +172,13 @@ export default function MyWhiteboards() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setCreateNotebookOpen(true)}
+            onClick={() => openCreateNotebook()}
             className="flex items-center gap-2 px-4 py-2.5 bg-surface-container-high text-on-surface rounded-xl text-sm font-semibold hover:bg-surface-container-high/80 transition-colors"
           >
             <Folder size={16} /> New Notebook
           </button>
           <button
-            onClick={() => setCreateBoardOpen(true)}
+            onClick={() => openCreateBoard()}
             className="flex items-center gap-2 px-4 py-2.5 bg-primary text-on-primary rounded-xl text-sm font-semibold hover:shadow-lg hover:shadow-primary/20 transition-all"
           >
             <Plus size={16} /> New Whiteboard
@@ -172,8 +189,10 @@ export default function MyWhiteboards() {
       {error && <p className="text-sm text-error mb-6">{error}</p>}
 
       {loading ? (
-        <div className="flex items-center justify-center py-24">
-          <Loader2 size={32} className="animate-spin text-primary" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
         </div>
       ) : (
         <div className="space-y-10">
@@ -190,7 +209,7 @@ export default function MyWhiteboards() {
                     board={wb}
                     isOwner={false}
                     onOpen={() => navigate(`/whiteboards/${wb._id}`)}
-                    onDelete={() => handleDeleteBoard(wb._id)}
+                    onDelete={() => setDeleteConfirm({ type: 'board', id: wb._id })}
                   />
                 ))}
               </div>
@@ -204,7 +223,7 @@ export default function MyWhiteboards() {
             </div>
             {notebooks.length === 0 ? (
               <button
-                onClick={() => setCreateNotebookOpen(true)}
+                onClick={() => openCreateNotebook()}
                 className="w-full border-2 border-dashed border-outline-variant/40 rounded-2xl p-6 flex items-center justify-center gap-2 text-on-surface/40 hover:border-primary hover:text-primary transition-colors"
               >
                 <Folder size={18} /> Create your first notebook to organize boards
@@ -227,7 +246,7 @@ export default function MyWhiteboards() {
                           <p className="text-[11px] text-on-surface/40">{nbBoards.length} board{nbBoards.length !== 1 ? 's' : ''}</p>
                         </div>
                         <button
-                          onClick={() => handleDeleteNotebook(nb._id)}
+                          onClick={() => setDeleteConfirm({ type: 'notebook', id: nb._id })}
                           className="text-on-surface/30 hover:text-error transition-colors shrink-0"
                           title="Delete notebook"
                         >
@@ -264,7 +283,7 @@ export default function MyWhiteboards() {
             </div>
             {unfiled.length === 0 ? (
               <button
-                onClick={() => setCreateBoardOpen(true)}
+                onClick={() => openCreateBoard()}
                 className="w-full border-2 border-dashed border-outline-variant/40 rounded-2xl p-6 flex items-center justify-center gap-2 text-on-surface/40 hover:border-primary hover:text-primary transition-colors"
               >
                 <Plus size={18} /> Create your first whiteboard
@@ -278,7 +297,7 @@ export default function MyWhiteboards() {
                     isOwner
                     notebooks={notebooks}
                     onOpen={() => navigate(`/whiteboards/${wb._id}`)}
-                    onDelete={() => handleDeleteBoard(wb._id)}
+                    onDelete={() => setDeleteConfirm({ type: 'board', id: wb._id })}
                     onShare={() => setShareBoard(wb)}
                     onMove={handleMove}
                   />
@@ -311,10 +330,11 @@ export default function MyWhiteboards() {
                   ))}
                 </select>
               </div>
+              {boardError && <p className="text-xs text-error">{boardError}</p>}
               <div className="flex justify-end gap-2 pt-1">
                 <button type="button" onClick={() => setCreateBoardOpen(false)} className="px-4 py-2.5 text-sm text-on-surface/50 hover:bg-surface-container rounded-xl transition-colors">Cancel</button>
-                <button type="submit" disabled={!boardTitle.trim() || creatingBoard} className="px-5 py-2.5 bg-primary text-on-primary rounded-xl text-sm font-semibold disabled:opacity-50">
-                  {creatingBoard ? 'Creating...' : 'Create Board'}
+                <button type="submit" disabled={!boardTitle.trim() || creatingBoard} className="px-5 py-2.5 bg-primary text-on-primary rounded-xl text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2">
+                  {creatingBoard ? (<><Loader2 size={15} className="animate-spin" /> Creating...</>) : 'Create Board'}
                 </button>
               </div>
             </form>
@@ -331,10 +351,11 @@ export default function MyWhiteboards() {
                 <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Name</label>
                 <input autoFocus value={notebookName} onChange={(e) => setNotebookName(e.target.value)} placeholder="e.g. Chemistry" className={inputCls} />
               </div>
+              {notebookError && <p className="text-xs text-error">{notebookError}</p>}
               <div className="flex justify-end gap-2 pt-1">
                 <button type="button" onClick={() => setCreateNotebookOpen(false)} className="px-4 py-2.5 text-sm text-on-surface/50 hover:bg-surface-container rounded-xl transition-colors">Cancel</button>
-                <button type="submit" disabled={!notebookName.trim() || creatingNotebook} className="px-5 py-2.5 bg-primary text-on-primary rounded-xl text-sm font-semibold disabled:opacity-50">
-                  {creatingNotebook ? 'Creating...' : 'Create Notebook'}
+                <button type="submit" disabled={!notebookName.trim() || creatingNotebook} className="px-5 py-2.5 bg-primary text-on-primary rounded-xl text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2">
+                  {creatingNotebook ? (<><Loader2 size={15} className="animate-spin" /> Creating...</>) : 'Create Notebook'}
                 </button>
               </div>
             </form>
@@ -345,6 +366,21 @@ export default function MyWhiteboards() {
       <AnimatePresence>
         {shareBoard && <ShareWhiteboardModal board={shareBoard} onClose={() => setShareBoard(null)} />}
       </AnimatePresence>
+
+      <ConfirmationModal
+        open={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={handleConfirmDelete}
+        title={deleteConfirm?.type === 'notebook' ? 'Delete Notebook' : 'Delete Whiteboard'}
+        message={
+          deleteConfirm?.type === 'notebook'
+            ? 'This notebook will be deleted. Its whiteboards will be moved to the main list.'
+            : 'This whiteboard will be permanently deleted. This cannot be undone.'
+        }
+        confirmText="Delete"
+        confirmVariant="danger"
+        loading={deleting}
+      />
     </div>
   )
 }
@@ -427,6 +463,7 @@ function BoardCard({ board, isOwner, notebooks = [], onOpen, onDelete, onShare, 
           <>
             <button
               onClick={onShare}
+              aria-label="Share"
               className="w-9 h-9 rounded-xl flex items-center justify-center text-on-surface/50 hover:bg-surface-container hover:text-on-surface transition-colors"
               title="Share"
             >
@@ -448,6 +485,7 @@ function BoardCard({ board, isOwner, notebooks = [], onOpen, onDelete, onShare, 
             </div>
             <button
               onClick={onDelete}
+              aria-label="Delete"
               className="w-9 h-9 rounded-xl flex items-center justify-center text-on-surface/30 hover:bg-error-container hover:text-error transition-colors"
               title="Delete"
             >

@@ -18,6 +18,8 @@ const roomRoutes = require('./routes/rooms');
 const whiteboardRoutes = require('./routes/whiteboards');
 const notebookRoutes = require('./routes/notebooks');
 const fileRoutes = require('./routes/files');
+const notificationRoutes = require('./routes/notifications');
+const { setSocketIO, notify } = require('./notify');
 
 const app = express();
 const server = http.createServer(app);
@@ -38,6 +40,8 @@ const io = new Server(server, {
   cors: { origin: corsOrigin, methods: ['GET', 'POST'] },
 });
 
+setSocketIO(io);
+
 app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: '10mb' }));
 app.use('/api/auth', authRoutes);
@@ -45,6 +49,7 @@ app.use('/api/rooms', roomRoutes);
 app.use('/api/whiteboards', whiteboardRoutes);
 app.use('/api/notebooks', notebookRoutes);
 app.use('/api/files', fileRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const clientBuild = path.join(__dirname, '..', 'client', 'dist');
@@ -82,6 +87,8 @@ const activeRooms = new Map();
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.user.name} (${socket._id})`);
 
+  socket.join(`user:${socket.user._id.toString()}`);
+
   socket.on('join-room', async (roomId) => {
     try {
       const room = await Room.findById(roomId);
@@ -103,6 +110,16 @@ io.on('connection', (socket) => {
       const users = Array.from(activeRooms.get(roomId).values());
       io.to(roomId).emit('room-users', users);
 
+      if (room.host.toString() !== socket.user._id.toString()) {
+        notify(room.host, {
+          type: 'room_joined',
+          title: `${socket.user.name} joined "${room.name}"`,
+          body: 'A new member joined your study room',
+          from: socket.user._id,
+          roomId: room._id,
+        });
+      }
+
       console.log(`${socket.user.name} joined room ${room.name}`);
     } catch (err) {
       socket.emit('error', err.message);
@@ -111,6 +128,9 @@ io.on('connection', (socket) => {
 
   socket.on('leave-room', (roomId) => {
     socket.leave(roomId);
+    socket.to(roomId).emit('user-stopped-typing', {
+      userId: socket.user._id,
+    });
     if (activeRooms.has(roomId)) {
       activeRooms.get(roomId).delete(socket.id);
       if (activeRooms.get(roomId).size === 0) {
@@ -147,6 +167,23 @@ io.on('connection', (socket) => {
     } catch (err) {
       console.error('Failed to persist chat message:', err.message);
     }
+  });
+
+  socket.on('typing-start', () => {
+    const roomId = socket.roomId;
+    if (!roomId) return;
+    socket.to(roomId).emit('user-typing', {
+      userId: socket.user._id,
+      name: socket.user.name,
+    });
+  });
+
+  socket.on('typing-stop', () => {
+    const roomId = socket.roomId;
+    if (!roomId) return;
+    socket.to(roomId).emit('user-stopped-typing', {
+      userId: socket.user._id,
+    });
   });
 
   socket.on('draw-action', async (data) => {
@@ -285,6 +322,21 @@ io.on('connection', (socket) => {
       url: data.url,
       createdAt: data.createdAt,
     });
+
+    try {
+      const room = await Room.findById(roomId).select('host');
+      if (room && room.host.toString() !== socket.user._id.toString()) {
+        notify(room.host, {
+          type: 'file_uploaded',
+          title: `${socket.user.name} uploaded "${data.fileName}"`,
+          body: 'A new file was shared in your study room',
+          from: socket.user._id,
+          roomId: room._id,
+        });
+      }
+    } catch (err) {
+      console.error('File notification error:', err.message);
+    }
   });
 
   socket.on('file-deleted', (data) => {
@@ -326,6 +378,9 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     const roomId = socket.roomId;
     if (roomId) {
+      socket.to(roomId).emit('user-stopped-typing', {
+        userId: socket.user._id,
+      });
       io.to(roomId).emit('webrtc-user-left', { socketId: socket.id });
       if (activeRooms.has(roomId)) {
         activeRooms.get(roomId).delete(socket.id);

@@ -47,21 +47,19 @@ export default function Login() {
 
   return (
     <div className="relative flex min-h-screen w-full overflow-hidden bg-surface">
-      {/* Left panel */}
+      {/* Left panel — fixed dark branding */}
       <motion.div
         initial={{ x: -60, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ type: 'spring', stiffness: 200, damping: 28 }}
         className="hidden lg:flex relative w-1/2 flex-col justify-between bg-[#151327] p-10 xl:p-14 overflow-hidden"
       >
-        <div className="absolute inset-0 mesh-aurora opacity-70 pointer-events-none" style={{ '--color-primary-container': '#3b2f8f', '--color-secondary-container': '#14544c', '--color-tertiary-container': '#7f3a2d' }} />
-        <div className="absolute inset-0 bg-gradient-to-br from-[#2a1d6b]/40 via-transparent to-[#0f0d1c] pointer-events-none" />
-        <div className="absolute inset-0 opacity-[0.04] pointer-events-none" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")', backgroundSize: '200px 200px' }} />
+        <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")', backgroundSize: '200px 200px' }} />
 
         <div className="relative z-10 max-w-[28rem]">
           <div className="flex items-center gap-2.5 mb-8">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#c3b8ff] to-[#7fd8c9] flex items-center justify-center shadow-lg shadow-black/30">
-              <Sparkles size={18} className="text-[#241877]" />
+            <div className="w-10 h-10 rounded-xl bg-primary-container flex items-center justify-center">
+              <Sparkles size={18} className="text-on-primary-container" />
             </div>
             <span className="font-display text-lg font-bold text-white">StudySync</span>
           </div>
@@ -69,7 +67,7 @@ export default function Login() {
           <h1 className="font-display text-[2.6rem] leading-[1.05] font-bold text-white tracking-tight">
             Master your craft
             <br />
-            <span className="text-[#c3b8ff]">together.</span>
+            <span className="text-primary-container">together.</span>
           </h1>
           <p className="mt-5 text-sm leading-relaxed text-white/50 max-w-[24rem]">
             An infinite canvas where ideas meet. Collaborate in real-time, study
@@ -83,7 +81,7 @@ export default function Login() {
             transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
             className="w-64 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 p-4 shadow-lg shadow-black/20 -rotate-2"
           >
-            <StickyNote size={16} className="text-[#c3b8ff] mb-2" />
+            <StickyNote size={16} className="text-primary-container mb-2" />
             <p className="text-xs leading-relaxed font-medium text-white/85">
               Biology Quiz Prep: Focus on cellular respiration tomorrow!
             </p>
@@ -93,28 +91,15 @@ export default function Login() {
             transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 1.2 }}
             className="w-64 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 p-4 shadow-lg shadow-black/20 rotate-2 ml-10"
           >
-            <Brain size={16} className="text-[#7fd8c9] mb-2" />
+            <Brain size={16} className="text-secondary-container mb-2" />
             <p className="text-xs leading-relaxed font-medium text-white/85">
               Brainstorming session for the final project at 4PM.
             </p>
           </motion.div>
         </div>
 
-        <div className="relative z-10 flex items-center gap-3">
-          <div className="flex -space-x-2">
-            {['A', 'M', 'K'].map((init, i) => (
-              <div key={i} className="w-8 h-8 rounded-full border-2 border-[#151327] bg-gradient-to-br from-[#c3b8ff] to-[#7fd8c9] flex items-center justify-center text-[10px] font-bold text-[#151327] font-display">
-                {init}
-              </div>
-            ))}
-          </div>
-          <p className="text-[11px] text-white/40">
-            Trusted by <span className="text-white/70 font-medium">50,000+</span> students
-          </p>
-        </div>
-
-        <div className="absolute bottom-0 left-0 w-72 h-72 bg-[#c3b8ff]/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute top-20 right-10 w-40 h-40 bg-[#7fd8c9]/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-72 h-72 bg-primary-container/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-20 right-10 w-40 h-40 bg-secondary-container/10 rounded-full blur-3xl pointer-events-none" />
       </motion.div>
 
       {/* Right panel — form */}
@@ -127,18 +112,20 @@ export default function Login() {
         <div className="absolute inset-0 dot-grid opacity-30 pointer-events-none" />
 
         <div className="relative z-10 w-full max-w-[24rem]">
+          {/* Mobile logo */}
           <div className="flex items-center gap-2.5 mb-10 lg:hidden">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-tertiary flex items-center justify-center">
-              <Sparkles size={18} className="text-on-primary" />
+            <div className="w-9 h-9 rounded-xl bg-primary-container flex items-center justify-center">
+              <Sparkles size={18} className="text-on-primary-container" />
             </div>
             <span className="font-display text-lg font-bold text-on-surface">StudySync</span>
           </div>
 
+          {/* Tab switcher */}
           <div className="relative flex w-full rounded-full bg-surface-container-high p-1 mb-8 hairline">
             <motion.div
               layout
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-              className="absolute top-1 bottom-1 w-[calc(50%-2px)] rounded-full bg-gradient-to-r from-primary to-tertiary shadow-sm"
+              className="absolute top-1 bottom-1 w-[calc(50%-2px)] rounded-full bg-primary shadow-sm"
               style={{ left: isLogin ? '4px' : 'calc(50% + 0px)' }}
             />
             {['Sign In', 'Create Account'].map((tab, i) => (
@@ -154,11 +141,9 @@ export default function Login() {
             ))}
           </div>
 
+          {/* Google login */}
           <motion.div variants={stagger} initial="hidden" animate="visible">
-            <motion.div
-              variants={fieldVariants}
-              className="w-full flex justify-center"
-            >
+            <motion.div variants={fieldVariants} className="w-full flex justify-center">
               <GoogleLogin
                 onSuccess={async (credentialResponse) => {
                   try {
@@ -178,12 +163,14 @@ export default function Login() {
             </motion.div>
           </motion.div>
 
+          {/* Divider */}
           <div className="flex items-center gap-4 my-6">
             <div className="flex-1 h-px bg-outline-variant/40" />
             <span className="text-xs text-on-surface/30 whitespace-nowrap">Or continue with email</span>
             <div className="flex-1 h-px bg-outline-variant/40" />
           </div>
 
+          {/* Error */}
           {error && (
             <motion.div
               initial={{ opacity: 0, y: -8 }}
@@ -194,6 +181,7 @@ export default function Login() {
             </motion.div>
           )}
 
+          {/* Form */}
           <AnimatePresence mode="wait">
             <motion.form
               key={isLogin ? 'login' : 'signup'}
@@ -207,45 +195,41 @@ export default function Login() {
               {!isLogin && (
                 <motion.div variants={fieldVariants}>
                   <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Full Name</label>
-                  <div className="flex items-center rounded-2xl border border-outline-variant/50 bg-surface-container-lowest px-4 py-3 transition-all focus-within:border-primary focus-within:shadow-[0_0_0_3px_rgba(91,70,214,0.15)]">
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Jane Doe"
-                      className="flex-1 bg-transparent text-sm text-on-surface placeholder:text-on-surface/30 outline-none"
-                    />
-                  </div>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Jane Doe"
+                    className="w-full rounded-2xl border border-outline-variant/50 bg-surface-container-lowest px-4 py-3 text-sm text-on-surface placeholder:text-on-surface/30 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  />
                 </motion.div>
               )}
 
               <motion.div variants={fieldVariants}>
                 <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Email</label>
-                <div className="flex items-center rounded-2xl border border-outline-variant/50 bg-surface-container-lowest px-4 py-3 transition-all focus-within:border-primary focus-within:shadow-[0_0_0_3px_rgba(91,70,214,0.15)]">
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    className="flex-1 bg-transparent text-sm text-on-surface placeholder:text-on-surface/30 outline-none"
-                  />
-                </div>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="w-full rounded-2xl border border-outline-variant/50 bg-surface-container-lowest px-4 py-3 text-sm text-on-surface placeholder:text-on-surface/30 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
               </motion.div>
 
               <motion.div variants={fieldVariants}>
                 <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Password</label>
-                <div className="flex items-center rounded-2xl border border-outline-variant/50 bg-surface-container-lowest px-4 py-3 transition-all focus-within:border-primary focus-within:shadow-[0_0_0_3px_rgba(91,70,214,0.15)]">
+                <div className="flex items-center rounded-2xl border border-outline-variant/50 bg-surface-container-lowest transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
                   <input
                     type={showPw ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder={isLogin ? 'Enter your password' : 'Create a password'}
-                    className="flex-1 bg-transparent text-sm text-on-surface placeholder:text-on-surface/30 outline-none"
+                    className="flex-1 bg-transparent px-4 py-3 text-sm text-on-surface placeholder:text-on-surface/30 outline-none"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPw(!showPw)}
-                    className="text-on-surface/30 hover:text-on-surface/60 transition-colors ml-2"
+                    className="text-on-surface/30 hover:text-on-surface/60 transition-colors mr-3"
                   >
                     {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
@@ -266,7 +250,7 @@ export default function Login() {
                   disabled={submitting}
                   whileHover={{ scale: 1.005 }}
                   whileTap={{ scale: 0.985 }}
-                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-primary to-tertiary text-on-primary text-sm font-semibold overflow-hidden shadow-lg shadow-primary/20 hover:shadow-primary/35 transition-shadow flex items-center justify-center gap-2 disabled:opacity-60"
+                  className="w-full py-3 rounded-2xl bg-primary text-on-primary text-sm font-semibold shadow-lg shadow-primary/20 hover:shadow-primary/35 transition-shadow flex items-center justify-center gap-2 disabled:opacity-60"
                 >
                   {submitting ? <Loader2 size={16} className="animate-spin" /> : null}
                   {isLogin ? 'Sign In' : 'Create Account'}

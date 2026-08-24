@@ -93,6 +93,31 @@ router.post('/:id/join', auth, async (req, res) => {
   }
 });
 
+router.put('/:id', auth, async (req, res) => {
+  try {
+    const room = await Room.findById(req.params.id);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    if (room.host.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: 'Only the host can update this room' });
+    }
+
+    const { name, description, tag } = req.body;
+    if (name !== undefined) {
+      if (!String(name).trim()) return res.status(400).json({ error: 'Room name is required' });
+      room.name = String(name).trim();
+    }
+    if (description !== undefined) room.description = String(description).trim();
+    if (tag !== undefined) room.tag = String(tag).trim();
+
+    await room.save();
+
+    const populated = await room.populate('host members', 'name email avatar');
+    res.json({ room: populated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.delete('/:id', auth, async (req, res) => {
   try {
     const room = await Room.findById(req.params.id);

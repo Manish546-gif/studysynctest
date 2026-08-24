@@ -1,3 +1,4 @@
+/* eslint-disable react/only-export-components */
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { api, isNetworkError } from '../services/api';
 
@@ -62,6 +63,11 @@ export function AuthProvider({ children }) {
   }, []);
 
   const updateUser = useCallback(async (body) => {
+    if (body && body._id) {
+      cacheUser(body);
+      setUser(body);
+      return body;
+    }
     const data = await api.updateMe(body);
     cacheUser(data.user);
     setUser(data.user);

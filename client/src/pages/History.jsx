@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { Search, Filter, Clock, ArrowRight, ChevronDown, Loader2 } from 'lucide-react'
+import { Search, Filter, Clock, ArrowRight, ChevronDown, Download } from 'lucide-react'
 import { api } from '../services/api'
+import { SkeletonListRow } from '../components/common/Skeleton'
 
 const container = {
   hidden: { opacity: 0 },
@@ -108,6 +109,11 @@ export default function History() {
           duration: timeAgo(room.updatedAt),
           participants: (room.members || []).map((m) => initialsOf(m.name)),
           tags: [room.tag].filter(Boolean),
+          tag: room.tag || '',
+          host: room.host?.name || 'Unknown',
+          members: (room.members || []).map((m) => m?.name).filter(Boolean),
+          created: room.createdAt,
+          lastActive: room.updatedAt,
         })),
     }))
     .map((g) => ({
@@ -119,6 +125,35 @@ export default function History() {
       ),
     }))
     .filter((g) => g.items.length > 0)
+
+  const exportCSV = () => {
+    const rows = filtered.flatMap((group) => group.items)
+    const escapeCell = (value) => {
+      const str = String(value ?? '')
+      return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str
+    }
+    const csvRows = [
+      ['Room Name', 'Tag', 'Host', 'Members', 'Created', 'Last Active'],
+      ...rows.map((s) => [
+        s.title,
+        s.tag,
+        s.host,
+        s.members.join('; '),
+        s.created ? new Date(s.created).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '',
+        s.lastActive ? new Date(s.lastActive).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '',
+      ]),
+    ]
+    const csvContent = csvRows.map((cells) => cells.map(escapeCell).join(',')).join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `studysync-history-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <motion.div
@@ -155,20 +190,34 @@ export default function History() {
           <Filter size={14} />
           {activeFilter === 'all' ? 'Filter' : 'Starred'}
         </button>
+        <button
+          onClick={exportCSV}
+          disabled={filtered.length === 0}
+          className="inline-flex items-center gap-2 bg-surface-container-high text-on-surface text-sm px-4 py-2 rounded-xl border border-outline-variant/30 hover:bg-surface-container-high/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Download size={14} />
+          Export CSV
+        </button>
       </motion.div>
 
       {/* Timeline */}
       {loading ? (
-        <div className="flex items-center justify-center py-24">
-          <Loader2 size={24} className="animate-spin text-primary" />
+        <div className="space-y-3">
+          <SkeletonListRow />
+          <SkeletonListRow />
+          <SkeletonListRow />
+          <SkeletonListRow />
+          <SkeletonListRow />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-24 bg-surface-container-low rounded-2xl">
-          <Clock size={36} className="mx-auto text-on-surface/20 mb-3" />
+        <div className="text-center py-24 bg-surface-container-low rounded-2xl hairline">
+          <div className="w-16 h-16 rounded-2xl bg-primary-container/50 flex items-center justify-center mx-auto mb-4">
+            <Clock size={28} className="text-on-primary-container/60" />
+          </div>
           {rooms.length === 0 ? (
             <>
-              <p className="text-sm text-on-surface/40 mb-1">No sessions yet</p>
-              <p className="text-xs text-on-surface/25">Create or join a room and it will show up here</p>
+              <p className="font-display text-base font-bold text-on-surface mb-1">No sessions yet</p>
+              <p className="text-sm text-on-surface/40 max-w-[260px] mx-auto">Create or join a study room and your session history will appear here.</p>
             </>
           ) : (
             <p className="text-sm text-on-surface/40">No sessions found matching "{search}"</p>
@@ -224,7 +273,10 @@ export default function History() {
                           ))}
                         </div>
                       )}
-                      <button className="w-8 h-8 rounded-xl bg-primary-container text-on-primary-container flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:shadow-sm">
+                      <button
+                        aria-label={`Open ${session.title}`}
+                        className="w-8 h-8 rounded-xl bg-primary-container text-on-primary-container flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:shadow-sm"
+                      >
                         <ArrowRight size={14} />
                       </button>
                     </div>

@@ -130,7 +130,7 @@ export default function FilePreview({
     if (files.length > 0 && !activeFile) {
       setActiveFile(files[files.length - 1])
     }
-  }, [files])
+  }, [files, activeFile])
 
   const uploadFile = useCallback(async (file) => {
     if (!roomId) return

@@ -104,12 +104,28 @@ export const api = {
   googleLogin: (credential) => request('/auth/google', { method: 'POST', body: JSON.stringify({ credential }) }),
   getMe: () => request('/auth/me'),
   updateMe: (body) => request('/auth/me', { method: 'PUT', body: JSON.stringify(body) }),
+  uploadAvatar: async (file) => {
+    const token = localStorage.getItem('token');
+    const fd = new FormData();
+    fd.append('avatar', file);
+    const res = await fetch(`${API_URL}/auth/avatar`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: fd,
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Upload failed');
+    }
+    return res.json();
+  },
 
   getRooms: () => request('/rooms'),
   getRoom: (id) => request(`/rooms/${id}`),
   createRoom: (body) => request('/rooms', { method: 'POST', body: JSON.stringify(body) }),
   verifyCode: (code) => request('/rooms/verify', { method: 'POST', body: JSON.stringify({ code }) }),
   joinRoom: (id) => request(`/rooms/${id}/join`, { method: 'POST' }),
+  updateRoom: (id, body) => request(`/rooms/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteRoom: (id) => request(`/rooms/${id}`, { method: 'DELETE' }),
 
   getWhiteboards: () => request('/whiteboards'),
@@ -164,4 +180,9 @@ export const api = {
   },
   deleteRoomFile: (roomId, fileId) => request(`/files/${roomId}/${fileId}`, { method: 'DELETE' }),
   getFileUrl: (roomId, storedName) => `${API_URL}/files/${roomId}/download/${storedName}`,
+
+  getNotifications: (skip = 0, limit = 30) => request(`/notifications?skip=${skip}&limit=${limit}`),
+  markNotificationRead: (id) => request(`/notifications/${id}/read`, { method: 'PUT' }),
+  markAllNotificationsRead: () => request('/notifications/read-all', { method: 'PUT' }),
+  deleteNotification: (id) => request(`/notifications/${id}`, { method: 'DELETE' }),
 };

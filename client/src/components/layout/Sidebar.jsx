@@ -53,8 +53,8 @@ function SidebarContent({ onClose }) {
     <div className="flex flex-col h-full bg-surface-container-lowest/60">
       {/* Brand */}
       <div className="flex items-center gap-3 px-5 h-16 border-b border-outline-variant/30 shrink-0">
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-tertiary flex items-center justify-center shadow-lg shadow-primary/20">
-          <Sparkles size={16} className="text-on-primary" />
+        <div className="w-9 h-9 rounded-xl bg-primary-container flex items-center justify-center shadow-lg shadow-primary/20">
+          <Sparkles size={16} className="text-on-primary-container" />
         </div>
         <div className="flex flex-col leading-none">
           <span className="font-display text-[15px] font-bold text-on-surface tracking-tight">StudySync</span>
@@ -112,7 +112,7 @@ function SidebarContent({ onClose }) {
           <p className="text-sm font-display font-bold text-primary">Pro Plan</p>
           <div className="mt-3 h-1.5 bg-outline-variant/30 rounded-full overflow-hidden">
             <motion.div
-              className="h-full bg-gradient-to-r from-primary to-tertiary rounded-full"
+              className="h-full bg-primary rounded-full"
               initial={{ width: 0 }}
               animate={{ width: '75%' }}
               transition={{ delay: 0.5, duration: 0.8, ease: 'easeOut' }}
@@ -124,7 +124,7 @@ function SidebarContent({ onClose }) {
         <Link
           to="/dashboard"
           onClick={onClose}
-          className="press flex items-center justify-center gap-2 w-full px-4 py-3 bg-gradient-to-r from-primary to-tertiary text-on-primary rounded-xl text-sm font-semibold shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-shadow"
+          className="press flex items-center justify-center gap-2 w-full px-4 py-3 bg-primary text-on-primary rounded-xl text-sm font-semibold shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-shadow"
         >
           <Play size={16} />
           Start Session
@@ -132,7 +132,7 @@ function SidebarContent({ onClose }) {
 
         {/* User card */}
         <div className="flex items-center gap-3 p-3 rounded-2xl bg-surface-container hairline">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-container to-secondary-container flex items-center justify-center text-xs font-bold font-display text-on-primary-container overflow-hidden shrink-0">
+          <div className="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center text-xs font-bold font-display text-on-primary-container overflow-hidden shrink-0">
             {user?.avatar ? (
               <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
             ) : initials}
@@ -143,6 +143,7 @@ function SidebarContent({ onClose }) {
           </div>
           <button
             onClick={handleLogout}
+            aria-label="Log out"
             className="press w-8 h-8 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-error-container hover:text-error transition-colors"
             title="Log out"
           >

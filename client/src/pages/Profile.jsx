@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { Award, Clock, Users, Edit3, ChevronRight, Loader2 } from 'lucide-react'
+import { Clock, Users, Edit3, ChevronRight, Loader2, Settings } from 'lucide-react'
 import gsap from 'gsap'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../services/api'
@@ -35,7 +35,9 @@ export default function Profile() {
   const [rooms, setRooms] = useState([])
   const [loading, setLoading] = useState(true)
 
-  const initials = user?.name ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : 'U'
+  const initials = user?.name
+    ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+    : 'U'
 
   useEffect(() => {
     api.getRooms()
@@ -46,17 +48,6 @@ export default function Profile() {
 
   const createdRooms = rooms.filter((r) => r.host?._id === user?.id)
   const joinedRooms = rooms.filter((r) => r.host?._id !== user?.id)
-  const totalMembers = rooms.reduce((sum, r) => sum + (r.members?.length || 0), 0)
-  const hasRecent = rooms.some((r) => Date.now() - new Date(r.updatedAt).getTime() < 7 * 86400000)
-
-  const badges = [
-    { label: 'First Steps', icon: '🚀', unlocked: rooms.length >= 1, desc: 'Join or create your first room' },
-    { label: 'Room Builder', icon: '🏗️', unlocked: createdRooms.length >= 1, desc: 'Create your first room' },
-    { label: 'Collab Guru', icon: '🤝', unlocked: joinedRooms.length >= 1, desc: 'Join a room with others' },
-    { label: 'Active Today', icon: '⚡', unlocked: hasRecent, desc: 'Active in the last 7 days' },
-    { label: 'Study Group', icon: '👥', unlocked: totalMembers >= 5, desc: 'Collaborate with 5+ peers' },
-    { label: 'Superhost', icon: '👑', unlocked: createdRooms.length >= 3, desc: 'Create 3 rooms' },
-  ]
 
   const activities = [...rooms]
     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
@@ -90,9 +81,11 @@ export default function Profile() {
     return () => ctx.revert()
   }, [rooms.length, createdRooms.length])
 
+  const hasAvatar = user?.avatar && user.avatar.trim().length > 0
+
   return (
     <motion.div
-      className="p-6 md:p-12 max-w-5xl mx-auto"
+      className="p-6 md:p-12 max-w-4xl mx-auto"
       variants={container}
       initial="hidden"
       animate="show"
@@ -100,94 +93,79 @@ export default function Profile() {
       {/* Profile Header */}
       <motion.div
         variants={fadeUp}
-        className="bg-surface-container-low rounded-3xl p-8 md:p-10 mb-8"
+        className="bg-surface-container-low rounded-3xl hairline p-8 md:p-10 mb-8"
       >
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
-          <div className="relative">
-            {user?.avatar ? (
-              <img src={user.avatar} alt={user.name} className="w-20 h-20 rounded-full object-cover" />
+        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
+          {/* Avatar */}
+          <div className="relative shrink-0">
+            {hasAvatar ? (
+              <img
+                src={user.avatar}
+                alt={user.name}
+                className="w-24 h-24 rounded-full object-cover ring-4 ring-surface-container-high"
+                onError={(e) => { e.target.style.display = 'none' }}
+              />
             ) : (
-              <div className="w-20 h-20 rounded-full bg-primary-container flex items-center justify-center text-2xl font-bold font-display text-on-primary-container">
+              <div className="w-24 h-24 rounded-full bg-primary-container flex items-center justify-center text-3xl font-bold font-display text-on-primary-container ring-4 ring-surface-container-high">
                 {initials}
               </div>
             )}
-            <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-green-400 border-2 border-surface-container-low flex items-center justify-center">
-              <div className="w-2 h-2 rounded-full bg-white" />
+          </div>
+
+          {/* Info */}
+          <div className="flex-1 text-center sm:text-left">
+            <h1 className="font-display text-2xl font-bold text-on-surface mb-1">
+              {user?.name || 'Student'}
+            </h1>
+            <p className="text-sm text-on-surface/50 mb-4">{user?.email}</p>
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 text-xs text-on-surface/40">
+              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-high">
+                <Users size={13} /> {rooms.length} {rooms.length === 1 ? 'room' : 'rooms'}
+              </span>
+              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-high">
+                <Edit3 size={13} /> {createdRooms.length} created
+              </span>
             </div>
           </div>
 
-          <div className="flex-1">
-            <h1 className="font-display text-2xl font-bold text-on-surface mb-1">{user?.name || 'Student'}</h1>
-            <p className="text-sm text-on-surface/50">{user?.email}</p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate('/settings')}
-              className="flex items-center gap-2 px-4 py-2 bg-primary-container text-on-primary-container rounded-xl text-sm font-semibold hover:shadow-sm transition-shadow"
-            >
-              <Edit3 size={14} />
-              Edit Profile
-            </button>
-          </div>
+          {/* Settings link */}
+          <button
+            onClick={() => navigate('/settings')}
+            className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-surface-container-high text-on-surface/60 text-sm font-medium hover:bg-primary-container hover:text-on-primary-container transition-colors"
+          >
+            <Settings size={15} />
+            Settings
+          </button>
         </div>
       </motion.div>
 
-      {/* Stats + Badges */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 mb-8">
-        {/* Stats */}
-        <motion.div ref={statsRef} variants={fadeUp} className="lg:col-span-2 grid grid-cols-2 gap-4">
-          <div className="bg-surface-container-low rounded-2xl p-6 text-center">
-            <Users size={20} className="text-primary mx-auto mb-2" />
-            <p className="font-display text-3xl font-bold text-on-surface">
-              <span className="count-up" data-target={rooms.length}>0</span>
-            </p>
-            <p className="text-xs text-on-surface/40 mt-1">Study Rooms</p>
-          </div>
-          <div className="bg-surface-container-low rounded-2xl p-6 text-center">
-            <Edit3 size={20} className="text-tertiary mx-auto mb-2" />
-            <p className="font-display text-3xl font-bold text-on-surface">
-              <span className="count-up" data-target={createdRooms.length}>0</span>
-            </p>
-            <p className="text-xs text-on-surface/40 mt-1">Rooms Created</p>
-          </div>
-        </motion.div>
-
-        {/* Badges */}
-        <motion.div variants={fadeUp} className="lg:col-span-3">
-          <div className="bg-surface-container-low rounded-2xl p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Award size={18} className="text-primary" />
-              <h2 className="font-display text-base font-bold text-on-surface">Achievement Badges</h2>
-            </div>
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 size={18} className="animate-spin text-primary" />
-              </div>
-            ) : (
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-                {badges.map((b) => (
-                  <div
-                    key={b.label}
-                    className={`flex flex-col items-center text-center p-3 rounded-xl transition-colors ${
-                      b.unlocked
-                        ? 'bg-surface-container-high hover:bg-primary-container/30 cursor-pointer'
-                        : 'bg-surface-container-high/50 opacity-40'
-                    }`}
-                    title={b.desc}
-                  >
-                    <span className="text-2xl mb-1">{b.icon}</span>
-                    <span className="text-[10px] font-medium text-on-surface/60 leading-tight">{b.label}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </motion.div>
-      </div>
+      {/* Stats */}
+      <motion.div ref={statsRef} variants={fadeUp} className="grid grid-cols-3 gap-4 mb-8">
+        <div className="bg-surface-container-low rounded-2xl hairline p-6 text-center">
+          <Users size={20} className="text-primary mx-auto mb-2" />
+          <p className="font-display text-3xl font-bold text-on-surface">
+            <span className="count-up" data-target={rooms.length}>0</span>
+          </p>
+          <p className="text-xs text-on-surface/40 mt-1">Total Rooms</p>
+        </div>
+        <div className="bg-surface-container-low rounded-2xl hairline p-6 text-center">
+          <Edit3 size={20} className="text-tertiary mx-auto mb-2" />
+          <p className="font-display text-3xl font-bold text-on-surface">
+            <span className="count-up" data-target={createdRooms.length}>0</span>
+          </p>
+          <p className="text-xs text-on-surface/40 mt-1">Created</p>
+        </div>
+        <div className="bg-surface-container-low rounded-2xl hairline p-6 text-center">
+          <Users size={20} className="text-secondary mx-auto mb-2" />
+          <p className="font-display text-3xl font-bold text-on-surface">
+            <span className="count-up" data-target={joinedRooms.length}>0</span>
+          </p>
+          <p className="text-xs text-on-surface/40 mt-1">Joined</p>
+        </div>
+      </motion.div>
 
       {/* Recent Activity */}
-      <motion.div variants={fadeUp} className="bg-surface-container-low rounded-2xl p-6">
+      <motion.div variants={fadeUp} className="bg-surface-container-low rounded-2xl hairline p-6">
         <h2 className="font-display text-base font-bold text-on-surface mb-4">Recent Activity</h2>
         {loading ? (
           <div className="flex items-center justify-center py-10">

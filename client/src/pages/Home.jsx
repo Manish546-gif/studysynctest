@@ -93,14 +93,14 @@ export default function Home() {
         >
           <Link
             to="/workspace"
-            className="flex items-center gap-2 bg-primary-container text-on-primary-container font-display font-semibold px-6 py-3 rounded-2xl hover:shadow-lg transition-shadow"
+            className="flex items-center gap-2 bg-primary text-on-primary font-display font-semibold px-6 py-3 rounded-2xl hover:shadow-lg hover:shadow-primary/20 transition-shadow"
           >
             <Plus size={20} />
             Create a Room
           </Link>
           <Link
             to="/dashboard"
-            className="flex items-center gap-2 bg-on-background text-surface font-display font-semibold px-6 py-3 rounded-2xl hover:shadow-lg transition-shadow"
+            className="flex items-center gap-2 bg-surface-container-high text-on-surface font-display font-semibold px-6 py-3 rounded-2xl border border-outline-variant/40 hover:bg-surface-container transition-colors"
           >
             <DoorOpen size={20} />
             Join a Session
