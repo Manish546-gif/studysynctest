@@ -26,6 +26,7 @@ import {
   PenTool,
   Maximize,
   Settings,
+  Link2,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -37,6 +38,11 @@ import PomodoroTimer from '../components/common/PomodoroTimer'
 import ScreenRecorder from '../components/common/ScreenRecorder'
 import FilePreview from '../components/common/FilePreview'
 import ConfirmationModal from '../components/common/ConfirmationModal'
+import FloatingReactions from '../components/FloatingReactions'
+import ReactionPicker from '../components/ReactionPicker'
+import InviteLinkModal from '../components/InviteLinkModal'
+import BreakoutPanel from '../components/BreakoutPanel'
+import useRoomReactions from '../hooks/useRoomReactions'
 
 const ROOM_TAGS = ['Study', 'Project', 'Review', 'Homework', 'Exam Prep', 'Discussion']
 
@@ -126,6 +132,13 @@ export default function Workspace() {
   const [recorderOpen, setRecorderOpen] = useState(false)
   const [filePreviewOpen, setFilePreviewOpen] = useState(false)
   const [recording, setRecording] = useState(false)
+  const [inviteLinkOpen, setInviteLinkOpen] = useState(false)
+  const [breakoutOpen, setBreakoutOpen] = useState(false)
+  const [breakoutRooms, setBreakoutRooms] = useState([])
+  const [viewerCount, setViewerCount] = useState(0)
+  const [_sharedPomodoro, setSharedPomodoro] = useState(null)
+  const pomodoroSessionsRef = useRef(0)
+  const sessionStartRef = useRef(Date.now())
   const chatScrollRef = useRef(null)
   const typingTimeoutRef = useRef(null)
   const isTypingRef = useRef(false)
@@ -171,11 +184,54 @@ export default function Workspace() {
     stopMedia,
   } = useWebRTC(socketRef, roomId, user?.id)
 
+  const { floatingReactions, raisedHands: _raisedHands, sendReaction, toggleHand } = useRoomReactions(socketRef)
+
 
   const [pinnedId, setPinnedId] = useState(null) // 'local' | socketId | null
   const stageRef = useRef(null)
   const stageVideoRef = useRef(null)
 
+  // --- Breakout rooms listener ---
+  useEffect(() => {
+    const socket = socketRef.current
+    if (!socket) return
+    socket.on('breakout-update', (data) => setBreakoutRooms(data.breakoutRooms || []))
+    socket.on('viewer-count', (data) => setViewerCount(data.count || 0))
+    socket.on('pomodoro-sync', (data) => setSharedPomodoro(data))
+    return () => {
+      socket.off('breakout-update')
+      socket.off('viewer-count')
+      socket.off('pomodoro-sync')
+    }
+  }, [socketRef])
+
+  // --- Keyboard shortcuts ---
+  useEffect(() => {
+    const handler = (e) => {
+      // Ignore if typing in an input/textarea
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'm' || e.key === 'M') { e.preventDefault(); toggleMic() }
+        if (e.key === 'd' || e.key === 'D') { e.preventDefault(); toggleCam() }
+        if (e.shiftKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); toggleScreenShare() }
+        if (e.shiftKey && (e.key === 'r' || e.key === 'R')) { e.preventDefault(); setRecorderOpen((v) => !v) }
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [toggleMic, toggleCam, toggleScreenShare])
+
+  // --- Record study session on unmount ---
+  useEffect(() => {
+    return () => {
+      const duration = Math.floor((Date.now() - sessionStartRef.current) / 1000)
+      if (duration > 30) {
+        api.recordStudySession({ room: roomId, type: 'room', duration, pomodoroSessions: pomodoroSessionsRef.current }).catch(() => {})
+      }
+    }
+  }, [roomId])
+
+  // --- Room data fetch (moved after socket setup so we can copy invite link) ---
   useEffect(() => {
     if (!roomId) return
     setLoading(true)
@@ -183,6 +239,7 @@ export default function Workspace() {
       .then((data) => {
         setRoom(data.room)
         if (data.room.files) setRoomFiles(data.room.files)
+        setBreakoutRooms(data.room.breakoutRooms || [])
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
@@ -367,6 +424,11 @@ export default function Workspace() {
 
   return (
     <div className="flex flex-col h-screen bg-surface">
+      <FloatingReactions reactions={floatingReactions} />
+      {inviteLinkOpen && (
+        <InviteLinkModal roomId={roomId} roomCode={room?.code} onClose={() => setInviteLinkOpen(false)} />
+      )}
+
       {/* Top Header */}
       <div className="flex items-center gap-3 px-4 lg:px-6 py-3 bg-surface border-b border-outline-variant/20 shrink-0">
         <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-sm text-on-surface/50 hover:text-on-surface transition-colors">
@@ -389,6 +451,15 @@ export default function Workspace() {
           <KeyRound size={13} />
           <span className="font-mono tracking-widest">{room.code}</span>
           {codeCopied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
+        </button>
+
+        <button
+          onClick={() => setInviteLinkOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 text-on-surface/60 rounded-xl text-xs font-medium transition"
+          title="Copy invite link"
+        >
+          <Link2 size={13} />
+          Invite
         </button>
 
         <AnimatePresence>
@@ -855,6 +926,34 @@ export default function Workspace() {
           )}
         </AnimatePresence>
 
+        {/* Breakout rooms sidebar */}
+        <AnimatePresence>
+          {breakoutOpen && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 320, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="bg-surface-container-low border-l border-outline-variant/20 flex flex-col overflow-hidden shrink-0"
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant/20">
+                <span className="text-sm font-semibold text-on-surface">Breakout Rooms</span>
+                <button onClick={() => setBreakoutOpen(false)} className="w-7 h-7 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                <BreakoutPanel
+                  breakoutRooms={breakoutRooms}
+                  socketRef={socketRef}
+                  userId={user?.id}
+                  isHost={room?.host?._id === user?.id}
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Invite sidebar */}
         <AnimatePresence>
           {inviteOpen && (
@@ -1164,6 +1263,26 @@ export default function Workspace() {
           title="File Preview"
         >
           <FileText size={20} />
+        </button>
+
+        <div className="w-px h-8 bg-outline-variant/30 mx-1" />
+
+        <ReactionPicker onReaction={sendReaction} onToggleHand={toggleHand} />
+
+        {viewerCount > 0 && (
+          <div className="flex items-center gap-1 px-2 py-1 bg-green-600/20 text-green-400 rounded-lg text-xs font-medium" title="Screen share viewers">
+            👁 {viewerCount}
+          </div>
+        )}
+
+        <button
+          onClick={() => setBreakoutOpen(!breakoutOpen)}
+          className={`w-10 h-10 rounded-xl flex items-center justify-center transition text-sm ${
+            breakoutOpen ? 'bg-primary text-on-primary' : 'bg-white/5 text-white/60 hover:bg-white/10'
+          }`}
+          title="Breakout Rooms"
+        >
+          🔀
         </button>
 
         <div className="w-px h-8 bg-outline-variant/30 mx-1" />

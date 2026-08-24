@@ -194,4 +194,30 @@ export const api = {
   markNotificationRead: (id) => request(`/notifications/${id}/read`, { method: 'PUT' }),
   markAllNotificationsRead: () => request('/notifications/read-all', { method: 'PUT' }),
   deleteNotification: (id) => request(`/notifications/${id}`, { method: 'DELETE' }),
+
+  // Flashcards
+  getFlashcards: (params) => {
+    const q = new URLSearchParams(params).toString()
+    return request(`/flashcards?${q}`)
+  },
+  getDueFlashcards: (params) => {
+    const q = new URLSearchParams(params || {}).toString()
+    return request(`/flashcards/due?${q}`)
+  },
+  createFlashcard: (body) => request('/flashcards', { method: 'POST', body: JSON.stringify(body) }),
+  createFlashcardsBatch: (cards, notebook) =>
+    request('/flashcards/batch', { method: 'POST', body: JSON.stringify({ cards, notebook }) }),
+  updateFlashcard: (id, body) => request(`/flashcards/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteFlashcard: (id) => request(`/flashcards/${id}`, { method: 'DELETE' }),
+  reviewFlashcard: (id, quality) =>
+    request(`/flashcards/${id}/review`, { method: 'POST', body: JSON.stringify({ quality }) }),
+  getFlashcardStats: () => request('/flashcards/stats'),
+
+  // Stats & Public rooms
+  getStats: () => request('/stats'),
+  recordStudySession: (body) => request('/stats/sessions', { method: 'POST', body: JSON.stringify(body) }),
+  getPublicRooms: (params) => {
+    const q = new URLSearchParams(params).toString()
+    return request(`/stats/public-rooms?${q}`)
+  },
 };

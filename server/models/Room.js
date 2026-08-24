@@ -32,6 +32,14 @@ const roomSchema = new mongoose.Schema({
   messages: [messageSchema],
   files: [fileSchema],
   isActive: { type: Boolean, default: true },
+  isPublic: { type: Boolean, default: false },
+  subject: { type: String, default: '' },
+  inviteLinkCode: { type: String, default: '' },
+  breakoutRooms: [{
+    name: String,
+    members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    isActive: { type: Boolean, default: true },
+  }],
 }, { timestamps: true });
 
 roomSchema.index({ host: 1 });

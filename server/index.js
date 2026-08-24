@@ -19,6 +19,8 @@ const whiteboardRoutes = require('./routes/whiteboards');
 const notebookRoutes = require('./routes/notebooks');
 const fileRoutes = require('./routes/files');
 const notificationRoutes = require('./routes/notifications');
+const flashcardRoutes = require('./routes/flashcards');
+const statsRoutes = require('./routes/stats');
 const { setSocketIO, notify } = require('./notify');
 
 const app = express();
@@ -50,6 +52,8 @@ app.use('/api/whiteboards', whiteboardRoutes);
 app.use('/api/notebooks', notebookRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/flashcards', flashcardRoutes);
+app.use('/api/stats', statsRoutes);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const clientBuild = path.join(__dirname, '..', 'client', 'dist');
@@ -422,6 +426,135 @@ io.on('connection', (socket) => {
     });
   });
 
+  // --- Reactions (floating emoji) ---
+  socket.on('reaction', (data) => {
+    const roomId = socket.roomId;
+    if (!roomId || !data?.emoji) return;
+    io.to(roomId).emit('reaction', {
+      socketId: socket.id,
+      userId: socket.user._id,
+      userName: socket.user.name,
+      emoji: String(data.emoji).slice(0, 4),
+    });
+  });
+
+  socket.on('raise-hand', (data) => {
+    const roomId = socket.roomId;
+    if (!roomId) return;
+    io.to(roomId).emit('raise-hand', {
+      socketId: socket.id,
+      userId: socket.user._id,
+      userName: socket.user.name,
+      raised: !!data.raised,
+    });
+  });
+
+  // --- Shared Pomodoro sync ---
+  socket.on('pomodoro-sync', (data) => {
+    const roomId = socket.roomId;
+    if (!roomId) return;
+    // Only host can control the shared timer
+    if (!activeRooms.has(roomId)) return;
+    const users = activeRooms.get(roomId);
+    const hostEntry = Array.from(users.values())[0];
+    if (!hostEntry || String(hostEntry._id) !== String(socket.user._id)) return;
+    io.to(roomId).emit('pomodoro-sync', {
+      phase: data.phase,
+      timeLeft: data.timeLeft,
+      completedSessions: data.completedSessions,
+      totalSessions: data.totalSessions,
+    });
+  });
+
+  // --- Screen share viewer count ---
+  const screenViewers = new Map(); // roomId -> Map(sharingSocketId -> Set<viewerSocketId>)
+
+  socket.on('screen-viewer-join', (data) => {
+    const roomId = socket.roomId;
+    if (!roomId || !data?.targetSocketId) return;
+    if (!screenViewers.has(roomId)) screenViewers.set(roomId, new Map());
+    const rv = screenViewers.get(roomId);
+    if (!rv.has(data.targetSocketId)) rv.set(data.targetSocketId, new Set());
+    rv.get(data.targetSocketId).add(socket.id);
+    const count = rv.get(data.targetSocketId).size;
+    io.to(data.targetSocketId).emit('viewer-count', { count });
+  });
+
+  socket.on('screen-viewer-leave', (data) => {
+    const roomId = socket.roomId;
+    if (!roomId || !data?.targetSocketId) return;
+    const rv = screenViewers.get(roomId);
+    if (rv && rv.has(data.targetSocketId)) {
+      rv.get(data.targetSocketId).delete(socket.id);
+      const count = rv.get(data.targetSocketId).size;
+      io.to(data.targetSocketId).emit('viewer-count', { count });
+      if (count <= 0) rv.delete(data.targetSocketId);
+    }
+  });
+
+  // --- Breakout rooms ---
+  socket.on('breakout-create', async (data) => {
+    const roomId = socket.roomId;
+    if (!roomId) return;
+    try {
+      const room = await Room.findById(roomId);
+      if (!room || String(room.host) !== String(socket.user._id)) return;
+      room.breakoutRooms.push({ name: data?.name || `Breakout ${room.breakoutRooms.length + 1}`, members: [] });
+      await room.save();
+      io.to(roomId).emit('breakout-update', { breakoutRooms: room.breakoutRooms });
+    } catch {}
+  });
+
+  socket.on('breakout-join', async (data) => {
+    const roomId = socket.roomId;
+    if (!roomId || !data?.breakoutIndex && data.breakoutIndex !== 0) return;
+    try {
+      const room = await Room.findById(roomId);
+      if (!room) return;
+      // Remove from other breakout rooms first
+      room.breakoutRooms.forEach((br) => {
+        br.members = br.members.filter((m) => String(m) !== String(socket.user._id));
+      });
+      if (data.breakoutIndex < room.breakoutRooms.length) {
+        const br = room.breakoutRooms[data.breakoutIndex];
+        if (!br.members.some((m) => String(m) === String(socket.user._id))) {
+          br.members.push(socket.user._id);
+        }
+      }
+      await room.save();
+      io.to(roomId).emit('breakout-update', { breakoutRooms: room.breakoutRooms });
+    } catch {}
+  });
+
+  socket.on('breakout-leave', async (data) => {
+    const roomId = socket.roomId;
+    if (!roomId) return;
+    try {
+      const room = await Room.findById(roomId);
+      if (!room) return;
+      room.breakoutRooms.forEach((br) => {
+        br.members = br.members.filter((m) => String(m) !== String(socket.user._id));
+      });
+      await room.save();
+      io.to(roomId).emit('breakout-update', { breakoutRooms: room.breakoutRooms });
+    } catch {}
+  });
+
+  socket.on('breakout-delete', async (data) => {
+    const roomId = socket.roomId;
+    if (!roomId) return;
+    try {
+      const room = await Room.findById(roomId);
+      if (!room || String(room.host) !== String(socket.user._id)) return;
+      if (data?.breakoutIndex < room.breakoutRooms.length) {
+        room.breakoutRooms.splice(data.breakoutIndex, 1);
+        await room.save();
+        io.to(roomId).emit('breakout-update', { breakoutRooms: room.breakoutRooms });
+      }
+    } catch {}
+  });
+
+  // --- Clean up viewer tracking on disconnect ---
   socket.on('disconnect', () => {
     const roomId = socket.roomId;
     if (roomId) {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Loader2, Undo2, Redo2, Share2, Pencil, Check, X } from 'lucide-react'
+import { ArrowLeft, Loader2, Undo2, Redo2, Share2, Pencil, Check, X, Download } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import Whiteboard from '../components/whiteboard/Whiteboard'
@@ -272,6 +272,30 @@ export default function WhiteboardEditor() {
               <Share2 size={14} /> Share
             </button>
           )}
+          <button
+            onClick={() => {
+              const canvas = document.querySelector('.wb-canvas canvas, canvas.whiteboard-canvas, canvas[data-whiteboard]')
+              if (!canvas) {
+                const all = document.querySelectorAll('canvas')
+                const biggest = Array.from(all).sort((a, b) => (a.width * a.height) - (b.width * b.height)).pop()
+                if (biggest) {
+                  const link = document.createElement('a')
+                  link.download = `${board?.title || 'whiteboard'}.png`
+                  link.href = biggest.toDataURL('image/png')
+                  link.click()
+                }
+                return
+              }
+              const link = document.createElement('a')
+              link.download = `${board?.title || 'whiteboard'}.png`
+              link.href = canvas.toDataURL('image/png')
+              link.click()
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-container-high text-on-surface rounded-xl text-xs font-semibold hover:bg-surface-container-high/80 transition-colors"
+            title="Export as PNG"
+          >
+            <Download size={14} /> Export
+          </button>
         </div>
       </div>
 
