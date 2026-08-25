@@ -602,27 +602,6 @@ export default function Whiteboard({
     }
   }, [commitPen, commitShape, renderMain, screenToWorld, effectiveCanvasRef])
 
-  useEffect(() => {
-    const handleKey = (e) => {
-      const el = document.activeElement
-      if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA') return
-
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndoClick(); return }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'Z' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); handleRedoClick(); return }
-      if ((e.ctrlKey || e.metaKey) && e.key === '=') { e.preventDefault(); setZoom(z => Math.min(3, z + 0.1)); return }
-      if ((e.ctrlKey || e.metaKey) && e.key === '-') { e.preventDefault(); setZoom(z => Math.max(0.1, z - 0.1)); return }
-      if ((e.ctrlKey || e.metaKey) && e.key === '0') { e.preventDefault(); setZoom(1); panRef.current = { x: 0, y: 0 }; renderMain(); return }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) { e.preventDefault(); return }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedActionId) { e.preventDefault(); deleteSelected(); return }
-
-      const toolMap = { v: 'select', p: 'pen', t: 'text', s: 'sticky', r: 'rect', o: 'circle', c: 'circle', l: 'line', a: 'arrow', e: 'eraser', x: 'laser' }
-      const mapped = toolMap[e.key.toLowerCase()]
-      if (mapped) setActiveTool(mapped)
-    }
-    document.addEventListener('keydown', handleKey)
-    return () => document.removeEventListener('keydown', handleKey)
-  }, [selectedActionId, renderMain, handleUndoClick, handleRedoClick, deleteSelected])
-
   const handleTextSubmit = useCallback(() => {
     if (textInput.trim()) {
       onDraw?.({ tool: 'text', x: textPos.x, y: textPos.y, w: 200, h: 32, text: textInput, color, strokeWidth, fontSize: 20 })
@@ -665,6 +644,27 @@ export default function Whiteboard({
       setSelectedActionId(null)
     }
   }, [selectedActionId, actions, onUndo])
+
+  useEffect(() => {
+    const handleKey = (e) => {
+      const el = document.activeElement
+      if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA') return
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndoClick(); return }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'Z' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); handleRedoClick(); return }
+      if ((e.ctrlKey || e.metaKey) && e.key === '=') { e.preventDefault(); setZoom(z => Math.min(3, z + 0.1)); return }
+      if ((e.ctrlKey || e.metaKey) && e.key === '-') { e.preventDefault(); setZoom(z => Math.max(0.1, z - 0.1)); return }
+      if ((e.ctrlKey || e.metaKey) && e.key === '0') { e.preventDefault(); setZoom(1); panRef.current = { x: 0, y: 0 }; renderMain(); return }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) { e.preventDefault(); return }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedActionId) { e.preventDefault(); deleteSelected(); return }
+
+      const toolMap = { v: 'select', p: 'pen', t: 'text', s: 'sticky', r: 'rect', o: 'circle', c: 'circle', l: 'line', a: 'arrow', e: 'eraser', x: 'laser' }
+      const mapped = toolMap[e.key.toLowerCase()]
+      if (mapped) setActiveTool(mapped)
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [selectedActionId, renderMain, handleUndoClick, handleRedoClick, deleteSelected])
 
   const handleClear = useCallback(() => {
     onClear?.()

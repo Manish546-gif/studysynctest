@@ -229,17 +229,23 @@ io.on('connection', (socket) => {
     if (!roomId) return;
 
     const actionData = {
-      type: data.type,
+      tool: data.tool,
       points: data.points,
       color: data.color,
       strokeWidth: data.strokeWidth,
       text: data.text,
       x: data.x,
       y: data.y,
+      x1: data.x1,
+      y1: data.y1,
+      x2: data.x2,
+      y2: data.y2,
       w: data.w,
       h: data.h,
       fill: data.fill,
       stroke: data.stroke,
+      src: data.src,
+      fontSize: data.fontSize,
       userId: socket.user._id,
       actionId: data.actionId,
     };
