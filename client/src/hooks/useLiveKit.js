@@ -17,6 +17,12 @@ function logTag(...args) {
   console.log('[LiveKit]', ...args);
 }
 
+const isMobileDevice = () => {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+    (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+};
+
 function subscribeToAllTracks(room) {
   if (!room) return;
   const participants = room.remoteParticipants;
@@ -140,6 +146,9 @@ export function useLiveKit(socketRef, roomId, user) {
 
     logTag('connecting to', serverUrl);
 
+    const isMobile = isMobileDevice();
+    logTag('device type:', isMobile ? 'mobile' : 'desktop');
+
     const room = new Room({
       adaptiveStream: false,
       dynacast: false,
@@ -148,11 +157,17 @@ export function useLiveKit(socketRef, roomId, user) {
         noiseSuppression: true,
         autoGainControl: true,
       },
-      videoCaptureDefaults: {
-        facingMode: 'user',
-        resolution: { width: 1920, height: 1080 },
-        maxFramerate: 60,
-      },
+      videoCaptureDefaults: isMobile
+        ? {
+            facingMode: 'user',
+            resolution: { width: 1280, height: 720 },
+            maxFramerate: 30,
+          }
+        : {
+            facingMode: 'user',
+            resolution: { width: 1920, height: 1080 },
+            maxFramerate: 60,
+          },
     });
 
     room.on(RoomEvent.Connected, () => {
@@ -277,15 +292,29 @@ export function useLiveKit(socketRef, roomId, user) {
       await room.localParticipant.setCameraEnabled(next);
       setCamOn(next);
     } else {
-      await room.localParticipant.setCameraEnabled(true, {
-        resolution: { width: 1920, height: 1080 },
-        maxFramerate: 60,
-        degradationPreference: 'maintain-resolution',
-      });
+      const isMobile = isMobileDevice();
+      const constraints = isMobile
+        ? { resolution: { width: 1280, height: 720 }, maxFramerate: 30 }
+        : {
+            resolution: { width: 1920, height: 1080 },
+            maxFramerate: 60,
+            degradationPreference: 'maintain-resolution',
+          };
+      try {
+        await room.localParticipant.setCameraEnabled(true, constraints);
+      } catch {
+        try {
+          await room.localParticipant.setCameraEnabled(true);
+        } catch (e) {
+          console.warn('[LiveKit] camera failed on this device:', e.message);
+        }
+      }
       const newPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
       setCamOn(!!newPub && !newPub.isMuted);
     }
   }, []);
+
+  const canScreenShare = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getDisplayMedia;
 
   const toggleScreenShare = useCallback(async (shareAudio = false) => {
     const room = roomRef.current;
@@ -299,11 +328,16 @@ export function useLiveKit(socketRef, roomId, user) {
       return null;
     }
 
+    if (!canScreenShare) {
+      console.warn('[LiveKit] screen sharing not supported on this device');
+      return null;
+    }
+
     try {
       await room.localParticipant.setScreenShareEnabled(true, {
         video: {
           resolution: { width: 1920, height: 1080 },
-          maxFramerate: 60,
+          maxFramerate: 30,
           degradationPreference: 'maintain-resolution',
         },
         audio: shareAudio
@@ -318,7 +352,7 @@ export function useLiveKit(socketRef, roomId, user) {
       setScreenSharing(false);
       return null;
     }
-  }, [screenSharing, socketRef]);
+  }, [screenSharing, socketRef, canScreenShare]);
 
   const stopMedia = useCallback(() => {
     disconnect();
@@ -336,6 +370,7 @@ export function useLiveKit(socketRef, roomId, user) {
     camOn,
     screenSharing,
     screenStream,
+    canScreenShare,
     connect,
     disconnect,
     toggleMic,

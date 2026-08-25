@@ -56,9 +56,20 @@ function VideoTile({ stream, name, isLocal, muted, mirror, presenting, onClick, 
 
   useEffect(() => {
     if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream
+      const el = videoRef.current
+      el.srcObject = stream
+      // iOS blocks autoplay when unmuted — start muted, unmute after playback begins
+      if (!isLocal && !el.muted) {
+        el.muted = true
+        const onPlaying = () => {
+          el.muted = !!muted
+          el.removeEventListener('playing', onPlaying)
+        }
+        el.addEventListener('playing', onPlaying)
+      }
+      el.play?.().catch(() => {})
     }
-  }, [stream])
+  }, [stream, isLocal, muted])
 
   return (
     <div
@@ -216,6 +227,7 @@ export default function Workspace() {
     camOn,
     screenSharing,
     screenStream,
+    canScreenShare,
     connect: connectLiveKit,
     disconnect: disconnectLiveKit,
     toggleMic,
@@ -826,7 +838,17 @@ export default function Workspace() {
                     ref={(node) => {
                       stageVideoRef.current = node
                       if (node && stageStream && node.srcObject !== stageStream) {
+                        // iOS blocks autoplay when unmuted — start muted, unmute after playback begins
+                        if (!stageIsLocal && !node.muted) {
+                          node.muted = true
+                          const onPlaying = () => {
+                            node.muted = false
+                            node.removeEventListener('playing', onPlaying)
+                          }
+                          node.addEventListener('playing', onPlaying)
+                        }
                         node.srcObject = stageStream
+                        node.play?.().catch(() => {})
                       }
                     }}
                     autoPlay
@@ -1289,10 +1311,10 @@ export default function Workspace() {
       </div>
 
       {/* Bottom Control Bar */}
-      <div className="flex items-center justify-center gap-1.5 px-4 py-2 bg-zoom-dark border-t border-white/5 shrink-0">
+      <div className="flex items-center justify-center gap-1.5 px-4 py-2 bg-zoom-dark border-t border-white/5 shrink-0 overflow-x-auto">
         <button
           onClick={toggleMic}
-          className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
+          className={`w-10 h-10 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center transition-all duration-150 shrink-0 ${
             micOn
               ? 'bg-white/10 text-white hover:bg-white/15'
               : 'bg-red-500 text-white hover:bg-red-600'
@@ -1304,7 +1326,7 @@ export default function Workspace() {
 
         <button
           onClick={toggleCam}
-          className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
+          className={`w-10 h-10 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center transition-all duration-150 shrink-0 ${
             camOn
               ? 'bg-white/10 text-white hover:bg-white/15'
               : 'bg-red-500 text-white hover:bg-red-600'
@@ -1314,22 +1336,24 @@ export default function Workspace() {
           {camOn ? <Video size={16} /> : <VideoOff size={16} />}
         </button>
 
-        <button
-          onClick={() => toggleScreenShare(shareAudio)}
-          className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
-            screenSharing
-              ? 'bg-zoom-blue text-white'
-              : 'bg-white/10 text-white hover:bg-white/15'
-          }`}
-          title={screenSharing ? 'Stop sharing' : 'Share screen'}
-        >
-          {screenSharing ? <MonitorOff size={16} /> : <Monitor size={16} />}
-        </button>
+        {canScreenShare && (
+          <button
+            onClick={() => toggleScreenShare(shareAudio)}
+            className={`w-10 h-10 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center transition-all duration-150 shrink-0 ${
+              screenSharing
+                ? 'bg-zoom-blue text-white'
+                : 'bg-white/10 text-white hover:bg-white/15'
+            }`}
+            title={screenSharing ? 'Stop sharing' : 'Share screen'}
+          >
+            {screenSharing ? <MonitorOff size={16} /> : <Monitor size={16} />}
+          </button>
+        )}
 
-        {screenSharing && (
+        {screenSharing && canScreenShare && (
           <button
             onClick={() => setShareAudio((v) => !v)}
-            className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
+            className={`w-10 h-10 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center transition-all duration-150 shrink-0 ${
               shareAudio
                 ? 'bg-zoom-blue text-white'
                 : 'bg-white/10 text-white hover:bg-white/15'
