@@ -14,6 +14,17 @@ function buildMediaStream(tracks) {
   return new MediaStream(mediaTracks);
 }
 
+function subscribeAllTracks(participant) {
+  try {
+    participant.trackPublications?.forEach((pub) => {
+      if (pub.track) return;
+      if (pub.isAvailable && !pub.isSubscribed) {
+        pub.setSubscribed(true);
+      }
+    });
+  } catch {}
+}
+
 export function useLiveKit(socketRef, roomId, user) {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState({});
@@ -39,11 +50,9 @@ export function useLiveKit(socketRef, roomId, user) {
           if (!pub.track) return;
           if (pub.source === Track.Source.Camera || pub.source === Track.Source.Microphone) {
             camTracks.push(pub.track);
-          } else if (pub.source === Track.Source.ScreenShare) {
+          } else if (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) {
             screenTracks.push(pub.track);
-          } else if (pub.source === Track.Source.ScreenShareAudio) {
-            screenTracks.push(pub.track);
-          } else if (pub.source === Track.Source.Unknown) {
+          } else {
             camTracks.push(pub.track);
           }
         });
@@ -71,9 +80,7 @@ export function useLiveKit(socketRef, roomId, user) {
         }
       });
     } catch {}
-    if (tracks.length > 0) {
-      setLocalStream(buildMediaStream(tracks));
-    }
+    setLocalStream(tracks.length > 0 ? buildMediaStream(tracks) : null);
   }, []);
 
   const rebuildLocalScreenStream = useCallback(() => {
@@ -87,11 +94,7 @@ export function useLiveKit(socketRef, roomId, user) {
         }
       });
     } catch {}
-    if (screenTracks.length > 0) {
-      setScreenStream(buildMediaStream(screenTracks));
-    } else {
-      setScreenStream(null);
-    }
+    setScreenStream(screenTracks.length > 0 ? buildMediaStream(screenTracks) : null);
   }, []);
 
   const handleConnected = useCallback(() => {
@@ -100,8 +103,11 @@ export function useLiveKit(socketRef, roomId, user) {
 
   const handleParticipantConnected = useCallback((participant) => {
     if (!connectedRef.current) return;
+    subscribeAllTracks(participant);
     participant.on('trackPublished', () => {
-      if (connectedRef.current) rebuildRemoteStreams();
+      if (!connectedRef.current) return;
+      subscribeAllTracks(participant);
+      rebuildRemoteStreams();
     });
     rebuildRemoteStreams();
   }, [rebuildRemoteStreams]);
@@ -144,8 +150,8 @@ export function useLiveKit(socketRef, roomId, user) {
     if (connectedRef.current && roomRef.current) return;
 
     const room = new Room({
-      adaptiveStream: true,
-      dynacast: true,
+      adaptiveStream: false,
+      dynacast: false,
       audioCaptureDefaults: {
         echoCancellation: true,
         noiseSuppression: true,
@@ -162,13 +168,10 @@ export function useLiveKit(socketRef, roomId, user) {
     });
 
     room.on(RoomEvent.Connected, handleConnected);
-
     room.on(RoomEvent.ParticipantConnected, handleParticipantConnected);
     room.on(RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
-
     room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
     room.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
-
     room.on(RoomEvent.LocalTrackPublished, handleLocalTrackPublished);
     room.on(RoomEvent.LocalTrackUnpublished, handleLocalTrackUnpublished);
 
@@ -193,6 +196,8 @@ export function useLiveKit(socketRef, roomId, user) {
     }
 
     await room.connect(serverUrl, token);
+
+    room.participants?.forEach((p) => subscribeAllTracks(p));
   }, [handleConnected, handleParticipantConnected, handleParticipantDisconnected,
     handleTrackSubscribed, handleTrackUnsubscribed, handleLocalTrackPublished,
     handleLocalTrackUnpublished]);
