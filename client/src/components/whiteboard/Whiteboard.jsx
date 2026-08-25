@@ -9,6 +9,12 @@ const COLORS = ['#000000', '#e53e3e', '#dd6b20', '#d69e2e', '#38a169', '#3182ce'
 const STROKE_WIDTHS = [2, 4, 6, 8]
 const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2]
 const LASER_FADE_MS = 1500
+const MAX_UNDO_REDO = 100
+const SMOOTHING_WINDOW = 3
+const PRESSURE_MIN = 0.05
+const PRESSURE_MAX = 0.8
+const MIN_PRESSURE_WIDTH = 1
+const MAX_PRESSURE_WIDTH_MULT = 3
 
 function hitTest(action, px, py) {
   if (!action) return false
@@ -82,14 +88,33 @@ function drawAction(ctx, action, selectedId) {
     }
     case 'pen':
       if (action.points?.length > 1) {
-        ctx.strokeStyle = action.color
-        ctx.lineWidth = action.strokeWidth
-        ctx.lineCap = 'round'
-        ctx.lineJoin = 'round'
-        ctx.beginPath()
-        ctx.moveTo(action.points[0].x, action.points[0].y)
-        for (let i = 1; i < action.points.length; i++) ctx.lineTo(action.points[i].x, action.points[i].y)
-        ctx.stroke()
+        const hasPressure = action.points.some(p => p.pressure != null && p.pressure > 0)
+        if (hasPressure) {
+          ctx.lineCap = 'round'
+          ctx.lineJoin = 'round'
+          ctx.strokeStyle = action.color
+          const baseWidth = action.strokeWidth || 4
+          for (let i = 1; i < action.points.length; i++) {
+            const p0 = action.points[i - 1], p1 = action.points[i]
+            const pressure = p1.pressure ?? 0.5
+            const norm = Math.max(0, Math.min(1, (pressure - PRESSURE_MIN) / (PRESSURE_MAX - PRESSURE_MIN)))
+            const w = Math.max(MIN_PRESSURE_WIDTH, baseWidth * (1 + norm * (MAX_PRESSURE_WIDTH_MULT - 1)))
+            ctx.lineWidth = w
+            ctx.beginPath()
+            ctx.moveTo(p0.x, p0.y)
+            ctx.lineTo(p1.x, p1.y)
+            ctx.stroke()
+          }
+        } else {
+          ctx.strokeStyle = action.color
+          ctx.lineWidth = action.strokeWidth
+          ctx.lineCap = 'round'
+          ctx.lineJoin = 'round'
+          ctx.beginPath()
+          ctx.moveTo(action.points[0].x, action.points[0].y)
+          for (let i = 1; i < action.points.length; i++) ctx.lineTo(action.points[i].x, action.points[i].y)
+          ctx.stroke()
+        }
       }
       break
     case 'text': {
@@ -113,73 +138,81 @@ function drawAction(ctx, action, selectedId) {
       ctx.shadowBlur = 0
       ctx.shadowOffsetY = 0
       if (action.text) {
-        ctx.fillStyle = '#1e1c26'
-        ctx.font = '14px Inter, sans-serif'
+        ctx.fillStyle = '#000000'
+        ctx.font = '13px Inter, sans-serif'
         ctx.textBaseline = 'top'
-        ctx.save()
-        ctx.beginPath()
-        ctx.rect(action.x, action.y, sw, sh)
-        ctx.clip()
-        action.text.split('\n').forEach((line, i) => {
-          const ty = action.y + 28 + i * 20
-          if (ty < action.y + sh - 8) ctx.fillText(line, action.x + 10, ty)
+        const lines = []
+        const words = action.text.split(' ')
+        let line = ''
+        for (const word of words) {
+          const test = line ? `${line} ${word}` : word
+          if (ctx.measureText(test).width > sw - 20) { lines.push(line); line = word }
+          else line = test
+        }
+        if (line) lines.push(line)
+        lines.forEach((l, i) => {
+          if (i < Math.floor((sh - 16) / 18)) ctx.fillText(l, action.x + 10, action.y + 10 + i * 18)
         })
-        ctx.restore()
       }
       break
     }
-    case 'rect': {
-      const rw = action.w || 150, rh = action.h || 100
-      ctx.strokeStyle = action.color
-      ctx.lineWidth = action.strokeWidth
-      ctx.lineCap = 'round'
-      ctx.lineJoin = 'round'
-      ctx.strokeRect(action.x, action.y, rw, rh)
-      break
-    }
-    case 'circle': {
-      const cw = action.w || 100, ch = action.h || 100
-      ctx.strokeStyle = action.color
-      ctx.lineWidth = action.strokeWidth
-      ctx.lineCap = 'round'
-      ctx.beginPath()
-      ctx.ellipse(action.x + cw / 2, action.y + ch / 2, Math.max(cw / 2, 1), Math.max(ch / 2, 1), 0, 0, Math.PI * 2)
-      ctx.stroke()
+    case 'image': {
+      if (action._img && action._img.complete) {
+        ctx.drawImage(action._img, action.x, action.y, action.w || 200, action.h || 200)
+      }
       break
     }
   }
-  ctx.restore()
-
-  if (action._id && action._id === selectedId) {
-    ctx.save()
-    let sx, sy, sw, sh
-    switch (action.tool) {
-      case 'rect': sw = action.w || 150; sh = action.h || 100; sx = action.x; sy = action.y; break
-      case 'circle': sw = action.w || 100; sh = action.h || 100; sx = action.x; sy = action.y; break
-      case 'text': sw = 200; sh = (action.fontSize || 20) * 1.4; sx = action.x; sy = action.y; break
-      case 'sticky': sw = action.w || 180; sh = action.h || 180; sx = action.x; sy = action.y; break
-      case 'pen': {
-        if (!action.points?.length) break
-        const xs = action.points.map(p => p.x), ys = action.points.map(p => p.y)
-        sx = Math.min(...xs) - 8; sy = Math.min(...ys) - 8
-        sw = Math.max(...xs) - sx + 16; sh = Math.max(...ys) - sy + 16; break
-      }
-      case 'line': case 'arrow': {
-        const lx = Math.min(action.x1, action.x2 ?? action.x1)
-        const ly = Math.min(action.y1, action.y2 ?? action.y1)
-        sx = lx - 8; sy = ly - 8
-        sw = Math.abs((action.x2 ?? action.x1) - action.x1) + 16
-        sh = Math.abs((action.y2 ?? action.y1) - action.y1) + 16; break
-      }
-    }
-    if (sx != null) {
+  if (selectedId && action._id === selectedId) {
+    const bounds = getActionBounds(action)
+    if (bounds) {
       ctx.strokeStyle = '#0f71ef'
-      ctx.lineWidth = 2
-      ctx.setLineDash([6, 3])
-      ctx.strokeRect(sx, sy, sw, sh)
+      ctx.lineWidth = 1.5
+      ctx.setLineDash([5, 4])
+      ctx.strokeRect(bounds.x - 6, bounds.y - 6, bounds.w + 12, bounds.h + 12)
       ctx.setLineDash([])
     }
-    ctx.restore()
+  }
+  ctx.restore()
+}
+
+function getActionBounds(action) {
+  switch (action.tool) {
+    case 'rect': case 'circle': case 'text': case 'sticky': case 'image':
+      return { x: action.x, y: action.y, w: action.w || 100, h: action.h || 100 }
+    case 'line': case 'arrow': {
+      const x = Math.min(action.x1, action.x2), y = Math.min(action.y1, action.y2)
+      return { x, y, w: Math.abs(action.x2 - action.x1), h: Math.abs(action.y2 - action.y1) }
+    }
+    case 'pen': {
+      if (!action.points?.length) return null
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+      for (const p of action.points) {
+        minX = Math.min(minX, p.x); minY = Math.min(minY, p.y)
+        maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y)
+      }
+      return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
+    }
+    default: return null
+  }
+}
+
+function smoothPoint(pts, idx, window) {
+  if (idx < 1 || idx >= pts.length - 1) return pts[idx]
+  const half = Math.floor(window / 2)
+  const start = Math.max(1, idx - half)
+  const end = Math.min(pts.length - 1, idx + half)
+  let sx = 0, sy = 0, sp = 0, count = 0
+  for (let i = start; i <= end; i++) {
+    sx += pts[i].x
+    sy += pts[i].y
+    sp += pts[i].pressure ?? 0.5
+    count++
+  }
+  return {
+    x: sx / count,
+    y: sy / count,
+    pressure: sp / count,
   }
 }
 
@@ -201,7 +234,6 @@ export default function Whiteboard({
   const [undoStack, setUndoStack] = useState([])
   const [redoStack, setRedoStack] = useState([])
   const [selectedActionId, setSelectedActionId] = useState(null)
-
   const [textInput, setTextInput] = useState('')
   const [showTextInput, setShowTextInput] = useState(false)
   const [textPos, setTextPos] = useState({ x: 0, y: 0 })
@@ -218,19 +250,20 @@ export default function Whiteboard({
   const selectDragRef = useRef(null)
   const lastCursorRef = useRef(0)
 
-  const effectiveCanvasRef = externalCanvasRef || canvasRef
+  const penPointerRef = useRef(null)
+  const activePointerTypeRef = useRef('mouse')
+  const lastPanPointerRef = useRef(null)
 
-  const getCanvasSize = useCallback(() => {
-    const c = effectiveCanvasRef.current
-    return c ? { w: c.offsetWidth, h: c.offsetHeight } : { w: 800, h: 600 }
-  }, [effectiveCanvasRef])
+  const effectiveCanvasRef = externalCanvasRef || canvasRef
 
   const screenToWorld = useCallback((e) => {
     const c = effectiveCanvasRef.current
     if (!c) return { x: 0, y: 0 }
     const rect = c.getBoundingClientRect()
-    const cx = (e.touches ? e.touches[0]?.clientX ?? e.changedTouches?.[0]?.clientX ?? 0 : e.clientX) - rect.left
-    const cy = (e.touches ? e.touches[0]?.clientY ?? e.changedTouches?.[0]?.clientY ?? 0 : e.clientY) - rect.top
+    const clientX = e.clientX ?? e.touches?.[0]?.clientX ?? 0
+    const clientY = e.clientY ?? e.touches?.[0]?.clientY ?? 0
+    const cx = clientX - rect.left
+    const cy = clientY - rect.top
     return {
       x: (cx - panRef.current.x) / zoom,
       y: (cy - panRef.current.y) / zoom,
@@ -314,9 +347,17 @@ export default function Whiteboard({
   }, [])
 
   const commitPen = useCallback(() => {
-    const pts = currentPathRef.current
-    if (pts.length > 1 && onDraw) {
-      onDraw({ tool: 'pen', points: [...pts], color, strokeWidth })
+    const rawPts = currentPathRef.current
+    if (rawPts.length > 1 && onDraw) {
+      const smoothed = []
+      for (let i = 0; i < rawPts.length; i++) {
+        if (rawPts.length > SMOOTHING_WINDOW + 1 && i > 0 && i < rawPts.length - 1) {
+          smoothed.push(smoothPoint(rawPts, i, SMOOTHING_WINDOW))
+        } else {
+          smoothed.push({ ...rawPts[i] })
+        }
+      }
+      onDraw({ tool: 'pen', points: smoothed, color, strokeWidth })
     }
     currentPathRef.current = []
     renderOverlay(null)
@@ -355,6 +396,18 @@ export default function Whiteboard({
   }, [screenToWorld, strokeWidth, zoom, effectiveCanvasRef])
 
   const handlePointerDown = useCallback((e) => {
+    const ptrType = e.pointerType || 'mouse'
+    activePointerTypeRef.current = ptrType
+    const isPen = ptrType === 'pen'
+    const isTouch = ptrType === 'touch'
+
+    if (isTouch && penPointerRef.current != null) return
+
+    if (isPen) {
+      penPointerRef.current = e.pointerId
+    }
+
+    const pressure = isPen ? (e.pressure || 0.5) : 0.5
     const pos = screenToWorld(e)
 
     if (activeTool === 'select') {
@@ -369,24 +422,36 @@ export default function Whiteboard({
     }
 
     if (e.button === 1 || spaceRef.current || activeTool === 'select') {
+      const c = effectiveCanvasRef.current
+      if (c) {
+        const rect = c.getBoundingClientRect()
+        const cx = e.clientX - rect.left
+        const cy = e.clientY - rect.top
+        startRef.current = { panStartX: cx - panRef.current.x, panStartY: cy - panRef.current.y }
+      }
       drawRef.current = { active: true, type: 'pan' }
+      lastPanPointerRef.current = e.pointerId
+      if (e.target?.setPointerCapture) e.target.setPointerCapture(e.pointerId)
       return
     }
 
     if (activeTool === 'eraser') {
       drawRef.current = { active: true, type: 'eraser' }
+      if (e.target?.setPointerCapture) e.target.setPointerCapture(e.pointerId)
       eraseAt(e)
       return
     }
     if (activeTool === 'laser') {
       drawRef.current = { active: true, type: 'laser' }
+      if (e.target?.setPointerCapture) e.target.setPointerCapture(e.pointerId)
       setLaserTrails(p => [...p, { id: Date.now(), x: pos.x, y: pos.y, time: Date.now() }])
       if (onLivePath) onLivePath({ type: 'laser', points: [pos], color: '#e53e3e', strokeWidth: 3 })
       return
     }
     if (activeTool === 'pen') {
       drawRef.current = { active: true, type: 'pen' }
-      currentPathRef.current = [pos]
+      if (e.target?.setPointerCapture) e.target.setPointerCapture(e.pointerId)
+      currentPathRef.current = [{ x: pos.x, y: pos.y, pressure }]
       return
     }
     if (activeTool === 'text') {
@@ -399,12 +464,18 @@ export default function Whiteboard({
     }
     if (['rect', 'circle', 'line', 'arrow'].includes(activeTool)) {
       drawRef.current = { active: true, type: 'shape' }
+      if (e.target?.setPointerCapture) e.target.setPointerCapture(e.pointerId)
       startRef.current = pos
       return
     }
-  }, [activeTool, actions, screenToWorld, eraseAt, onLivePath])
+  }, [activeTool, actions, screenToWorld, eraseAt, onLivePath, effectiveCanvasRef])
 
   const handlePointerMove = useCallback((e) => {
+    const isPen = e.pointerType === 'pen'
+    const isTouch = e.pointerType === 'touch'
+
+    if (isTouch && penPointerRef.current != null) return
+
     if (!drawRef.current.active) return
     const dt = drawRef.current.type
     const pos = screenToWorld(e)
@@ -413,8 +484,8 @@ export default function Whiteboard({
       const c = effectiveCanvasRef.current
       if (!c) return
       const rect = c.getBoundingClientRect()
-      const cx = (e.touches ? e.touches[0]?.clientX ?? 0 : e.clientX) - rect.left
-      const cy = (e.touches ? e.touches[0]?.clientY ?? 0 : e.clientY) - rect.top
+      const cx = e.clientX - rect.left
+      const cy = e.clientY - rect.top
       panRef.current = { x: cx - (startRef.current?.panStartX || cx), y: cy - (startRef.current?.panStartY || cy) }
       renderMain()
       return
@@ -437,12 +508,11 @@ export default function Whiteboard({
     }
 
     if (dt === 'pen') {
-      currentPathRef.current.push(pos)
+      const pressure = isPen ? (e.pressure || 0.5) : 0.5
+      currentPathRef.current.push({ x: pos.x, y: pos.y, pressure })
       const pts = currentPathRef.current
       if (pts.length >= 2) {
-        renderOverlay({
-          tool: 'pen', points: pts, color, strokeWidth,
-        })
+        renderOverlay({ tool: 'pen', points: pts, color, strokeWidth })
       }
       return
     }
@@ -473,6 +543,14 @@ export default function Whiteboard({
   }, [screenToWorld, onCursor, standalone, eraseAt, renderOverlay, renderMain, activeTool, color, strokeWidth, actions, onLivePath, effectiveCanvasRef])
 
   const handlePointerUp = useCallback((e) => {
+    const isTouch = e.pointerType === 'touch'
+    if (isTouch && penPointerRef.current != null) return
+
+    const isPen = e.pointerType === 'pen'
+    if (isPen && e.pointerId === penPointerRef.current) {
+      penPointerRef.current = null
+    }
+
     const dt = drawRef.current.type
     const wasActive = drawRef.current.active
     drawRef.current = { active: false, type: null }
@@ -480,7 +558,11 @@ export default function Whiteboard({
     if (!wasActive) return
     const pos = screenToWorld(e)
 
-    if (dt === 'pan') { renderMain(); return }
+    if (dt === 'pan') {
+      lastPanPointerRef.current = null
+      renderMain()
+      return
+    }
     if (dt === 'eraser') return
     if (dt === 'laser') { if (onLivePathEnd) onLivePathEnd(); return }
     if (dt === 'pen') { commitPen(); return }
@@ -503,20 +585,43 @@ export default function Whiteboard({
   }, [screenToWorld, renderMain, commitPen, commitShape, actions, onMove, onUndo, onDraw, onLivePathEnd, renderOverlay])
 
   useEffect(() => {
-    const handlePanStart = (e) => {
-      if (e.button === 1 || spaceRef.current) {
-        const c = effectiveCanvasRef.current
-        if (!c) return
-        const rect = c.getBoundingClientRect()
-        const cx = e.clientX - rect.left
-        const cy = e.clientY - rect.top
-        startRef.current = { panStartX: cx - panRef.current.x, panStartY: cy - panRef.current.y }
+    const handlePointerCancel = (e) => {
+      if (e.pointerId === penPointerRef.current) penPointerRef.current = null
+      if (drawRef.current.active) {
+        const dt = drawRef.current.type
+        drawRef.current = { active: false, type: null }
+        if (dt === 'pen') commitPen()
+        else if (dt === 'shape') commitShape(screenToWorld(e))
+        else renderMain()
       }
     }
     const c = effectiveCanvasRef.current
-    if (c) c.addEventListener('mousedown', handlePanStart)
-    return () => { if (c) c.removeEventListener('mousedown', handlePanStart) }
-  }, [effectiveCanvasRef])
+    if (c) {
+      c.addEventListener('pointercancel', handlePointerCancel)
+      return () => c.removeEventListener('pointercancel', handlePointerCancel)
+    }
+  }, [commitPen, commitShape, renderMain, screenToWorld, effectiveCanvasRef])
+
+  useEffect(() => {
+    const handleKey = (e) => {
+      const el = document.activeElement
+      if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA') return
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndoClick(); return }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'Z' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); handleRedoClick(); return }
+      if ((e.ctrlKey || e.metaKey) && e.key === '=') { e.preventDefault(); setZoom(z => Math.min(3, z + 0.1)); return }
+      if ((e.ctrlKey || e.metaKey) && e.key === '-') { e.preventDefault(); setZoom(z => Math.max(0.1, z - 0.1)); return }
+      if ((e.ctrlKey || e.metaKey) && e.key === '0') { e.preventDefault(); setZoom(1); panRef.current = { x: 0, y: 0 }; renderMain(); return }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) { e.preventDefault(); return }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedActionId) { e.preventDefault(); deleteSelected(); return }
+
+      const toolMap = { v: 'select', p: 'pen', t: 'text', s: 'sticky', r: 'rect', o: 'circle', c: 'circle', l: 'line', a: 'arrow', e: 'eraser', x: 'laser' }
+      const mapped = toolMap[e.key.toLowerCase()]
+      if (mapped) setActiveTool(mapped)
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [selectedActionId, renderMain, handleUndoClick, handleRedoClick, deleteSelected])
 
   const handleTextSubmit = useCallback(() => {
     if (textInput.trim()) {
@@ -531,8 +636,6 @@ export default function Whiteboard({
     }
     setShowStickyInput(false); setStickyText('')
   }, [stickyText, stickyPos, onDraw])
-
-  const MAX_UNDO_REDO = 100
 
   const handleUndoClick = useCallback(() => {
     const last = actions[actions.length - 1]
@@ -562,27 +665,6 @@ export default function Whiteboard({
       setSelectedActionId(null)
     }
   }, [selectedActionId, actions, onUndo])
-
-  useEffect(() => {
-    const handleKey = (e) => {
-      const el = document.activeElement
-      if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA') return
-
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndoClick(); return }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'Z' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); handleRedoClick(); return }
-      if ((e.ctrlKey || e.metaKey) && e.key === '=') { e.preventDefault(); setZoom(z => Math.min(3, z + 0.1)); return }
-      if ((e.ctrlKey || e.metaKey) && e.key === '-') { e.preventDefault(); setZoom(z => Math.max(0.1, z - 0.1)); return }
-      if ((e.ctrlKey || e.metaKey) && e.key === '0') { e.preventDefault(); setZoom(1); panRef.current = { x: 0, y: 0 }; renderMain(); return }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) { e.preventDefault(); return }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedActionId) { e.preventDefault(); deleteSelected(); return }
-
-      const toolMap = { v: 'select', p: 'pen', t: 'text', s: 'sticky', r: 'rect', o: 'circle', c: 'circle', l: 'line', a: 'arrow', e: 'eraser', x: 'laser' }
-      const mapped = toolMap[e.key.toLowerCase()]
-      if (mapped) setActiveTool(mapped)
-    }
-    document.addEventListener('keydown', handleKey)
-    return () => document.removeEventListener('keydown', handleKey)
-  }, [selectedActionId, renderMain, handleUndoClick, handleRedoClick, deleteSelected])
 
   const handleClear = useCallback(() => {
     onClear?.()
@@ -641,50 +723,49 @@ export default function Whiteboard({
   ]
 
   return (
-    <div ref={containerRef} className="w-full h-full bg-white flex flex-col relative select-none">
+    <div ref={containerRef} className="w-full h-full flex flex-col bg-white">
       {showTextInput && (
-        <div className="absolute z-50" style={{ left: textPos.x * zoom + panRef.current.x, top: textPos.y * zoom + panRef.current.y }}>
-          <textarea
-            autoFocus
-            value={textInput}
-            onChange={(e) => setTextInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleTextSubmit() }
-              if (e.key === 'Escape') { setShowTextInput(false); setTextInput('') }
-              e.stopPropagation()
-            }}
-            onBlur={handleTextSubmit}
-            className="bg-white/95 border border-zoom-blue/50 rounded px-2 py-1 text-sm text-black resize-none outline-none min-w-[120px]"
-            style={{ fontSize: 20 * zoom, color }}
-            placeholder="Type here..."
-            rows={1}
-          />
-        </div>
+        <input
+          autoFocus
+          value={textInput}
+          onChange={(e) => setTextInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleTextSubmit(); if (e.key === 'Escape') setShowTextInput(false) }}
+          onBlur={handleTextSubmit}
+          className="absolute z-50 bg-transparent border border-zoom-blue outline-none px-1 py-0.5 text-sm"
+          style={{
+            left: textPos.x * zoom + panRef.current.x,
+            top: textPos.y * zoom + panRef.current.y,
+            color,
+            fontSize: `${20 * zoom}px`,
+            minWidth: 100,
+          }}
+        />
       )}
-
       {showStickyInput && (
-        <div className="absolute z-50" style={{ left: stickyPos.x * zoom + panRef.current.x, top: stickyPos.y * zoom + panRef.current.y }}>
-          <textarea
-            autoFocus
-            value={stickyText}
-            onChange={(e) => setStickyText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') { setShowStickyInput(false); setStickyText('') }
-              e.stopPropagation()
-            }}
-            onBlur={handleStickySubmit}
-            className="bg-yellow-100 border border-yellow-300 rounded px-2 py-1 text-sm text-black resize-none outline-none min-w-[150px] min-h-[60px]"
-            placeholder="Sticky note..."
-          />
-        </div>
+        <textarea
+          autoFocus
+          value={stickyText}
+          onChange={(e) => setStickyText(e.target.value)}
+          onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleStickySubmit(); if (e.key === 'Escape') setShowStickyInput(false) }}
+          onBlur={handleStickySubmit}
+          placeholder="Type here..."
+          className="absolute z-50 bg-yellow-100 border border-zoom-blue outline-none p-2 text-sm rounded-lg shadow-lg resize-none"
+          style={{
+            left: stickyPos.x * zoom + panRef.current.x,
+            top: stickyPos.y * zoom + panRef.current.y,
+            width: 180 * zoom,
+            height: 120 * zoom,
+          }}
+        />
       )}
 
       {laserTrails.map(trail => {
-        const progress = Math.min((Date.now() - trail.time) / LASER_FADE_MS, 1)
+        const age = Date.now() - trail.time
+        const progress = age / LASER_FADE_MS
         return (
           <div
             key={trail.id}
-            className="absolute rounded-full pointer-events-none"
+            className="absolute rounded-full pointer-events-none z-10"
             style={{
               left: trail.x * zoom + panRef.current.x - 5,
               top: trail.y * zoom + panRef.current.y - 5,
@@ -697,17 +778,26 @@ export default function Whiteboard({
         )
       })}
 
-      <div className="flex-1 relative overflow-hidden" style={{ cursor: cursorMap[activeTool] || 'crosshair' }}>
+      <div
+        className="flex-1 relative overflow-hidden"
+        style={{ cursor: cursorMap[activeTool] || 'crosshair', touchAction: 'none' }}
+      >
         <canvas
           ref={effectiveCanvasRef}
-          onMouseDown={handlePointerDown}
-          onMouseMove={handlePointerMove}
-          onMouseUp={handlePointerUp}
-          onMouseLeave={() => { drawRef.current = { active: false, type: null }; renderOverlay(null) }}
-          onTouchStart={handlePointerDown}
-          onTouchMove={handlePointerMove}
-          onTouchEnd={handlePointerUp}
-          className="absolute inset-0 w-full h-full touch-none"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={() => {
+            if (drawRef.current.active) {
+              const dt = drawRef.current.type
+              drawRef.current = { active: false, type: null }
+              if (dt === 'pen') commitPen()
+              else renderMain()
+            }
+            renderOverlay(null)
+          }}
+          className="absolute inset-0 w-full h-full"
+          style={{ touchAction: 'none' }}
         />
         <canvas
           ref={overlayRef}
