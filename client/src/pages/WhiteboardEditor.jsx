@@ -37,7 +37,10 @@ export default function WhiteboardEditor() {
         setBoard(data.whiteboard)
         setMyRole(data.role || 'viewer')
         setComments(data.whiteboard.comments || [])
-        const initial = data.whiteboard.actions || []
+        const initial = (data.whiteboard.actions || []).map((a) => ({
+          ...a,
+          tool: a.tool || a.type || 'pen',
+        }))
         actionsRef.current = initial
         setActions(initial)
       })
@@ -53,7 +56,7 @@ export default function WhiteboardEditor() {
     saveTimerRef.current = setTimeout(() => {
       api.saveWhiteboardActions(id, actionsRef.current)
         .then(() => { if (!unmountedRef.current) setSaveState('saved') })
-        .catch(() => { if (!unmountedRef.current) setSaveState('error') })
+        .catch((err) => { console.error('Whiteboard save failed:', err); if (!unmountedRef.current) setSaveState('error') })
     }, 600)
   }, [id])
 

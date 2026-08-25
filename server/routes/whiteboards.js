@@ -138,7 +138,7 @@ router.put('/:id', auth, async (req, res) => {
 
 router.put('/:id/actions', auth, async (req, res) => {
   try {
-    const board = await loadBoard(req.params.id);
+    const board = await Whiteboard.findById(req.params.id);
     if (!board) return res.status(404).json({ error: 'Whiteboard not found' });
     const level = accessLevel(board, req.user._id);
     if (!canAccess(board, req.user._id)) {
@@ -148,10 +148,36 @@ router.put('/:id/actions', auth, async (req, res) => {
       return res.status(403).json({ error: 'You have view-only access to this whiteboard' });
     }
 
-    board.actions = Array.isArray(req.body.actions) ? req.body.actions : [];
-    await board.save();
-    res.json({ message: 'Saved', count: board.actions.length });
+    const raw = Array.isArray(req.body.actions) ? req.body.actions : [];
+    const actions = raw.map((a) => {
+      const clean = { tool: a.tool || a.type || 'pen' };
+      if (a.points) clean.points = a.points;
+      if (a.color != null) clean.color = a.color;
+      if (a.strokeWidth != null) clean.strokeWidth = a.strokeWidth;
+      if (a.text != null) clean.text = a.text;
+      if (a.x != null) clean.x = a.x;
+      if (a.y != null) clean.y = a.y;
+      if (a.x1 != null) clean.x1 = a.x1;
+      if (a.y1 != null) clean.y1 = a.y1;
+      if (a.x2 != null) clean.x2 = a.x2;
+      if (a.y2 != null) clean.y2 = a.y2;
+      if (a.w != null) clean.w = a.w;
+      if (a.h != null) clean.h = a.h;
+      if (a.fill != null) clean.fill = a.fill;
+      if (a.stroke != null) clean.stroke = a.stroke;
+      if (a.src != null) clean.src = a.src;
+      if (a.fontSize != null) clean.fontSize = a.fontSize;
+      return clean;
+    });
+
+    const result = await Whiteboard.findByIdAndUpdate(
+      req.params.id,
+      { $set: { actions } },
+      { new: true, runValidators: false }
+    );
+    res.json({ message: 'Saved', count: result.actions.length });
   } catch (err) {
+    console.error('Failed to save whiteboard actions:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

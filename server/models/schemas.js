@@ -1,7 +1,8 @@
 const mongoose = require('mongoose');
 
 const drawActionSchema = new mongoose.Schema({
-  tool: { type: String, required: true },
+  tool: { type: String },
+  type: { type: String },
   points: [{ x: Number, y: Number, pressure: Number }],
   color: { type: String, default: '#000000' },
   strokeWidth: { type: Number, default: 2 },

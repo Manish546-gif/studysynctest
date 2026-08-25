@@ -55,10 +55,10 @@ export function useSocket(roomId) {
       setTypingUsers((prev) => prev.filter((u) => u.userId !== data.userId));
     });
 
-    socket.on('whiteboard-state', (actions) => setRemoteActions(actions));
+    socket.on('whiteboard-state', (actions) => setRemoteActions(actions.map((a) => ({ ...a, tool: a.tool || a.type || 'pen' }))));
 
     socket.on('draw-action', (data) => {
-      setRemoteActions((prev) => [...prev, data]);
+      setRemoteActions((prev) => [...prev, { ...data, tool: data.tool || data.type || 'pen' }]);
     });
 
     socket.on('move-action', (data) => {
