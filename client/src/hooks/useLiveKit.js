@@ -14,7 +14,7 @@ function buildMediaStream(tracks) {
   return new MediaStream(mediaTracks);
 }
 
-export function useLiveKit(_socketRef, roomId, user) {
+export function useLiveKit(socketRef, roomId, user) {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState({});
   const [micOn, setMicOn] = useState(false);
@@ -29,50 +29,34 @@ export function useLiveKit(_socketRef, roomId, user) {
     const room = roomRef.current;
     if (!room) return;
     const next = {};
-    room.participants.forEach((participant) => {
-      const tracks = [];
-      participant.trackPublications.forEach((pub) => {
-        if (pub.track && pub.source !== Track.Source.ScreenShareAudio) {
-          // Include camera, microphone, AND screen share tracks
-          tracks.push(pub.track);
+    try {
+      room.participants?.forEach((participant) => {
+        const tracks = [];
+        participant.trackPublications?.forEach((pub) => {
+          if (pub.track && pub.source !== Track.Source.ScreenShareAudio) {
+            tracks.push(pub.track);
+          }
+        });
+        if (tracks.length > 0) {
+          next[participant.identity] = buildMediaStream(tracks);
         }
       });
-      if (tracks.length > 0) {
-        next[participant.identity] = buildMediaStream(tracks);
-      }
-    });
+    } catch {}
     remoteStreamsRef.current = next;
     setRemoteStreams({ ...next });
-  }, []);
-
-  const rebuildScreenStream = useCallback(() => {
-    const room = roomRef.current;
-    if (!room) return;
-    room.participants.forEach((participant) => {
-      const screenTracks = [];
-      participant.trackPublications.forEach((pub) => {
-        if (pub.track && (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio)) {
-          screenTracks.push(pub.track);
-        }
-      });
-      if (screenTracks.length > 0) {
-        const stream = buildMediaStream(screenTracks);
-        if (stream) {
-          setScreenStream(stream);
-        }
-      }
-    });
   }, []);
 
   const rebuildLocalStream = useCallback(() => {
     const room = roomRef.current;
     if (!room || !room.localParticipant) return;
     const tracks = [];
-    room.localParticipant.trackPublications.forEach((pub) => {
-      if (pub.track && pub.source === Track.Source.Camera) {
-        tracks.push(pub.track);
-      }
-    });
+    try {
+      room.localParticipant.trackPublications?.forEach((pub) => {
+        if (pub.track && pub.source === Track.Source.Camera) {
+          tracks.push(pub.track);
+        }
+      });
+    } catch {}
     if (tracks.length > 0) {
       setLocalStream(buildMediaStream(tracks));
     }
@@ -82,11 +66,13 @@ export function useLiveKit(_socketRef, roomId, user) {
     const room = roomRef.current;
     if (!room || !room.localParticipant) return;
     const screenTracks = [];
-    room.localParticipant.trackPublications.forEach((pub) => {
-      if (pub.track && (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio)) {
-        screenTracks.push(pub.track);
-      }
-    });
+    try {
+      room.localParticipant.trackPublications?.forEach((pub) => {
+        if (pub.track && (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio)) {
+          screenTracks.push(pub.track);
+        }
+      });
+    } catch {}
     if (screenTracks.length > 0) {
       setScreenStream(buildMediaStream(screenTracks));
     }
@@ -97,26 +83,31 @@ export function useLiveKit(_socketRef, roomId, user) {
   }, []);
 
   const handleParticipantConnected = useCallback((participant) => {
+    if (!connectedRef.current) return;
     participant.on('trackPublished', () => {
-      rebuildRemoteStreams();
+      if (connectedRef.current) rebuildRemoteStreams();
     });
     rebuildRemoteStreams();
   }, [rebuildRemoteStreams]);
 
   const handleParticipantDisconnected = useCallback((participant) => {
+    if (!connectedRef.current) return;
     rebuildRemoteStreams();
   }, [rebuildRemoteStreams]);
 
   const handleTrackSubscribed = useCallback((track, publication, participant) => {
+    if (!connectedRef.current) return;
     rebuildRemoteStreams();
     rebuildLocalScreenStream();
   }, [rebuildRemoteStreams, rebuildLocalScreenStream]);
 
   const handleTrackUnsubscribed = useCallback((track) => {
+    if (!connectedRef.current) return;
     rebuildRemoteStreams();
   }, [rebuildRemoteStreams]);
 
   const handleLocalTrackPublished = useCallback((publication) => {
+    if (!connectedRef.current) return;
     if (publication.source === Track.Source.Camera) {
       rebuildLocalStream();
     } else if (publication.source === Track.Source.ScreenShare || publication.source === Track.Source.ScreenShareAudio) {
@@ -125,6 +116,7 @@ export function useLiveKit(_socketRef, roomId, user) {
   }, [rebuildLocalStream, rebuildLocalScreenStream]);
 
   const handleLocalTrackUnpublished = useCallback((publication) => {
+    if (!connectedRef.current) return;
     if (publication.source === Track.Source.Camera) {
       rebuildLocalStream();
     } else if (publication.source === Track.Source.ScreenShare || publication.source === Track.Source.ScreenShareAudio) {
@@ -166,6 +158,7 @@ export function useLiveKit(_socketRef, roomId, user) {
 
     room.on(RoomEvent.Disconnected, () => {
       connectedRef.current = false;
+      roomRef.current = null;
       setLocalStream(null);
       setRemoteStreams({});
       setMicOn(false);
@@ -239,6 +232,7 @@ export function useLiveKit(_socketRef, roomId, user) {
       await room.localParticipant.setScreenShareEnabled(false);
       setScreenSharing(false);
       setScreenStream(null);
+      socketRef.current?.emit('screen-share-changed', { sharing: false });
       return null;
     }
 
@@ -249,13 +243,14 @@ export function useLiveKit(_socketRef, roomId, user) {
           : false,
       });
       setScreenSharing(true);
+      socketRef.current?.emit('screen-share-changed', { sharing: true });
       return room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
     } catch (err) {
       console.warn('Screen share failed:', err.message);
       setScreenSharing(false);
       return null;
     }
-  }, [screenSharing]);
+  }, [screenSharing, socketRef]);
 
   const stopMedia = useCallback(() => {
     disconnect();

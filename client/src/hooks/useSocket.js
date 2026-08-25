@@ -123,8 +123,9 @@ export function useSocket(roomId) {
     socket.on('screen-share-changed', (data) => {
       setScreenSharers((prev) => {
         const next = { ...prev };
-        if (data.sharing) next[data.socketId] = data.userName || true;
-        else delete next[data.socketId];
+        const uid = data.userId || data.socketId;
+        if (data.sharing) next[uid] = data.userName || true;
+        else delete next[uid];
         return next;
       });
     });
@@ -134,19 +135,21 @@ export function useSocket(roomId) {
       if (!Array.isArray(sharers)) return;
       setScreenSharers(() => {
         const next = {};
-        sharers.forEach(({ socketId, userName }) => {
-          if (socketId) next[socketId] = userName || true;
+        sharers.forEach(({ userId, userName }) => {
+          if (userId) next[userId] = userName || true;
         });
         return next;
       });
     });
 
     socket.on('tab-visibility', (data) => {
-      setTabVisibility((prev) => ({ ...prev, [data.socketId]: { visible: data.visible, userName: data.userName } }));
+      const uid = data.userId || data.socketId;
+      setTabVisibility((prev) => ({ ...prev, [uid]: { visible: data.visible, userName: data.userName } }));
     });
 
     socket.on('speaker-level', (data) => {
-      setSpeakerLevels((prev) => ({ ...prev, [data.socketId]: data.level }));
+      const uid = data.userId || data.socketId;
+      setSpeakerLevels((prev) => ({ ...prev, [uid]: data.level }));
     });
 
     socket.on('activity-log', (data) => {
@@ -154,7 +157,8 @@ export function useSocket(roomId) {
     });
 
     socket.on('cursor-position', (data) => {
-      setScreenCursors((prev) => ({ ...prev, [data.socketId]: { x: data.x, y: data.y } }));
+      const uid = data.userId || data.socketId;
+      setScreenCursors((prev) => ({ ...prev, [uid]: { x: data.x, y: data.y } }));
     });
 
     return () => {

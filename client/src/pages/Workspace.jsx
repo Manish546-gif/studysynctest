@@ -235,7 +235,6 @@ export default function Workspace() {
     if (!socket) return
     socket.on('breakout-update', (data) => setBreakoutRooms(data.breakoutRooms || []))
     socket.on('viewer-count', (data) => setViewerCount(data.count || 0))
-    socket.on('pomodoro-sync', (data) => setSharedPomodoro(data))
 
     // Reaction toast notifications
     socket.on('reaction', (data) => {
@@ -251,7 +250,6 @@ export default function Workspace() {
     return () => {
       socket.off('breakout-update')
       socket.off('viewer-count')
-      socket.off('pomodoro-sync')
       socket.off('reaction')
     }
   }, [socketRef])
@@ -887,9 +885,7 @@ export default function Workspace() {
                       <VideoTile
                         stream={remoteStreams[socketId]}
                         name={
-                          displayMembers.find((m) =>
-                            roomUsers.some((u) => u._id === m._id)
-                          )?.name || 'Participant'
+                          displayMembers.find((m) => m._id === socketId)?.name || 'Participant'
                         }
                         isLocal={false}
                         muted={false}
@@ -927,9 +923,7 @@ export default function Workspace() {
                       key={socketId}
                       stream={remoteStreams[socketId]}
                       name={
-                        displayMembers.find((m) =>
-                          roomUsers.some((u) => u._id === m._id)
-                        )?.name || 'Participant'
+                        displayMembers.find((m) => m._id === socketId)?.name || 'Participant'
                       }
                       isLocal={false}
                       muted={false}

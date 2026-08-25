@@ -89,18 +89,18 @@ io.use(async (socket, next) => {
 });
 
 const activeRooms = new Map();
-// roomId -> Map(socketId -> userName) of active screen sharers
+// roomId -> Map(userId -> userName) of active screen sharers
 const roomScreenShares = new Map();
 
-function setScreenShareState(roomId, socketId, userName, sharing) {
+function setScreenShareState(roomId, userId, userName, sharing) {
   if (!roomScreenShares.has(roomId)) {
     roomScreenShares.set(roomId, new Map());
   }
   const shares = roomScreenShares.get(roomId);
   if (sharing) {
-    shares.set(socketId, userName);
+    shares.set(userId, userName);
   } else {
-    shares.delete(socketId);
+    shares.delete(userId);
   }
   if (shares.size === 0) roomScreenShares.delete(roomId);
 }
@@ -136,7 +136,7 @@ io.on('connection', (socket) => {
       if (shares && shares.size > 0) {
         socket.emit(
           'screen-sharers',
-          Array.from(shares.entries()).map(([socketId, userName]) => ({ socketId, userName }))
+          Array.from(shares.entries()).map(([userId, userName]) => ({ userId, userName }))
         );
       }
 
@@ -162,12 +162,11 @@ io.on('connection', (socket) => {
       userId: socket.user._id,
     });
     // Leaving the room ends any active screen share.
-    if (roomScreenShares.has(roomId) && roomScreenShares.get(roomId).has(socket.id)) {
-      setScreenShareState(roomId, socket.id, socket.user.name, false);
+    if (roomScreenShares.has(roomId) && roomScreenShares.get(roomId).has(socket.user._id.toString())) {
+      setScreenShareState(roomId, socket.user._id.toString(), socket.user.name, false);
       io.to(roomId).emit('screen-share-changed', {
-        socketId: socket.id,
-        sharing: false,
         userId: socket.user._id,
+        sharing: false,
         userName: socket.user.name,
       });
     }
@@ -391,45 +390,15 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('file-removed', { fileId: data.fileId });
   });
 
-  socket.on('webrtc-ready', () => {
-    const roomId = socket.roomId;
-    if (!roomId) return;
-    socket.to(roomId).emit('webrtc-user-joined', {
-      socketId: socket.id,
-      userId: socket.user._id,
-    });
-  });
-
-  socket.on('webrtc-offer', (data) => {
-    io.to(data.target).emit('webrtc-offer', {
-      from: socket.id,
-      offer: data.offer,
-    });
-  });
-
-  socket.on('webrtc-answer', (data) => {
-    io.to(data.target).emit('webrtc-answer', {
-      from: socket.id,
-      answer: data.answer,
-    });
-  });
-
-  socket.on('webrtc-ice-candidate', (data) => {
-    io.to(data.target).emit('webrtc-ice-candidate', {
-      from: socket.id,
-      candidate: data.candidate,
-    });
-  });
-
   socket.on('screen-share-changed', (data) => {
     const roomId = socket.roomId;
     if (!roomId) return;
     const sharing = !!data.sharing;
-    setScreenShareState(roomId, socket.id, socket.user.name, sharing);
+    const userId = socket.user._id.toString();
+    setScreenShareState(roomId, userId, socket.user.name, sharing);
     io.to(roomId).emit('screen-share-changed', {
-      socketId: socket.id,
+      userId,
       sharing,
-      userId: socket.user._id,
       userName: socket.user.name,
     });
   });
@@ -567,7 +536,6 @@ io.on('connection', (socket) => {
     const roomId = socket.roomId;
     if (!roomId) return;
     io.to(roomId).emit('tab-visibility', {
-      socketId: socket.id,
       userId: socket.user._id,
       userName: socket.user.name,
       visible: !!data.visible,
@@ -583,6 +551,7 @@ io.on('connection', (socket) => {
     if (!viewers) return;
     viewers.forEach((viewerId) => {
       io.to(viewerId).emit('cursor-position', {
+        userId: socket.user._id,
         socketId: socket.id,
         x: data.x,
         y: data.y,
@@ -595,7 +564,7 @@ io.on('connection', (socket) => {
     const roomId = socket.roomId;
     if (!roomId) return;
     io.to(roomId).emit('speaker-level', {
-      socketId: socket.id,
+      userId: socket.user._id,
       level: data.level || 0,
     });
   });
@@ -618,14 +587,13 @@ io.on('connection', (socket) => {
       socket.to(roomId).emit('user-stopped-typing', {
         userId: socket.user._id,
       });
-      io.to(roomId).emit('webrtc-user-left', { socketId: socket.id });
       // Abrupt disconnect (tab close/crash) must also clear share state.
-      if (roomScreenShares.has(roomId) && roomScreenShares.get(roomId).has(socket.id)) {
-        setScreenShareState(roomId, socket.id, socket.user.name, false);
+      const userId = socket.user._id.toString();
+      if (roomScreenShares.has(roomId) && roomScreenShares.get(roomId).has(userId)) {
+        setScreenShareState(roomId, userId, socket.user.name, false);
         io.to(roomId).emit('screen-share-changed', {
-          socketId: socket.id,
+          userId,
           sharing: false,
-          userId: socket.user._id,
           userName: socket.user.name,
         });
       }
@@ -645,7 +613,7 @@ io.on('connection', (socket) => {
         if (rv.has(socket.id)) {
           const viewers = rv.get(socket.id);
           viewers.forEach((vId) => {
-            io.to(vId).emit('cursor-position', { socketId: socket.id, x: -1, y: -1 });
+            io.to(vId).emit('cursor-position', { userId: socket.user._id, socketId: socket.id, x: -1, y: -1 });
           });
           rv.delete(socket.id);
         }
@@ -653,12 +621,11 @@ io.on('connection', (socket) => {
       }
       // Broadcast tab away on disconnect
       io.to(roomId).emit('tab-visibility', {
-        socketId: socket.id,
         userId: socket.user._id,
         userName: socket.user.name,
         visible: false,
       });
-      io.to(roomId).emit('speaker-level', { socketId: socket.id, level: 0 });
+      io.to(roomId).emit('speaker-level', { userId: socket.user._id, level: 0 });
       if (activeRooms.has(roomId)) {
         activeRooms.get(roomId).delete(socket.id);
         if (activeRooms.get(roomId).size === 0) {
