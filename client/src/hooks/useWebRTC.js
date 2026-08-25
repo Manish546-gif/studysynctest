@@ -248,8 +248,8 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
                 if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
                 params.encodings[0] = {
                   ...params.encodings[0],
-                  maxBitrate: 2500000,
-                  maxFramerate: 30,
+                  maxBitrate: 4500000,
+                  maxFramerate: 60,
                   scaleResolutionDownBy: 1,
                   networkPriority: 'high',
                   adaptivePtime: true,
@@ -303,9 +303,9 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
     try {
       const disp = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          frameRate: { ideal: 30, max: 60 },
+          frameRate: { ideal: 45, max: 60 },
           width: { ideal: 1920, max: 2560 },
-          height: { ideal: 1080, max: 1440 },
+          height: { ideal: 1440, max: 2160 },
           cursor: 'always',
           displaySurface: 'monitor',
         },
@@ -314,7 +314,7 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
       const screenTrack = disp.getVideoTracks()[0];
       if (!screenTrack) return null;
 
-      // Apply high-quality encoding parameters
+    
       try {
         const sender = peersRef.current && Object.values(peersRef.current)
           .map(pc => pc.getSenders().find(s => s.track === screenTrack))
@@ -326,8 +326,8 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
           }
           params.encodings[0] = {
             ...params.encodings[0],
-            maxBitrate: 2500000,
-            maxFramerate: 30,
+            maxBitrate: 4500000,
+            maxFramerate: 60,
             scaleResolutionDownBy: 1,
             networkPriority: 'high',
             adaptivePtime: true,
