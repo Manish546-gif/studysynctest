@@ -45,9 +45,38 @@ export function useLiveKit(socketRef, roomId, user) {
   const [camOn, setCamOn] = useState(false);
   const [screenSharing, setScreenSharing] = useState(false);
   const [screenStream, setScreenStream] = useState(null);
+  const [mediaError, setMediaError] = useState(null);
 
   const roomRef = useRef(null);
   const connectedRef = useRef(false);
+
+  // Media APIs only exist on secure contexts (HTTPS or localhost).
+  // On http://<lan-ip> the whole namespace is missing — the #1 cause of
+  // "camera doesn't work when testing on my phone".
+  const secureContext =
+    typeof window !== 'undefined' && window.isSecureContext === true;
+  const hasMediaDevices =
+    typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
+  const canScreenShare =
+    typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getDisplayMedia;
+
+  const diagnoseMediaFailure = useCallback((err) => {
+    let msg = err?.message || 'Media access failed';
+    if (!secureContext) {
+      msg = 'Camera/mic require HTTPS. Open the app over https:// or localhost.';
+    } else if (!hasMediaDevices) {
+      msg = 'This browser does not support camera/mic access.';
+    } else if (err?.name === 'NotAllowedError') {
+      msg = 'Camera/mic permission denied. Allow access in browser settings.';
+    } else if (err?.name === 'NotFoundError') {
+      msg = 'No camera/microphone found on this device.';
+    } else if (err?.name === 'NotReadableError') {
+      msg = 'Camera/mic is already in use by another app.';
+    }
+    console.warn('[LiveKit] media failure:', err?.name, '-', msg);
+    setMediaError(msg);
+    return msg;
+  }, [secureContext, hasMediaDevices]);
 
   const rebuild = useCallback(() => {
     const room = roomRef.current;
@@ -271,17 +300,22 @@ export function useLiveKit(socketRef, roomId, user) {
   const toggleMic = useCallback(async () => {
     const room = roomRef.current;
     if (!room || !room.localParticipant) return;
+    setMediaError(null);
     const pub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
     if (pub) {
       const next = pub.isMuted;
       await room.localParticipant.setMicrophoneEnabled(next);
       setMicOn(next);
     } else {
-      await room.localParticipant.setMicrophoneEnabled(true);
-      const newPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
-      setMicOn(!!newPub && !newPub.isMuted);
+      try {
+        await room.localParticipant.setMicrophoneEnabled(true);
+        const newPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+        setMicOn(!!newPub && !newPub.isMuted);
+      } catch (err) {
+        diagnoseMediaFailure(err);
+      }
     }
-  }, []);
+  }, [diagnoseMediaFailure]);
 
   const toggleCam = useCallback(async () => {
     const room = roomRef.current;
@@ -302,19 +336,13 @@ export function useLiveKit(socketRef, roomId, user) {
           };
       try {
         await room.localParticipant.setCameraEnabled(true, constraints);
-      } catch {
-        try {
-          await room.localParticipant.setCameraEnabled(true);
-        } catch (e) {
-          console.warn('[LiveKit] camera failed on this device:', e.message);
-        }
+      } catch (e) {
+        diagnoseMediaFailure(e);
       }
       const newPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
       setCamOn(!!newPub && !newPub.isMuted);
     }
-  }, []);
-
-  const canScreenShare = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getDisplayMedia;
+  }, [diagnoseMediaFailure]);
 
   const toggleScreenShare = useCallback(async (shareAudio = false) => {
     const room = roomRef.current;
@@ -329,7 +357,9 @@ export function useLiveKit(socketRef, roomId, user) {
     }
 
     if (!canScreenShare) {
-      console.warn('[LiveKit] screen sharing not supported on this device');
+      const msg = 'Screen sharing is not supported in this browser. It requires a desktop browser (Chrome/Edge/Firefox/Safari on Windows, Mac or Linux).';
+      console.warn('[LiveKit]', msg);
+      setMediaError(msg);
       return null;
     }
 
@@ -348,15 +378,17 @@ export function useLiveKit(socketRef, roomId, user) {
       socketRef.current?.emit('screen-share-changed', { sharing: true });
       return room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
     } catch (err) {
-      console.warn('[LiveKit] screen share failed:', err);
+      diagnoseMediaFailure(err);
       setScreenSharing(false);
       return null;
     }
-  }, [screenSharing, socketRef, canScreenShare]);
+  }, [screenSharing, socketRef, canScreenShare, diagnoseMediaFailure]);
 
   const stopMedia = useCallback(() => {
     disconnect();
   }, [disconnect]);
+
+  const clearMediaError = useCallback(() => setMediaError(null), []);
 
   useEffect(() => {
     return () => disconnect();
@@ -371,6 +403,8 @@ export function useLiveKit(socketRef, roomId, user) {
     screenSharing,
     screenStream,
     canScreenShare,
+    mediaError,
+    clearMediaError,
     connect,
     disconnect,
     toggleMic,

@@ -31,6 +31,7 @@ import {
   SplitSquareHorizontal,
   Volume2,
   VolumeOff,
+  TriangleAlert,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -228,6 +229,8 @@ export default function Workspace() {
     screenSharing,
     screenStream,
     canScreenShare,
+    mediaError,
+    clearMediaError: setMediaError,
     connect: connectLiveKit,
     disconnect: disconnectLiveKit,
     toggleMic,
@@ -1309,6 +1312,24 @@ export default function Workspace() {
           ))}
         </AnimatePresence>
       </div>
+
+      {/* Media error banner */}
+      <AnimatePresence>
+        {mediaError && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            className="fixed bottom-16 left-1/2 -translate-x-1/2 z-[90] max-w-[92vw] sm:max-w-md bg-red-500/95 text-white rounded-lg px-3 py-2 shadow-lg flex items-start gap-2"
+          >
+            <TriangleAlert size={15} className="shrink-0 mt-0.5" />
+            <p className="text-[11px] leading-snug">{mediaError}</p>
+            <button onClick={setMediaError} className="shrink-0 ml-1 hover:bg-white/20 rounded p-0.5" title="Dismiss">
+              <X size={13} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Bottom Control Bar */}
       <div className="flex items-center justify-center gap-1.5 px-4 py-2 bg-zoom-dark border-t border-white/5 shrink-0 overflow-x-auto">

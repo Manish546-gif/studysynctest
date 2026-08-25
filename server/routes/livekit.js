@@ -41,7 +41,6 @@ router.post('/token', auth, async (req, res) => {
       canPublish: true,
       canSubscribe: true,
       canPublishData: true,
-      canPublishSources: [1, 2, 3, 4, 5, 6, 7, 8],
     });
 
     const token = await at.toJwt();
