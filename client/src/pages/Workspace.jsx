@@ -361,8 +361,9 @@ export default function Workspace() {
   }, [roomId, setRoomFiles])
 
   const handleDraw = useCallback((action) => {
-    emitDraw(action)
-    setRemoteActions((prev) => [...prev, action])
+    const normalized = { ...action, type: action.tool || action.type || 'pen' }
+    emitDraw(normalized)
+    setRemoteActions((prev) => [...prev, normalized])
   }, [emitDraw, setRemoteActions])
 
   const copyCode = () => {

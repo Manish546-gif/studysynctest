@@ -71,9 +71,10 @@ export default function WhiteboardEditor() {
   }, [persist])
 
   const handleDraw = useCallback((action) => {
+    const normalized = { ...action, type: action.tool || action.type || 'pen' }
     redoStackRef.current = []
     setCanRedo(false)
-    updateActions((prev) => [...prev, action])
+    updateActions((prev) => [...prev, normalized])
   }, [updateActions])
 
   const handleClear = useCallback(() => {
