@@ -29,6 +29,8 @@ import {
   Link2,
   Eye,
   SplitSquareHorizontal,
+  Volume2,
+  VolumeOff,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -44,11 +46,12 @@ import FloatingReactions from '../components/FloatingReactions'
 import ReactionPicker from '../components/ReactionPicker'
 import InviteLinkModal from '../components/InviteLinkModal'
 import BreakoutPanel from '../components/BreakoutPanel'
+import ShortcutOverlay from '../components/ShortcutOverlay'
 import useRoomReactions from '../hooks/useRoomReactions'
 
 const ROOM_TAGS = ['Study', 'Project', 'Review', 'Homework', 'Exam Prep', 'Discussion']
 
-function VideoTile({ stream, name, isLocal, muted, mirror, presenting, onClick, active, contain }) {
+function VideoTile({ stream, name, isLocal, muted, mirror, presenting, onClick, active, contain, tabAway, speakerLevel, pinned }) {
   const videoRef = useRef(null)
 
   useEffect(() => {
@@ -89,7 +92,26 @@ function VideoTile({ stream, name, isLocal, muted, mirror, presenting, onClick, 
       )}
       <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/50 backdrop-blur-sm rounded-lg px-2 py-1">
         <span className="text-[11px] font-medium text-white truncate max-w-[100px]">{name}{isLocal ? ' (You)' : ''}</span>
+        {tabAway && !isLocal && (
+          <span className="text-[9px] bg-orange-500/80 text-white rounded px-1 py-0.5 font-medium">Away</span>
+        )}
       </div>
+      {pinned && (
+        <div className="absolute top-2 right-2">
+          <div className="w-6 h-6 rounded-full bg-primary/80 flex items-center justify-center">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
+          </div>
+        </div>
+      )}
+      {speakerLevel > 0.15 && !isLocal && (
+        <div className="absolute bottom-2 right-2">
+          <div className="flex items-end gap-0.5 h-3">
+            {[0.2, 0.5, 0.8].map((threshold, i) => (
+              <div key={i} className={`w-1 rounded-full transition-all ${speakerLevel > threshold ? 'bg-success h-full' : 'bg-white/20 h-1'}`} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -129,6 +151,7 @@ export default function Workspace() {
   const [deletingRoom, setDeletingRoom] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
   const [chatInput, setChatInput] = useState('')
+  const [chatTab, setChatTab] = useState('chat') // 'chat' | 'activity'
   const [pomodoroOpen, setPomodoroOpen] = useState(false)
   const [recorderOpen, setRecorderOpen] = useState(false)
   const [filePreviewOpen, setFilePreviewOpen] = useState(false)
@@ -138,6 +161,11 @@ export default function Workspace() {
   const [breakoutRooms, setBreakoutRooms] = useState([])
   const [viewerCount, setViewerCount] = useState(0)
   const [_sharedPomodoro, setSharedPomodoro] = useState(null)
+  const [shortcutOpen, setShortcutOpen] = useState(false)
+  const [pinnedId, setPinnedId] = useState(null)
+  const [reactionToasts, setReactionToasts] = useState([])
+  const [shareAudio, setShareAudio] = useState(false)
+  const toastIdRef = useRef(0)
   const pomodoroSessionsRef = useRef(0)
   const sessionStartRef = useRef(Date.now())
   const chatScrollRef = useRef(null)
@@ -170,6 +198,14 @@ export default function Workspace() {
     emitFileUploaded,
     emitFileDeleted,
     screenSharers,
+    tabVisibility,
+    speakerLevels,
+    activityLog,
+    screenCursors,
+    emitTabVisibility,
+    emitCursorPosition,
+    emitSpeakerLevel,
+    emitActivityLog,
   } = useSocket(roomId)
 
   const {
@@ -188,7 +224,6 @@ export default function Workspace() {
   const { floatingReactions, raisedHands: _raisedHands, sendReaction, toggleHand } = useRoomReactions(socketRef)
 
 
-  const [pinnedId, setPinnedId] = useState(null) // 'local' | socketId | null
   const stageRef = useRef(null)
   const stageVideoRef = useRef(null)
 
@@ -199,18 +234,31 @@ export default function Workspace() {
     socket.on('breakout-update', (data) => setBreakoutRooms(data.breakoutRooms || []))
     socket.on('viewer-count', (data) => setViewerCount(data.count || 0))
     socket.on('pomodoro-sync', (data) => setSharedPomodoro(data))
+
+    // Reaction toast notifications
+    socket.on('reaction', (data) => {
+      if (data.socketId === socket.id) return
+      const id = ++toastIdRef.current
+      setReactionToasts((prev) => [...prev.slice(-4), { id, emoji: data.emoji, name: data.userName }])
+    })
+
+    // Activity log for joins/leaves
+    socket.on('room-users', (users) => {
+      // Activity log entries are handled by the existing room-users listener
+    })
     return () => {
       socket.off('breakout-update')
       socket.off('viewer-count')
       socket.off('pomodoro-sync')
+      socket.off('reaction')
     }
   }, [socketRef])
 
   // --- Keyboard shortcuts ---
   useEffect(() => {
     const handler = (e) => {
-      // Ignore if typing in an input/textarea
       if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setShortcutOpen((v) => !v); return }
       if (e.ctrlKey || e.metaKey) {
         if (e.key === 'm' || e.key === 'M') { e.preventDefault(); toggleMic() }
         if (e.key === 'd' || e.key === 'D') { e.preventDefault(); toggleCam() }
@@ -221,6 +269,72 @@ export default function Workspace() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [toggleMic, toggleCam, toggleScreenShare])
+
+  // --- Tab visibility tracking ---
+  useEffect(() => {
+    const handler = () => {
+      emitTabVisibility(document.visibilityState === 'visible')
+    }
+    document.addEventListener('visibilitychange', handler)
+    handler()
+    return () => document.removeEventListener('visibilitychange', handler)
+  }, [emitTabVisibility])
+
+  // --- Speaker level detection (audio analyser) ---
+  useEffect(() => {
+    if (!localStream || !micOn) {
+      emitSpeakerLevel(0)
+      return
+    }
+    let animFrame
+    let analyser
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)()
+      const source = ctx.createMediaStreamSource(localStream)
+      analyser = ctx.createAnalyser()
+      analyser.fftSize = 256
+      source.connect(analyser)
+      const dataArray = new Uint8Array(analyser.frequencyBinCount)
+      const tick = () => {
+        analyser.getByteFrequencyData(dataArray)
+        const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length / 255
+        emitSpeakerLevel(Math.round(avg * 100) / 100)
+        animFrame = requestAnimationFrame(tick)
+      }
+      tick()
+    } catch {}
+    return () => {
+      cancelAnimationFrame(animFrame)
+      emitSpeakerLevel(0)
+    }
+  }, [localStream, micOn, emitSpeakerLevel])
+
+  // --- Screen cursor tracking (for screen sharers) ---
+  useEffect(() => {
+    if (!screenSharing) return
+    const handler = (e) => {
+      const el = e.currentTarget
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      const x = (e.clientX - rect.left) / rect.width
+      const y = (e.clientY - rect.top) / rect.height
+      emitCursorPosition(x, y)
+    }
+    const el = document.querySelector('[data-screen-share]')
+    if (el) {
+      el.addEventListener('mousemove', handler)
+      return () => el.removeEventListener('mousemove', handler)
+    }
+  }, [screenSharing, emitCursorPosition])
+
+  // --- Reaction toast auto-dismiss ---
+  useEffect(() => {
+    if (reactionToasts.length === 0) return
+    const timer = setTimeout(() => {
+      setReactionToasts((prev) => prev.slice(1))
+    }, 3000)
+    return () => clearTimeout(timer)
+  }, [reactionToasts])
 
   // --- Record study session on unmount ---
   useEffect(() => {
@@ -699,6 +813,7 @@ export default function Workspace() {
                 <div
                   ref={stageRef}
                   onDoubleClick={toggleStageFullscreen}
+                  data-screen-share="true"
                   className="relative flex-1 min-h-0 rounded-2xl overflow-hidden bg-black border border-outline-variant/20"
                 >
                   <video
@@ -731,6 +846,21 @@ export default function Workspace() {
                   >
                     <X size={13} /> Exit spotlight
                   </button>
+                  {/* Remote cursor overlay for screen sharing */}
+                  {Object.entries(screenCursors).map(([sid, pos]) => {
+                    if (pos.x < 0) return null
+                    return (
+                      <div
+                        key={sid}
+                        className="absolute pointer-events-none z-10 transition-all duration-75"
+                        style={{ left: `${pos.x * 100}%`, top: `${pos.y * 100}%` }}
+                      >
+                        <svg width="18" height="22" viewBox="0 0 18 22" fill="none">
+                          <path d="M1 1L7 19L9.5 12L17 10L1 1Z" fill="#ef4444" stroke="white" strokeWidth="1.5" />
+                        </svg>
+                      </div>
+                    )
+                  })}
                 </div>
 
                 {/* Filmstrip of cameras */}
@@ -745,6 +875,7 @@ export default function Workspace() {
                       presenting={screenSharing}
                       active={stageTarget === 'local'}
                       onClick={() => setPinnedId(stageTarget === 'local' ? null : 'local')}
+                      pinned={pinnedId === 'local'}
                     />
                   </div>
                   {remoteUserIds.map((socketId) => (
@@ -761,6 +892,9 @@ export default function Workspace() {
                         presenting={!!screenSharers[socketId]}
                         active={stageTarget === socketId}
                         onClick={() => setPinnedId(stageTarget === socketId ? null : socketId)}
+                        pinned={pinnedId === socketId}
+                        tabAway={tabVisibility[socketId] && !tabVisibility[socketId].visible}
+                        speakerLevel={speakerLevels[socketId] || 0}
                       />
                     </div>
                   ))}
@@ -777,7 +911,10 @@ export default function Workspace() {
                     muted={true}
                     mirror={!screenSharing}
                     presenting={screenSharing}
-                    onClick={() => setPinnedId('local')}
+                    onClick={() => setPinnedId(pinnedId === 'local' ? null : 'local')}
+                    pinned={pinnedId === 'local'}
+                    tabAway={false}
+                    speakerLevel={0}
                   />
 
                   {/* Remote videos */}
@@ -793,7 +930,10 @@ export default function Workspace() {
                       isLocal={false}
                       muted={false}
                       presenting={!!screenSharers[socketId]}
-                      onClick={() => setPinnedId(socketId)}
+                      onClick={() => setPinnedId(pinnedId === socketId ? null : socketId)}
+                      pinned={pinnedId === socketId}
+                      tabAway={tabVisibility[socketId] && !tabVisibility[socketId].visible}
+                      speakerLevel={speakerLevels[socketId] || 0}
                     />
                   ))}
 
@@ -827,13 +967,42 @@ export default function Workspace() {
               className="bg-surface-container-low border-l border-outline-variant/20 flex flex-col overflow-hidden shrink-0"
             >
               <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant/20">
-                <span className="text-sm font-semibold text-on-surface">Chat</span>
+                <div className="flex items-center gap-1">
+                  {['chat', 'activity'].map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setChatTab(tab)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                        chatTab === tab
+                          ? 'bg-primary text-on-primary'
+                          : 'text-on-surface/40 hover:bg-surface-container'
+                      }`}
+                    >
+                      {tab === 'chat' ? 'Chat' : 'Activity'}
+                    </button>
+                  ))}
+                </div>
                 <button onClick={() => setChatOpen(false)} className="w-7 h-7 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors">
                   <X size={16} />
                 </button>
               </div>
               <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
-                {messages.length === 0 ? (
+                {chatTab === 'activity' ? (
+                  activityLog.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                      <FileText size={28} className="text-on-surface/15 mb-3" />
+                      <p className="text-sm text-on-surface/40">No activity yet</p>
+                    </div>
+                  ) : (
+                    activityLog.map((entry, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-primary/60 shrink-0" />
+                        <span className="text-xs text-on-surface/50">{entry.userName}</span>
+                        <span className="text-xs text-on-surface/30">{entry.message}</span>
+                      </div>
+                    ))
+                  )
+                ) : messages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     <MessageCircle size={28} className="text-on-surface/15 mb-3" />
                     <p className="text-sm text-on-surface/40">No messages yet</p>
@@ -868,6 +1037,7 @@ export default function Workspace() {
                   })
                 )}
               </div>
+              {chatTab === 'chat' && (
               <form onSubmit={handleSendChat} className="p-3 border-t border-outline-variant/20">
                 <div className="flex items-center gap-2 bg-surface-container-lowest rounded-xl px-3 py-2 border border-outline-variant/20">
                   <input
@@ -885,6 +1055,7 @@ export default function Workspace() {
                   <p className="text-on-surface/40 text-xs italic mt-1.5 px-1">{typingLabel}</p>
                 )}
               </form>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -1092,6 +1263,26 @@ export default function Workspace() {
         loading={deletingRoom}
       />
 
+      <ShortcutOverlay open={shortcutOpen} onClose={() => setShortcutOpen(false)} />
+
+      {/* Reaction toast notifications */}
+      <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[80] flex flex-col items-center gap-2 pointer-events-none">
+        <AnimatePresence>
+          {reactionToasts.map((t) => (
+            <motion.div
+              key={t.id}
+              initial={{ opacity: 0, y: -20, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.95 }}
+              className="bg-surface-container-high border border-outline-variant/20 rounded-2xl px-4 py-2.5 shadow-lg flex items-center gap-2"
+            >
+              <span className="text-lg">{t.emoji}</span>
+              <span className="text-sm text-on-surface font-medium">{t.name}</span>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
       {/* Bottom Control Bar */}
       <div className="flex items-center justify-center gap-3 px-6 py-4 bg-surface border-t border-outline-variant/20 shrink-0">
         <button
@@ -1119,7 +1310,7 @@ export default function Workspace() {
         </button>
 
         <button
-          onClick={toggleScreenShare}
+          onClick={() => toggleScreenShare(shareAudio)}
           className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
             screenSharing
               ? 'bg-primary text-on-primary'
@@ -1129,6 +1320,20 @@ export default function Workspace() {
         >
           {screenSharing ? <MonitorOff size={20} /> : <Monitor size={20} />}
         </button>
+
+        {screenSharing && (
+          <button
+            onClick={() => setShareAudio((v) => !v)}
+            className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
+              shareAudio
+                ? 'bg-primary text-on-primary'
+                : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80'
+            }`}
+            title={shareAudio ? 'Mute shared audio' : 'Share audio'}
+          >
+            {shareAudio ? <Volume2 size={20} /> : <VolumeOff size={20} />}
+          </button>
+        )}
 
         <div className="w-px h-8 bg-outline-variant/30 mx-1" />
 

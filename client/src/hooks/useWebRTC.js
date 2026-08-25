@@ -273,7 +273,7 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
     }
   }, [replaceVideoTrack, socketRef]);
 
-  const toggleScreenShare = useCallback(async () => {
+  const toggleScreenShare = useCallback(async (shareAudio = false) => {
     if (switchingRef.current) return null;
     if (screenSharing) {
       stopScreenShare();
@@ -282,8 +282,8 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
     switchingRef.current = true;
     try {
       const disp = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: 15 },
-        audio: false,
+        video: { frameRate: 30 },
+        audio: shareAudio,
       });
       const screenTrack = disp.getVideoTracks()[0];
       if (!screenTrack) return null;

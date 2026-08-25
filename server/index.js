@@ -554,6 +554,55 @@ io.on('connection', (socket) => {
     } catch {}
   });
 
+  // --- Tab visibility indicator ---
+  socket.on('tab-visibility', (data) => {
+    const roomId = socket.roomId;
+    if (!roomId) return;
+    io.to(roomId).emit('tab-visibility', {
+      socketId: socket.id,
+      userId: socket.user._id,
+      userName: socket.user.name,
+      visible: !!data.visible,
+    });
+  });
+
+  // --- Screen share cursor position ---
+  socket.on('cursor-position', (data) => {
+    const roomId = socket.roomId;
+    if (!roomId || !screenViewers.has(roomId)) return;
+    // Only forward to viewers of this sharer
+    const viewers = screenViewers.get(roomId)?.get(socket.id);
+    if (!viewers) return;
+    viewers.forEach((viewerId) => {
+      io.to(viewerId).emit('cursor-position', {
+        socketId: socket.id,
+        x: data.x,
+        y: data.y,
+      });
+    });
+  });
+
+  // --- Speaker activity (audio level for spotlight) ---
+  socket.on('speaker-level', (data) => {
+    const roomId = socket.roomId;
+    if (!roomId) return;
+    io.to(roomId).emit('speaker-level', {
+      socketId: socket.id,
+      level: data.level || 0,
+    });
+  });
+
+  // --- Activity log broadcast ---
+  socket.on('activity-log', (data) => {
+    const roomId = socket.roomId;
+    if (!roomId || !data?.message) return;
+    io.to(roomId).emit('activity-log', {
+      message: data.message,
+      userName: socket.user.name,
+      timestamp: Date.now(),
+    });
+  });
+
   // --- Clean up viewer tracking on disconnect ---
   socket.on('disconnect', () => {
     const roomId = socket.roomId;
@@ -572,6 +621,36 @@ io.on('connection', (socket) => {
           userName: socket.user.name,
         });
       }
+      // Clean up viewer tracking
+      if (screenViewers.has(roomId)) {
+        const rv = screenViewers.get(roomId);
+        // Remove this socket as a viewer from all sharers
+        rv.forEach((viewerSet, sharerId) => {
+          if (viewerSet.has(socket.id)) {
+            viewerSet.delete(socket.id);
+            const count = viewerSet.size;
+            io.to(sharerId).emit('viewer-count', { count });
+            if (count <= 0) rv.delete(sharerId);
+          }
+        });
+        // Remove this socket as a sharer
+        if (rv.has(socket.id)) {
+          const viewers = rv.get(socket.id);
+          viewers.forEach((vId) => {
+            io.to(vId).emit('cursor-position', { socketId: socket.id, x: -1, y: -1 });
+          });
+          rv.delete(socket.id);
+        }
+        if (rv.size === 0) screenViewers.delete(roomId);
+      }
+      // Broadcast tab away on disconnect
+      io.to(roomId).emit('tab-visibility', {
+        socketId: socket.id,
+        userId: socket.user._id,
+        userName: socket.user.name,
+        visible: false,
+      });
+      io.to(roomId).emit('speaker-level', { socketId: socket.id, level: 0 });
       if (activeRooms.has(roomId)) {
         activeRooms.get(roomId).delete(socket.id);
         if (activeRooms.get(roomId).size === 0) {

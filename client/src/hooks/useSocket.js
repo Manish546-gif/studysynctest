@@ -14,6 +14,10 @@ export function useSocket(roomId) {
   const [roomFiles, setRoomFiles] = useState([]);
   const [typingUsers, setTypingUsers] = useState([]);
   const [screenSharers, setScreenSharers] = useState({});
+  const [tabVisibility, setTabVisibility] = useState({});
+  const [speakerLevels, setSpeakerLevels] = useState({});
+  const [activityLog, setActivityLog] = useState([]);
+  const [screenCursors, setScreenCursors] = useState({});
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -137,6 +141,22 @@ export function useSocket(roomId) {
       });
     });
 
+    socket.on('tab-visibility', (data) => {
+      setTabVisibility((prev) => ({ ...prev, [data.socketId]: { visible: data.visible, userName: data.userName } }));
+    });
+
+    socket.on('speaker-level', (data) => {
+      setSpeakerLevels((prev) => ({ ...prev, [data.socketId]: data.level }));
+    });
+
+    socket.on('activity-log', (data) => {
+      setActivityLog((prev) => [...prev.slice(-50), data]);
+    });
+
+    socket.on('cursor-position', (data) => {
+      setScreenCursors((prev) => ({ ...prev, [data.socketId]: { x: data.x, y: data.y } }));
+    });
+
     return () => {
       socket.emit('leave-room', roomId);
       socket.disconnect();
@@ -149,6 +169,10 @@ export function useSocket(roomId) {
       setRoomFiles([]);
       setTypingUsers([]);
       setScreenSharers({});
+      setTabVisibility({});
+      setSpeakerLevels({});
+      setActivityLog([]);
+      setScreenCursors({});
     };
   }, [roomId]);
 
@@ -200,6 +224,22 @@ export function useSocket(roomId) {
     socketRef.current?.emit('typing-stop');
   }, []);
 
+  const emitTabVisibility = useCallback((visible) => {
+    socketRef.current?.emit('tab-visibility', { visible });
+  }, []);
+
+  const emitCursorPosition = useCallback((x, y) => {
+    socketRef.current?.emit('cursor-position', { x, y });
+  }, []);
+
+  const emitSpeakerLevel = useCallback((level) => {
+    socketRef.current?.emit('speaker-level', { level });
+  }, []);
+
+  const emitActivityLog = useCallback((message) => {
+    socketRef.current?.emit('activity-log', { message });
+  }, []);
+
   return {
     socket: socketRef,
     connected,
@@ -213,6 +253,10 @@ export function useSocket(roomId) {
     setRoomFiles,
     typingUsers,
     screenSharers,
+    tabVisibility,
+    speakerLevels,
+    activityLog,
+    screenCursors,
     emitDraw,
     emitMove,
     emitCursor,
@@ -225,5 +269,9 @@ export function useSocket(roomId) {
     emitFileDeleted,
     emitTypingStart,
     emitTypingStop,
+    emitTabVisibility,
+    emitCursorPosition,
+    emitSpeakerLevel,
+    emitActivityLog,
   };
 }
