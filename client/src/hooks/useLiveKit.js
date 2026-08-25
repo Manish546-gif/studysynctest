@@ -187,7 +187,6 @@ export function useLiveKit(socketRef, roomId, user) {
       logTag('LocalTrackPublished:', pub.source);
       if (pub.source === Track.Source.Camera) {
         try {
-          pub.setVideoQuality?.(7);
           pub.setVideoEncoding?.({
             maxBitrate: 8_000_000,
             maxFramerate: 60,
@@ -196,7 +195,6 @@ export function useLiveKit(socketRef, roomId, user) {
         rebuildLocalStream();
       } else if (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) {
         try {
-          pub.setVideoQuality?.(7);
           pub.setVideoEncoding?.({
             maxBitrate: 12_000_000,
             maxFramerate: 60,
