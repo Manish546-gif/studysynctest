@@ -213,6 +213,9 @@ export const api = {
     request(`/flashcards/${id}/review`, { method: 'POST', body: JSON.stringify({ quality }) }),
   getFlashcardStats: () => request('/flashcards/stats'),
 
+  // LiveKit
+  getLivekitToken: (roomId) => request('/livekit/token', { method: 'POST', body: JSON.stringify({ roomId }) }),
+
   // Stats & Public rooms
   getStats: () => request('/stats'),
   recordStudySession: (body) => request('/stats/sessions', { method: 'POST', body: JSON.stringify(body) }),

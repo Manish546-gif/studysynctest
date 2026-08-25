@@ -35,7 +35,7 @@ import {
 import { api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import { useSocket } from '../hooks/useSocket'
-import { useWebRTC } from '../hooks/useWebRTC'
+import { useLiveKit } from '../hooks/useLiveKit'
 import Whiteboard from '../components/whiteboard/Whiteboard'
 import WhiteboardPanel from '../components/whiteboard/WhiteboardPanel'
 import PomodoroTimer from '../components/common/PomodoroTimer'
@@ -215,11 +215,13 @@ export default function Workspace() {
     camOn,
     screenSharing,
     screenStream,
+    connect: connectLiveKit,
+    disconnect: disconnectLiveKit,
     toggleMic,
     toggleCam,
     toggleScreenShare,
     stopMedia,
-  } = useWebRTC(socketRef, roomId, user?.id)
+  } = useLiveKit(socketRef, roomId, user)
 
   const { floatingReactions, raisedHands: _raisedHands, sendReaction, toggleHand } = useRoomReactions(socketRef)
 
@@ -359,6 +361,20 @@ export default function Workspace() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }, [roomId, setRoomFiles])
+
+  // --- LiveKit: fetch token and connect after room loads ---
+  useEffect(() => {
+    if (!room || !roomId || !user) return
+    let cancelled = false
+    api.getLivekitToken(roomId)
+      .then((data) => {
+        if (!cancelled && data.token) {
+          connectLiveKit(data.token, data.url)
+        }
+      })
+      .catch((err) => console.warn('LiveKit token fetch failed:', err.message))
+    return () => { cancelled = true }
+  }, [room, roomId, user, connectLiveKit])
 
   const handleDraw = useCallback((action) => {
     const normalized = { ...action, type: action.tool || action.type || 'pen' }

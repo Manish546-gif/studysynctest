@@ -21,6 +21,7 @@ const fileRoutes = require('./routes/files');
 const notificationRoutes = require('./routes/notifications');
 const flashcardRoutes = require('./routes/flashcards');
 const statsRoutes = require('./routes/stats');
+const livekitRoutes = require('./routes/livekit');
 const { setSocketIO, notify } = require('./notify');
 
 const app = express();
@@ -54,6 +55,7 @@ app.use('/api/files', fileRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/flashcards', flashcardRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/livekit', livekitRoutes);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const clientBuild = path.join(__dirname, '..', 'client', 'dist');
