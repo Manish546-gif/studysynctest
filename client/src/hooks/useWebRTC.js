@@ -4,7 +4,11 @@ const ICE_SERVERS = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
   ],
+  bundlePolicy: 'max-bundle',
+  rtcpMuxPolicy: 'require',
 };
 
 export function useWebRTC(socketRef, roomId, _localUserId) {
@@ -237,7 +241,23 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
       try {
         const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
         if (sender) {
-          sender.replaceTrack(track);
+          sender.replaceTrack(track).then(() => {
+            // Apply high-quality encoding for screen share tracks
+            if (track && track.kind === 'video' && track.label && track.label.includes('screen')) {
+              sender.getParameters().then((params) => {
+                if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
+                params.encodings[0] = {
+                  ...params.encodings[0],
+                  maxBitrate: 2500000,
+                  maxFramerate: 30,
+                  scaleResolutionDownBy: 1,
+                  networkPriority: 'high',
+                  adaptivePtime: true,
+                };
+                sender.setParameters(params).catch(() => {});
+              });
+            }
+          });
         } else if (track) {
           const stream = localStreamRef.current || new MediaStream([track]);
           pc.addTrack(track, stream);
@@ -282,11 +302,40 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
     switchingRef.current = true;
     try {
       const disp = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: 30 },
-        audio: shareAudio,
+        video: {
+          frameRate: { ideal: 30, max: 60 },
+          width: { ideal: 1920, max: 2560 },
+          height: { ideal: 1080, max: 1440 },
+          cursor: 'always',
+          displaySurface: 'monitor',
+        },
+        audio: shareAudio ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false } : false,
       });
       const screenTrack = disp.getVideoTracks()[0];
       if (!screenTrack) return null;
+
+      // Apply high-quality encoding parameters
+      try {
+        const sender = peersRef.current && Object.values(peersRef.current)
+          .map(pc => pc.getSenders().find(s => s.track === screenTrack))
+          .find(Boolean);
+        if (sender) {
+          const params = sender.getParameters();
+          if (!params.encodings || params.encodings.length === 0) {
+            params.encodings = [{}];
+          }
+          params.encodings[0] = {
+            ...params.encodings[0],
+            maxBitrate: 2500000,
+            maxFramerate: 30,
+            scaleResolutionDownBy: 1,
+            networkPriority: 'high',
+            adaptivePtime: true,
+          };
+          await sender.setParameters(params);
+        }
+      } catch {}
+
       screenTrack.addEventListener('ended', () => stopScreenShare());
       screenTrackRef.current = screenTrack;
 
