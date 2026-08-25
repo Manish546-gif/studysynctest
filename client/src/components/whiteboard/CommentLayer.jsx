@@ -23,9 +23,9 @@ export default function CommentLayer({
   onDelete,
 }) {
   const [mode, setMode] = useState(false)
-  const [draftPos, setDraftPos] = useState(null) // {x, y} in percent
+  const [draftPos, setDraftPos] = useState(null)
   const [draftText, setDraftText] = useState('')
-  const [openPin, setOpenPin] = useState(null) // comment _id
+  const [openPin, setOpenPin] = useState(null)
   const [posting, setPosting] = useState(false)
   const layerRef = useRef(null)
 
@@ -79,7 +79,7 @@ export default function CommentLayer({
     const re = new RegExp(`(@(?:${all.join('|')}))`, 'gi')
     return text.split(re).map((part, i) =>
       part.startsWith('@') && re.test(part) ? (
-        <span key={i} className="font-semibold text-primary">{part}</span>
+        <span key={i} className="font-semibold text-[#0f71ef]">{part}</span>
       ) : (
         part
       )
@@ -91,10 +91,10 @@ export default function CommentLayer({
       {/* Toggle button */}
       <button
         onClick={() => { setMode((m) => !m); setDraftPos(null); setOpenPin(null) }}
-        className={`absolute bottom-4 left-4 z-30 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold shadow-sm transition-colors ${
+        className={`absolute bottom-4 left-4 z-30 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold shadow-sm transition-colors ${
           mode
-            ? 'bg-primary text-on-primary'
-            : 'bg-surface-container-high/90 text-on-surface hover:bg-surface-container-high'
+            ? 'bg-[#0f71ef] text-white'
+            : 'bg-[#2b2935]/90 text-white hover:bg-[#2b2935]'
         }`}
         title={mode ? 'Exit comment mode' : 'Add comments (click anywhere on the board)'}
       >
@@ -120,7 +120,7 @@ export default function CommentLayer({
               <button
                 onClick={(e) => { e.stopPropagation(); setOpenPin(isOpen ? null : c._id); setDraftPos(null) }}
                 className={`w-7 h-7 -translate-x-1/2 -translate-y-full rounded-full rounded-bl-sm flex items-center justify-center shadow-md transition-transform hover:scale-110 ${
-                  isOpen ? 'bg-primary text-on-primary' : 'bg-secondary-container text-on-secondary-container'
+                  isOpen ? 'bg-[#0f71ef] text-white' : 'bg-[#3e3c44] text-white'
                 }`}
                 title={`Comment by ${c.userName}`}
               >
@@ -137,7 +137,7 @@ export default function CommentLayer({
                     transition={{ duration: 0.12 }}
                     data-comment-pin
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute top-2 w-56 bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-lg p-3 z-40"
+                    className="absolute top-2 w-56 bg-[#2b2935] border border-white/10 rounded-xl shadow-lg p-3 z-40"
                     style={{
                       left: 0,
                       transform: `translateX(${c.x > 70 ? '-90%' : c.x < 15 ? '-10%' : '-50%'})`,
@@ -145,8 +145,8 @@ export default function CommentLayer({
                   >
                     <div className="flex items-start justify-between gap-2 mb-1.5">
                       <div className="min-w-0">
-                        <p className="text-xs font-bold text-on-surface truncate">{c.userName}</p>
-                        <p className="text-[10px] text-on-surface/35">{timeAgo(c.createdAt)}</p>
+                        <p className="text-xs font-bold text-white truncate">{c.userName}</p>
+                        <p className="text-[10px] text-white/35">{timeAgo(c.createdAt)}</p>
                       </div>
                       {canDelete && (
                         <button
@@ -155,14 +155,14 @@ export default function CommentLayer({
                             onDelete(c._id).catch((err) => alert(err.message))
                             setOpenPin(null)
                           }}
-                          className="text-on-surface/30 hover:text-error transition-colors shrink-0"
+                          className="text-white/30 hover:text-red-400 transition-colors shrink-0"
                           title="Delete comment"
                         >
                           <Trash2 size={13} />
                         </button>
                       )}
                     </div>
-                    <p className="text-xs text-on-surface/80 whitespace-pre-wrap break-words leading-relaxed">
+                    <p className="text-xs text-white/80 whitespace-pre-wrap break-words leading-relaxed">
                       {renderMentions(c.text)}
                     </p>
                   </motion.div>
@@ -181,7 +181,7 @@ export default function CommentLayer({
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.12 }}
               data-comment-composer
-              className="absolute w-64 bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-lg p-3 z-40"
+              className="absolute w-64 bg-[#2b2935] border border-white/10 rounded-xl shadow-lg p-3 z-40"
               style={{
                 left: `${draftPos.x}%`,
                 top: `${draftPos.y}%`,
@@ -197,7 +197,7 @@ export default function CommentLayer({
                 }}
                 placeholder="Add a comment... use @name to mention"
                 rows={3}
-                className="w-full text-xs text-on-surface placeholder:text-on-surface/25 bg-transparent outline-none resize-none"
+                className="w-full text-xs text-white placeholder:text-white/25 bg-transparent outline-none resize-none"
               />
               <div className="flex items-center justify-between mt-2">
                 {participants.length > 0 && (
@@ -206,7 +206,7 @@ export default function CommentLayer({
                       <button
                         key={p.id}
                         onClick={() => setDraftText((t) => `${t}${t && !t.endsWith(' ') ? ' ' : ''}@${(p.name || '').split(/\s+/)[0]} `)}
-                        className="px-1.5 py-0.5 rounded-md bg-surface-container text-[10px] font-medium text-on-surface/60 hover:bg-secondary-container hover:text-on-secondary-container transition-colors truncate"
+                        className="px-1.5 py-0.5 rounded-md bg-white/5 text-[10px] font-medium text-white/60 hover:bg-white/10 hover:text-white transition-colors truncate"
                       >
                         @{(p.name || '').split(/\s+/)[0]}
                       </button>
@@ -216,7 +216,7 @@ export default function CommentLayer({
                 <div className="ml-auto flex items-center gap-1.5">
                   <button
                     onClick={() => setDraftPos(null)}
-                    className="w-7 h-7 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors"
+                    className="w-7 h-7 rounded-lg flex items-center justify-center text-white/40 hover:bg-white/10 transition-colors"
                     title="Cancel (Esc)"
                   >
                     <X size={14} />
@@ -224,7 +224,7 @@ export default function CommentLayer({
                   <button
                     onClick={submitDraft}
                     disabled={!draftText.trim() || posting}
-                    className="w-7 h-7 rounded-lg flex items-center justify-center bg-primary text-on-primary disabled:opacity-40"
+                    className="w-7 h-7 rounded-lg flex items-center justify-center bg-[#0f71ef] text-white disabled:opacity-40 hover:bg-[#0d62cc] transition-colors"
                     title="Post comment"
                   >
                     <Send size={13} />

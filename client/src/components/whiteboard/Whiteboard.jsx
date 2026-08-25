@@ -187,8 +187,7 @@ export default function Whiteboard({
   boardName, standalone, connected, roomUsers, remoteCursors,
   actions = [], onDraw, onCursor, onClear, onUndo, onLivePath, onLivePathEnd,
   fullScreen, onToggleFullScreen, canvasRef: externalCanvasRef,
-  pomodoroOpen, onTogglePomodoro, recorderOpen, onToggleRecorder, recording,
-  panelTab, onTogglePanel, fileCount, readOnly, livePaths = [],
+  onMove, readOnly, livePaths = [],
 }) {
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
@@ -493,15 +492,15 @@ export default function Whiteboard({
       if (sel) {
         const newX = pos.x - d.offsetX, newY = pos.y - d.offsetY
         if (Math.abs(newX - (sel.x || 0)) > 1 || Math.abs(newY - (sel.y || 0)) > 1) {
-          if (onUndo) onUndo(sel._id)
-          onDraw?.({ ...sel, x: newX, y: newY })
+          if (onMove) onMove(d.id, newX, newY)
+          else if (onUndo) { onUndo(sel._id); onDraw?.({ ...sel, x: newX, y: newY }) }
         }
       }
       selectDragRef.current = null
       setSelectedActionId(null)
       renderOverlay(null)
     }
-  }, [screenToWorld, renderMain, commitPen, commitShape, actions, onUndo, onDraw, onLivePathEnd, renderOverlay])
+  }, [screenToWorld, renderMain, commitPen, commitShape, actions, onMove, onUndo, onDraw, onLivePathEnd, renderOverlay])
 
   useEffect(() => {
     const handlePanStart = (e) => {
@@ -519,26 +518,6 @@ export default function Whiteboard({
     return () => { if (c) c.removeEventListener('mousedown', handlePanStart) }
   }, [effectiveCanvasRef])
 
-  useEffect(() => {
-    const handleKey = (e) => {
-      const el = document.activeElement
-      if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA') return
-
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndoClick(); return }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'Z' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); handleRedoClick(); return }
-      if ((e.ctrlKey || e.metaKey) && e.key === '=') { e.preventDefault(); setZoom(z => Math.min(3, z + 0.1)); return }
-      if ((e.ctrlKey || e.metaKey) && e.key === '-') { e.preventDefault(); setZoom(z => Math.max(0.1, z - 0.1)); return }
-      if ((e.ctrlKey || e.metaKey) && e.key === '0') { e.preventDefault(); setZoom(1); panRef.current = { x: 0, y: 0 }; renderMain(); return }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedActionId) { e.preventDefault(); deleteSelected(); return }
-
-      const toolMap = { v: 'select', p: 'pen', t: 'text', s: 'sticky', r: 'rect', o: 'circle', c: 'circle', l: 'line', a: 'arrow', e: 'eraser', x: 'laser' }
-      const mapped = toolMap[e.key.toLowerCase()]
-      if (mapped) setActiveTool(mapped)
-    }
-    document.addEventListener('keydown', handleKey)
-    return () => document.removeEventListener('keydown', handleKey)
-  }, [selectedActionId, renderMain])
-
   const handleTextSubmit = useCallback(() => {
     if (textInput.trim()) {
       onDraw?.({ tool: 'text', x: textPos.x, y: textPos.y, w: 200, h: 32, text: textInput, color, strokeWidth, fontSize: 20 })
@@ -553,11 +532,13 @@ export default function Whiteboard({
     setShowStickyInput(false); setStickyText('')
   }, [stickyText, stickyPos, onDraw])
 
+  const MAX_UNDO_REDO = 100
+
   const handleUndoClick = useCallback(() => {
     const last = actions[actions.length - 1]
     if (last?._id) {
       onUndo?.(last._id)
-      setRedoStack(p => [...p, { action: last }])
+      setRedoStack(p => { const next = [...p, { action: last }]; return next.length > MAX_UNDO_REDO ? next.slice(next.length - MAX_UNDO_REDO) : next })
       if (selectedActionId === last._id) setSelectedActionId(null)
     }
   }, [actions, onUndo, selectedActionId])
@@ -577,10 +558,31 @@ export default function Whiteboard({
     const sel = actions.find(a => a._id === selectedActionId)
     if (sel && onUndo) {
       onUndo(sel._id)
-      setRedoStack(p => [...p, { action: sel }])
+      setRedoStack(p => { const next = [...p, { action: sel }]; return next.length > MAX_UNDO_REDO ? next.slice(next.length - MAX_UNDO_REDO) : next })
       setSelectedActionId(null)
     }
   }, [selectedActionId, actions, onUndo])
+
+  useEffect(() => {
+    const handleKey = (e) => {
+      const el = document.activeElement
+      if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA') return
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndoClick(); return }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'Z' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); handleRedoClick(); return }
+      if ((e.ctrlKey || e.metaKey) && e.key === '=') { e.preventDefault(); setZoom(z => Math.min(3, z + 0.1)); return }
+      if ((e.ctrlKey || e.metaKey) && e.key === '-') { e.preventDefault(); setZoom(z => Math.max(0.1, z - 0.1)); return }
+      if ((e.ctrlKey || e.metaKey) && e.key === '0') { e.preventDefault(); setZoom(1); panRef.current = { x: 0, y: 0 }; renderMain(); return }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) { e.preventDefault(); return }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedActionId) { e.preventDefault(); deleteSelected(); return }
+
+      const toolMap = { v: 'select', p: 'pen', t: 'text', s: 'sticky', r: 'rect', o: 'circle', c: 'circle', l: 'line', a: 'arrow', e: 'eraser', x: 'laser' }
+      const mapped = toolMap[e.key.toLowerCase()]
+      if (mapped) setActiveTool(mapped)
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [selectedActionId, renderMain, handleUndoClick, handleRedoClick, deleteSelected])
 
   const handleClear = useCallback(() => {
     onClear?.()

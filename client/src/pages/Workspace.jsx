@@ -160,7 +160,6 @@ export default function Workspace() {
   const [breakoutOpen, setBreakoutOpen] = useState(false)
   const [breakoutRooms, setBreakoutRooms] = useState([])
   const [viewerCount, setViewerCount] = useState(0)
-  const [_sharedPomodoro, setSharedPomodoro] = useState(null)
   const [shortcutOpen, setShortcutOpen] = useState(false)
   const [pinnedId, setPinnedId] = useState(null)
   const [reactionToasts, setReactionToasts] = useState([])
@@ -183,6 +182,7 @@ export default function Workspace() {
     setRemoteActions,
     livePaths,
     emitDraw,
+    emitMove,
     emitCursor,
     emitClear,
     emitUndo,
@@ -635,14 +635,7 @@ export default function Workspace() {
                 fullScreen={true}
                 onToggleFullScreen={() => setWhiteboardFullScreen(false)}
                 canvasRef={fullScreenCanvasRef}
-                pomodoroOpen={pomodoroOpen}
-                onTogglePomodoro={() => setPomodoroOpen((v) => !v)}
-                recorderOpen={recorderOpen}
-                onToggleRecorder={() => setRecorderOpen((v) => !v)}
-                recording={recording}
-                panelTab={wbPanelTab}
-                onTogglePanel={toggleWbPanel}
-                fileCount={roomFiles.length}
+                onMove={emitMove}
               />
             </div>
             <AnimatePresence>
@@ -723,14 +716,7 @@ export default function Workspace() {
                   fullScreen={false}
                   onToggleFullScreen={() => setWhiteboardFullScreen(true)}
                   canvasRef={halfScreenCanvasRef}
-                  pomodoroOpen={pomodoroOpen}
-                  onTogglePomodoro={() => setPomodoroOpen((v) => !v)}
-                  recorderOpen={recorderOpen}
-                  onToggleRecorder={() => setRecorderOpen((v) => !v)}
-                  recording={recording}
-                  panelTab={wbPanelTab}
-                  onTogglePanel={toggleWbPanel}
-                  fileCount={roomFiles.length}
+                  onMove={emitMove}
                 />
               </div>
               <AnimatePresence>
