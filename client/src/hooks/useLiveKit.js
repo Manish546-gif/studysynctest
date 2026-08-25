@@ -150,7 +150,8 @@ export function useLiveKit(socketRef, roomId, user) {
       },
       videoCaptureDefaults: {
         facingMode: 'user',
-        resolution: { width: 1280, height: 720 },
+        resolution: { width: 1920, height: 1080 },
+        maxFramerate: 60,
       },
     });
 
@@ -185,8 +186,22 @@ export function useLiveKit(socketRef, roomId, user) {
     room.on(RoomEvent.LocalTrackPublished, (pub) => {
       logTag('LocalTrackPublished:', pub.source);
       if (pub.source === Track.Source.Camera) {
+        try {
+          pub.setVideoQuality?.(7);
+          pub.setVideoEncoding?.({
+            maxBitrate: 8_000_000,
+            maxFramerate: 60,
+          });
+        } catch {}
         rebuildLocalStream();
       } else if (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) {
+        try {
+          pub.setVideoQuality?.(7);
+          pub.setVideoEncoding?.({
+            maxBitrate: 12_000_000,
+            maxFramerate: 60,
+          });
+        } catch {}
         rebuildLocalScreen();
       }
     });
@@ -264,7 +279,11 @@ export function useLiveKit(socketRef, roomId, user) {
       await room.localParticipant.setCameraEnabled(next);
       setCamOn(next);
     } else {
-      await room.localParticipant.setCameraEnabled(true);
+      await room.localParticipant.setCameraEnabled(true, {
+        resolution: { width: 1920, height: 1080 },
+        maxFramerate: 60,
+        degradationPreference: 'maintain-resolution',
+      });
       const newPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
       setCamOn(!!newPub && !newPub.isMuted);
     }
@@ -284,6 +303,11 @@ export function useLiveKit(socketRef, roomId, user) {
 
     try {
       await room.localParticipant.setScreenShareEnabled(true, {
+        video: {
+          resolution: { width: 1920, height: 1080 },
+          maxFramerate: 60,
+          degradationPreference: 'maintain-resolution',
+        },
         audio: shareAudio
           ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
           : false,
