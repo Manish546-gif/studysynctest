@@ -211,6 +211,7 @@ export default function Workspace() {
   const {
     localStream,
     remoteStreams,
+    remoteScreenStreams,
     micOn,
     camOn,
     screenSharing,
@@ -481,39 +482,42 @@ export default function Workspace() {
 
   const allMembers = room?.members || []
   const displayMembers = roomUsers.length > 0 ? roomUsers : allMembers
-  const remoteUserIds = Object.keys(remoteStreams)
+  const remoteUserIds = [...new Set([...Object.keys(remoteStreams), ...Object.keys(remoteScreenStreams)])]
 
   // Stage resolution: pinned tile wins, otherwise auto-follow the active
   // presenter (local share takes priority). Remotes count as presenters only
-  // once their stream has actually arrived.
+  // once their screen stream has actually arrived.
   const presenterIds = useMemo(() => {
     const ids = [];
     if (screenSharing && (screenStream || localStream)) ids.push('local');
-    Object.keys(screenSharers).forEach((sid) => {
-      if (remoteStreams[sid] && !ids.includes(sid)) ids.push(sid);
+    Object.keys(remoteScreenStreams).forEach((uid) => {
+      if (remoteScreenStreams[uid] && !ids.includes(uid)) ids.push(uid);
+    });
+    Object.keys(screenSharers).forEach((uid) => {
+      if (!ids.includes(uid) && (remoteStreams[uid] || remoteScreenStreams[uid])) ids.push(uid);
     });
     return ids;
-  }, [screenSharing, screenStream, localStream, screenSharers, remoteStreams]);
+  }, [screenSharing, screenStream, localStream, screenSharers, remoteStreams, remoteScreenStreams]);
 
   const pinnedValid =
     pinnedId === 'local'
       ? !!(localStream || screenSharing)
-      : !!(pinnedId && remoteStreams[pinnedId]);
+      : !!(pinnedId && (remoteStreams[pinnedId] || remoteScreenStreams[pinnedId]));
   const stageTarget = pinnedValid ? pinnedId : presenterIds.length > 0 ? presenterIds[0] : null;
   const stageIsLocal = stageTarget === 'local';
   const stageStream = stageIsLocal
     ? (screenSharing && screenStream ? screenStream : localStream)
-    : (stageTarget ? remoteStreams[stageTarget] : null);
+    : (stageTarget ? (remoteScreenStreams[stageTarget] || remoteStreams[stageTarget]) : null);
   const stageActive = !!stageStream;
   const stageName = stageIsLocal
     ? `${user?.name || 'You'} (You)`
-    : screenSharers[stageTarget] || displayMembers.find((m) => roomUsers.some((u) => u._id === m._id) && remoteUserIds.includes(stageTarget))?.name || 'Participant';
+    : screenSharers[stageTarget] || displayMembers.find((m) => m._id === stageTarget)?.name || 'Participant';
 
   // Drop stale pins (stream died / media stopped) and leave fullscreen.
   useEffect(() => {
     if (pinnedId === 'local' && !localStream && !screenSharing) setPinnedId(null);
-    else if (pinnedId && pinnedId !== 'local' && !remoteStreams[pinnedId]) setPinnedId(null);
-  }, [pinnedId, remoteStreams, localStream, screenSharing]);
+    else if (pinnedId && pinnedId !== 'local' && !remoteStreams[pinnedId] && !remoteScreenStreams[pinnedId]) setPinnedId(null);
+  }, [pinnedId, remoteStreams, remoteScreenStreams, localStream, screenSharing]);
 
   useEffect(() => {
     if (!stageActive && document.fullscreenElement) {
@@ -806,7 +810,7 @@ export default function Workspace() {
                         }`}
                       >
                         <Monitor size={11} />
-                        {pid === 'local' ? 'You' : screenSharers[pid] || 'Participant'}
+                        {pid === 'local' ? 'You' : screenSharers[pid] || displayMembers.find((m) => m._id === pid)?.name || 'Participant'}
                       </button>
                     ))}
                   </div>
@@ -883,13 +887,13 @@ export default function Workspace() {
                   {remoteUserIds.map((socketId) => (
                     <div key={socketId} className="w-44 shrink-0">
                       <VideoTile
-                        stream={remoteStreams[socketId]}
+                        stream={remoteScreenStreams[socketId] || remoteStreams[socketId]}
                         name={
                           displayMembers.find((m) => m._id === socketId)?.name || 'Participant'
                         }
                         isLocal={false}
                         muted={false}
-                        presenting={!!screenSharers[socketId]}
+                        presenting={!!screenSharers[socketId] || !!remoteScreenStreams[socketId]}
                         active={stageTarget === socketId}
                         onClick={() => setPinnedId(stageTarget === socketId ? null : socketId)}
                         pinned={pinnedId === socketId}
@@ -921,13 +925,13 @@ export default function Workspace() {
                   {remoteUserIds.map((socketId) => (
                     <VideoTile
                       key={socketId}
-                      stream={remoteStreams[socketId]}
+                      stream={remoteScreenStreams[socketId] || remoteStreams[socketId]}
                       name={
                         displayMembers.find((m) => m._id === socketId)?.name || 'Participant'
                       }
                       isLocal={false}
                       muted={false}
-                      presenting={!!screenSharers[socketId]}
+                      presenting={!!screenSharers[socketId] || !!remoteScreenStreams[socketId]}
                       onClick={() => setPinnedId(pinnedId === socketId ? null : socketId)}
                       pinned={pinnedId === socketId}
                       tabAway={tabVisibility[socketId] && !tabVisibility[socketId].visible}
@@ -937,7 +941,7 @@ export default function Workspace() {
 
                   {/* Audio-only participants (no video stream) */}
                   {displayMembers
-                    .filter((m) => m._id !== user?.id && !remoteUserIds.some((sid) => remoteStreams[sid]))
+                    .filter((m) => m._id !== user?.id && !remoteUserIds.includes(m._id))
                     .map((member, i) => (
                       <div key={member._id || i} className="relative rounded overflow-hidden bg-zoom-darker ring-1 ring-white/10 aspect-video flex items-center justify-center">
                         <div className="flex flex-col items-center gap-1.5">

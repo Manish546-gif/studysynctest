@@ -17,6 +17,7 @@ function buildMediaStream(tracks) {
 export function useLiveKit(socketRef, roomId, user) {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState({});
+  const [remoteScreenStreams, setRemoteScreenStreams] = useState({});
   const [micOn, setMicOn] = useState(false);
   const [camOn, setCamOn] = useState(false);
   const [screenSharing, setScreenSharing] = useState(false);
@@ -28,22 +29,35 @@ export function useLiveKit(socketRef, roomId, user) {
   const rebuildRemoteStreams = useCallback(() => {
     const room = roomRef.current;
     if (!room) return;
-    const next = {};
+    const nextStreams = {};
+    const nextScreens = {};
     try {
       room.participants?.forEach((participant) => {
-        const tracks = [];
+        const camTracks = [];
+        const screenTracks = [];
         participant.trackPublications?.forEach((pub) => {
-          if (pub.track && pub.source !== Track.Source.ScreenShareAudio) {
-            tracks.push(pub.track);
+          if (!pub.track) return;
+          if (pub.source === Track.Source.Camera || pub.source === Track.Source.Microphone) {
+            camTracks.push(pub.track);
+          } else if (pub.source === Track.Source.ScreenShare) {
+            screenTracks.push(pub.track);
+          } else if (pub.source === Track.Source.ScreenShareAudio) {
+            screenTracks.push(pub.track);
+          } else if (pub.source === Track.Source.Unknown) {
+            camTracks.push(pub.track);
           }
         });
-        if (tracks.length > 0) {
-          next[participant.identity] = buildMediaStream(tracks);
+        if (camTracks.length > 0) {
+          nextStreams[participant.identity] = buildMediaStream(camTracks);
+        }
+        if (screenTracks.length > 0) {
+          nextScreens[participant.identity] = buildMediaStream(screenTracks);
         }
       });
     } catch {}
-    remoteStreamsRef.current = next;
-    setRemoteStreams({ ...next });
+    remoteStreamsRef.current = nextStreams;
+    setRemoteStreams({ ...nextStreams });
+    setRemoteScreenStreams({ ...nextScreens });
   }, []);
 
   const rebuildLocalStream = useCallback(() => {
@@ -75,6 +89,8 @@ export function useLiveKit(socketRef, roomId, user) {
     } catch {}
     if (screenTracks.length > 0) {
       setScreenStream(buildMediaStream(screenTracks));
+    } else {
+      setScreenStream(null);
     }
   }, []);
 
@@ -161,6 +177,7 @@ export function useLiveKit(socketRef, roomId, user) {
       roomRef.current = null;
       setLocalStream(null);
       setRemoteStreams({});
+      setRemoteScreenStreams({});
       setMicOn(false);
       setCamOn(false);
       setScreenSharing(false);
@@ -188,6 +205,7 @@ export function useLiveKit(socketRef, roomId, user) {
     connectedRef.current = false;
     setLocalStream(null);
     setRemoteStreams({});
+    setRemoteScreenStreams({});
     setMicOn(false);
     setCamOn(false);
     setScreenSharing(false);
@@ -263,6 +281,7 @@ export function useLiveKit(socketRef, roomId, user) {
   return {
     localStream,
     remoteStreams,
+    remoteScreenStreams,
     micOn,
     camOn,
     screenSharing,
