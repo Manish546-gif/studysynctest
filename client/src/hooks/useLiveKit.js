@@ -3,7 +3,6 @@ import {
   Room,
   RoomEvent,
   Track,
-  ConnectionState,
 } from 'livekit-client';
 
 function buildMediaStream(tracks) {
@@ -14,15 +13,19 @@ function buildMediaStream(tracks) {
   return new MediaStream(mediaTracks);
 }
 
-function subscribeAllTracks(participant) {
-  try {
-    participant.trackPublications?.forEach((pub) => {
-      if (pub.track) return;
-      if (pub.isAvailable && !pub.isSubscribed) {
-        pub.setSubscribed(true);
+function logTag(...args) {
+  console.log('[LiveKit]', ...args);
+}
+
+function subscribeToAllTracks(room) {
+  if (!room) return;
+  room.participants.forEach((p) => {
+    p.trackPublications.forEach((pub) => {
+      if (!pub.isSubscribed && !pub.track) {
+        p.setTrackSubscription(pub.trackSid, true);
       }
     });
-  } catch {}
+  });
 }
 
 export function useLiveKit(socketRef, roomId, user) {
@@ -33,121 +36,96 @@ export function useLiveKit(socketRef, roomId, user) {
   const [camOn, setCamOn] = useState(false);
   const [screenSharing, setScreenSharing] = useState(false);
   const [screenStream, setScreenStream] = useState(null);
+
   const roomRef = useRef(null);
   const connectedRef = useRef(false);
-  const remoteStreamsRef = useRef({});
 
-  const rebuildRemoteStreams = useCallback(() => {
+  const rebuild = useCallback(() => {
     const room = roomRef.current;
     if (!room) return;
-    const nextStreams = {};
-    const nextScreens = {};
-    try {
-      room.participants?.forEach((participant) => {
-        const camTracks = [];
-        const screenTracks = [];
-        participant.trackPublications?.forEach((pub) => {
-          if (!pub.track) return;
-          if (pub.source === Track.Source.Camera || pub.source === Track.Source.Microphone) {
-            camTracks.push(pub.track);
-          } else if (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) {
-            screenTracks.push(pub.track);
+
+    const camStreams = {};
+    const screenStreams = {};
+    let count = 0;
+    let subCount = 0;
+
+    room.participants.forEach((p) => {
+      const camTracks = [];
+      const scrTracks = [];
+
+      p.trackPublications.forEach((pub) => {
+        count++;
+        if (pub.track) {
+          subCount++;
+          if (
+            pub.source === Track.Source.ScreenShare ||
+            pub.source === Track.Source.ScreenShareAudio
+          ) {
+            scrTracks.push(pub.track);
           } else {
             camTracks.push(pub.track);
           }
-        });
-        if (camTracks.length > 0) {
-          nextStreams[participant.identity] = buildMediaStream(camTracks);
-        }
-        if (screenTracks.length > 0) {
-          nextScreens[participant.identity] = buildMediaStream(screenTracks);
         }
       });
-    } catch {}
-    remoteStreamsRef.current = nextStreams;
-    setRemoteStreams({ ...nextStreams });
-    setRemoteScreenStreams({ ...nextScreens });
+
+      logTag('rebuild', p.identity, '| cams:', camTracks.length, 'screens:', scrTracks.length);
+
+      if (camTracks.length > 0) {
+        camStreams[p.identity] = buildMediaStream(camTracks);
+      }
+      if (scrTracks.length > 0) {
+        screenStreams[p.identity] = buildMediaStream(scrTracks);
+      }
+    });
+
+    logTag('total pubs:', count, 'subscribed:', subCount);
+    setRemoteStreams({ ...camStreams });
+    setRemoteScreenStreams({ ...screenStreams });
   }, []);
 
   const rebuildLocalStream = useCallback(() => {
     const room = roomRef.current;
     if (!room || !room.localParticipant) return;
     const tracks = [];
-    try {
-      room.localParticipant.trackPublications?.forEach((pub) => {
-        if (pub.track && pub.source === Track.Source.Camera) {
-          tracks.push(pub.track);
-        }
-      });
-    } catch {}
+    room.localParticipant.trackPublications.forEach((pub) => {
+      if (pub.track && pub.source === Track.Source.Camera) {
+        tracks.push(pub.track);
+      }
+    });
+    logTag('local cam tracks:', tracks.length);
     setLocalStream(tracks.length > 0 ? buildMediaStream(tracks) : null);
   }, []);
 
-  const rebuildLocalScreenStream = useCallback(() => {
+  const rebuildLocalScreen = useCallback(() => {
     const room = roomRef.current;
     if (!room || !room.localParticipant) return;
-    const screenTracks = [];
-    try {
-      room.localParticipant.trackPublications?.forEach((pub) => {
-        if (pub.track && (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio)) {
-          screenTracks.push(pub.track);
-        }
-      });
-    } catch {}
-    setScreenStream(screenTracks.length > 0 ? buildMediaStream(screenTracks) : null);
-  }, []);
-
-  const handleConnected = useCallback(() => {
-    connectedRef.current = true;
-  }, []);
-
-  const handleParticipantConnected = useCallback((participant) => {
-    if (!connectedRef.current) return;
-    subscribeAllTracks(participant);
-    participant.on('trackPublished', () => {
-      if (!connectedRef.current) return;
-      subscribeAllTracks(participant);
-      rebuildRemoteStreams();
+    const tracks = [];
+    room.localParticipant.trackPublications.forEach((pub) => {
+      if (pub.track && (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio)) {
+        tracks.push(pub.track);
+      }
     });
-    rebuildRemoteStreams();
-  }, [rebuildRemoteStreams]);
-
-  const handleParticipantDisconnected = useCallback((participant) => {
-    if (!connectedRef.current) return;
-    rebuildRemoteStreams();
-  }, [rebuildRemoteStreams]);
-
-  const handleTrackSubscribed = useCallback((track, publication, participant) => {
-    if (!connectedRef.current) return;
-    rebuildRemoteStreams();
-    rebuildLocalScreenStream();
-  }, [rebuildRemoteStreams, rebuildLocalScreenStream]);
-
-  const handleTrackUnsubscribed = useCallback((track) => {
-    if (!connectedRef.current) return;
-    rebuildRemoteStreams();
-  }, [rebuildRemoteStreams]);
-
-  const handleLocalTrackPublished = useCallback((publication) => {
-    if (!connectedRef.current) return;
-    if (publication.source === Track.Source.Camera) {
-      rebuildLocalStream();
-    } else if (publication.source === Track.Source.ScreenShare || publication.source === Track.Source.ScreenShareAudio) {
-      rebuildLocalScreenStream();
-    }
-  }, [rebuildLocalStream, rebuildLocalScreenStream]);
-
-  const handleLocalTrackUnpublished = useCallback((publication) => {
-    if (!connectedRef.current) return;
-    if (publication.source === Track.Source.Camera) {
-      rebuildLocalStream();
-    } else if (publication.source === Track.Source.ScreenShare || publication.source === Track.Source.ScreenShareAudio) {
-      setScreenStream(null);
-    }
-  }, [rebuildLocalStream]);
+    logTag('local screen tracks:', tracks.length);
+    setScreenStream(tracks.length > 0 ? buildMediaStream(tracks) : null);
+  }, []);
 
   const connect = useCallback(async (token, url) => {
-    if (connectedRef.current && roomRef.current) return;
+    if (roomRef.current) {
+      logTag('already connected, skipping');
+      return;
+    }
+
+    const serverUrl = url || import.meta.env.VITE_LIVEKIT_URL;
+    if (!serverUrl) {
+      console.error('[LiveKit] VITE_LIVEKIT_URL not set');
+      return;
+    }
+    if (!token) {
+      console.error('[LiveKit] no token');
+      return;
+    }
+
+    logTag('connecting to', serverUrl);
 
     const room = new Room({
       adaptiveStream: false,
@@ -161,21 +139,56 @@ export function useLiveKit(socketRef, roomId, user) {
         facingMode: 'user',
         resolution: { width: 1280, height: 720 },
       },
-      reconnectPolicy: (retryCount) => {
-        if (retryCount > 10) return -1;
-        return Math.min(retryCount * 500, 5000);
-      },
     });
 
-    room.on(RoomEvent.Connected, handleConnected);
-    room.on(RoomEvent.ParticipantConnected, handleParticipantConnected);
-    room.on(RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
-    room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
-    room.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
-    room.on(RoomEvent.LocalTrackPublished, handleLocalTrackPublished);
-    room.on(RoomEvent.LocalTrackUnpublished, handleLocalTrackUnpublished);
+    room.on(RoomEvent.Connected, () => {
+      logTag('CONNECTED');
+      connectedRef.current = true;
+    });
+
+    room.on(RoomEvent.ParticipantConnected, (participant) => {
+      logTag('participant joined:', participant.identity);
+      setTimeout(() => {
+        subscribeToAllTracks(room);
+        rebuild();
+      }, 500);
+    });
+
+    room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+      logTag('participant left:', participant.identity);
+      rebuild();
+    });
+
+    room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
+      logTag('TrackSubscribed:', track.kind, 'from', participant.identity, 'source:', pub.source);
+      rebuild();
+    });
+
+    room.on(RoomEvent.TrackUnsubscribed, (track, pub, participant) => {
+      logTag('TrackUnsubscribed:', track.kind, 'from', participant.identity, 'source:', pub.source);
+      rebuild();
+    });
+
+    room.on(RoomEvent.LocalTrackPublished, (pub) => {
+      logTag('LocalTrackPublished:', pub.source);
+      if (pub.source === Track.Source.Camera) {
+        rebuildLocalStream();
+      } else if (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) {
+        rebuildLocalScreen();
+      }
+    });
+
+    room.on(RoomEvent.LocalTrackUnpublished, (pub) => {
+      logTag('LocalTrackUnpublished:', pub.source);
+      if (pub.source === Track.Source.Camera) {
+        setLocalStream(null);
+      } else if (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) {
+        setScreenStream(null);
+      }
+    });
 
     room.on(RoomEvent.Disconnected, () => {
+      logTag('disconnected');
       connectedRef.current = false;
       roomRef.current = null;
       setLocalStream(null);
@@ -189,18 +202,14 @@ export function useLiveKit(socketRef, roomId, user) {
 
     roomRef.current = room;
 
-    const serverUrl = url || import.meta.env.VITE_LIVEKIT_URL;
-    if (!serverUrl) {
-      console.error('LiveKit URL not configured. Set VITE_LIVEKIT_URL env var.');
-      return;
-    }
+    await room.connect(serverUrl, token, { autoSubscribe: true });
+    logTag('room.connect() resolved');
 
-    await room.connect(serverUrl, token);
+    subscribeToAllTracks(room);
+    rebuild();
 
-    room.participants?.forEach((p) => subscribeAllTracks(p));
-  }, [handleConnected, handleParticipantConnected, handleParticipantDisconnected,
-    handleTrackSubscribed, handleTrackUnsubscribed, handleLocalTrackPublished,
-    handleLocalTrackUnpublished]);
+    logTag('existing participants:', [...room.participants.keys()].join(', ') || 'none');
+  }, [rebuild, rebuildLocalStream, rebuildLocalScreen]);
 
   const disconnect = useCallback(() => {
     if (roomRef.current) {
@@ -222,9 +231,9 @@ export function useLiveKit(socketRef, roomId, user) {
     if (!room || !room.localParticipant) return;
     const pub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
     if (pub) {
-      const enabled = !pub.isMuted;
-      await room.localParticipant.setMicrophoneEnabled(!enabled);
-      setMicOn(!enabled);
+      const next = pub.isMuted;
+      await room.localParticipant.setMicrophoneEnabled(next);
+      setMicOn(next);
     } else {
       await room.localParticipant.setMicrophoneEnabled(true);
       const newPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
@@ -237,9 +246,9 @@ export function useLiveKit(socketRef, roomId, user) {
     if (!room || !room.localParticipant) return;
     const pub = room.localParticipant.getTrackPublication(Track.Source.Camera);
     if (pub) {
-      const enabled = !pub.isMuted;
-      await room.localParticipant.setCameraEnabled(!enabled);
-      setCamOn(!enabled);
+      const next = pub.isMuted;
+      await room.localParticipant.setCameraEnabled(next);
+      setCamOn(next);
     } else {
       await room.localParticipant.setCameraEnabled(true);
       const newPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
@@ -269,7 +278,7 @@ export function useLiveKit(socketRef, roomId, user) {
       socketRef.current?.emit('screen-share-changed', { sharing: true });
       return room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
     } catch (err) {
-      console.warn('Screen share failed:', err.message);
+      console.warn('[LiveKit] screen share failed:', err);
       setScreenSharing(false);
       return null;
     }
