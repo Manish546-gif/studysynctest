@@ -63,7 +63,7 @@ function VideoTile({ stream, name, isLocal, muted, mirror, presenting, onClick, 
   return (
     <div
       onClick={onClick}
-      className={`relative rounded overflow-hidden bg-zoom-darker aspect-video transition-all ${
+      className={`relative rounded overflow-hidden bg-zoom-darker aspect-video w-full transition-all ${
         active
           ? 'ring-2 ring-zoom-blue'
           : 'ring-1 ring-white/10'
@@ -90,8 +90,8 @@ function VideoTile({ stream, name, isLocal, muted, mirror, presenting, onClick, 
           <span className="text-[9px] font-medium">Presenting</span>
         </div>
       )}
-      <div className="absolute bottom-1 left-1 flex items-center gap-1 bg-black/60 rounded px-1.5 py-0.5">
-        <span className="text-[10px] font-medium text-white truncate max-w-[80px]">{name}{isLocal ? ' (You)' : ''}</span>
+      <div className="absolute bottom-1 left-1 flex items-center gap-1 bg-black/60 rounded px-1.5 py-0.5 max-w-[calc(100%-0.5rem)]">
+        <span className="text-[10px] font-medium text-white truncate">{name}{isLocal ? ' (You)' : ''}</span>
         {tabAway && !isLocal && (
           <span className="text-[8px] bg-orange-500/80 text-white rounded px-1 py-0.5 font-medium">Away</span>
         )}
@@ -518,18 +518,18 @@ export default function Workspace() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-surface">
-        <Loader2 size={32} className="animate-spin text-primary" />
+      <div className="flex items-center justify-center min-h-screen bg-zoom-darker">
+        <Loader2 size={28} className="animate-spin text-zoom-blue" />
       </div>
     )
   }
 
   if (error || !room) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-surface">
-        <p className="text-on-surface/50 mb-4">{error || 'Room not found'}</p>
-        <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 px-4 py-2 bg-primary-container text-on-primary-container rounded-xl text-sm font-semibold">
-          <ArrowLeft size={16} /> Back to Dashboard
+      <div className="flex flex-col items-center justify-center min-h-screen bg-white">
+        <p className="text-on-surface/50 mb-3 text-sm">{error || 'Room not found'}</p>
+        <button onClick={() => navigate('/dashboard')} className="flex items-center gap-1.5 px-3 py-1.5 bg-zoom-blue text-white rounded-lg text-xs font-semibold hover:bg-[#0b5fc7] transition-colors">
+          <ArrowLeft size={14} /> Back to Dashboard
         </button>
       </div>
     )
@@ -685,23 +685,23 @@ export default function Workspace() {
             animate={{ width: `${whiteboardWidth}%`, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 260, damping: 30 }}
-            className="bg-surface relative flex flex-col overflow-hidden shrink-0 border-r border-outline-variant/20"
+            className="bg-white relative flex flex-col overflow-hidden shrink-0 border-r border-black/10"
           >
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-outline-variant/20 shrink-0">
-              <span className="text-sm font-semibold text-on-surface flex items-center gap-2">
-                <PenTool size={15} className="text-primary" />
+            <div className="flex items-center justify-between px-3 py-1.5 border-b border-black/10 shrink-0">
+              <span className="text-xs font-semibold text-on-surface flex items-center gap-1.5">
+                <PenTool size={13} className="text-zoom-blue" />
                 Whiteboard
               </span>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5">
                 <button
                   onClick={() => setWhiteboardFullScreen(true)}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container hover:text-on-surface transition-colors"
+                  className="w-5 h-5 rounded flex items-center justify-center text-on-surface/40 hover:bg-black/5 hover:text-on-surface transition-colors"
                   title="Full screen"
                 >
-                  <Maximize size={14} />
+                  <Maximize size={12} />
                 </button>
-                <button onClick={() => setWhiteboardOpen(false)} className="w-7 h-7 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors">
-                  <X size={16} />
+                <button onClick={() => setWhiteboardOpen(false)} className="w-5 h-5 rounded flex items-center justify-center text-on-surface/40 hover:bg-black/5 hover:text-on-surface transition-colors">
+                  <X size={12} />
                 </button>
               </div>
             </div>
@@ -763,7 +763,7 @@ export default function Workspace() {
               </AnimatePresence>
             </div>
             <div
-              className="absolute top-0 right-0 bottom-0 w-1.5 cursor-col-resize group hover:bg-primary/30 active:bg-primary/50 transition-colors"
+              className="absolute top-0 right-0 bottom-0 w-1.5 cursor-col-resize group hover:bg-zoom-blue/40 active:bg-zoom-blue/60 transition-colors"
               onPointerDown={(e) => {
                 e.preventDefault();
                 whiteboardResizing.current = true;
@@ -787,21 +787,21 @@ export default function Workspace() {
 
         {/* Center */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 p-4 flex flex-col gap-3 min-h-0 max-w-6xl w-full mx-auto">
+          <div className="flex-1 p-3 flex flex-col gap-2 min-h-0 w-full">
             {stageActive ? (
               <>
                 {/* Switcher: pick which shared screen to watch */}
                 {presenterIds.length > 1 && (
                   <div className="shrink-0 flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-medium text-on-surface/50">Shared screens:</span>
+                    <span className="text-[11px] font-medium text-on-surface/50">Shared screens:</span>
                     {presenterIds.map((pid) => (
                       <button
                         key={pid}
                         onClick={() => setPinnedId(pid)}
-                        className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
                           stageTarget === pid
-                            ? 'bg-primary text-on-primary'
-                            : 'bg-surface-container-high text-on-surface hover:bg-surface-container-highest'
+                            ? 'bg-zoom-blue text-white'
+                            : 'bg-black/5 text-on-surface/60 hover:bg-black/10'
                         }`}
                       >
                         <Monitor size={11} />
@@ -815,7 +815,7 @@ export default function Workspace() {
                   ref={stageRef}
                   onDoubleClick={toggleStageFullscreen}
                   data-screen-share="true"
-                  className="relative flex-1 min-h-0 rounded-2xl overflow-hidden bg-black border border-outline-variant/20"
+                  className="relative flex-1 min-h-0 rounded-lg overflow-hidden bg-black ring-1 ring-black/10"
                 >
                   <video
                     ref={(node) => {
@@ -829,20 +829,20 @@ export default function Workspace() {
                     muted={stageIsLocal}
                     className="w-full h-full object-contain"
                   />
-                  <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/50 backdrop-blur-sm rounded-lg px-2.5 py-1.5 pointer-events-none">
-                    <Monitor size={12} className="text-white" />
-                    <span className="text-xs font-medium text-white">{stageName}</span>
+                  <div className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 rounded px-1.5 py-0.5 pointer-events-none">
+                    <Monitor size={11} className="text-white" />
+                    <span className="text-[11px] font-medium text-white">{stageName}</span>
                   </div>
                   <button
                     onClick={toggleStageFullscreen}
-                    className="absolute top-3 right-3 w-8 h-8 rounded-lg flex items-center justify-center bg-black/50 text-white hover:bg-black/70 transition-colors"
+                    className="absolute top-2 right-2 w-7 h-7 rounded flex items-center justify-center bg-black/50 text-white hover:bg-black/70 transition-colors"
                     title={document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen'}
                   >
-                    <Maximize size={14} />
+                    <Maximize size={13} />
                   </button>
                   <button
                     onClick={() => setPinnedId(null)}
-                    className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/50 backdrop-blur-sm text-white text-xs font-semibold hover:bg-black/70 transition-colors"
+                    className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 rounded-lg bg-black/60 text-white text-[11px] font-medium hover:bg-black/80 transition-colors"
                     title="Back to gallery"
                   >
                     <X size={13} /> Exit spotlight
@@ -865,7 +865,7 @@ export default function Workspace() {
                 </div>
 
                 {/* Filmstrip of cameras */}
-                <div className="shrink-0 flex gap-3 overflow-x-auto pb-1">
+                <div className="shrink-0 flex gap-2 overflow-x-auto pb-1">
                   <div className="w-44 shrink-0">
                     <VideoTile
                       stream={localStream}
@@ -903,7 +903,7 @@ export default function Workspace() {
               </>
             ) : (
               <div className="flex-1 overflow-y-auto">
-                <div className="flex flex-wrap gap-3 justify-center content-start max-w-5xl mx-auto">
+                <div className="grid gap-2 justify-center content-start" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
                   {/* Local video */}
                   <VideoTile
                     stream={localStream}
@@ -942,12 +942,15 @@ export default function Workspace() {
                   {displayMembers
                     .filter((m) => m._id !== user?.id && !remoteUserIds.some((sid) => remoteStreams[sid]))
                     .map((member, i) => (
-                      <div key={member._id || i} className="rounded-xl overflow-hidden bg-surface-container-high border border-outline-variant/20 min-w-[16rem] min-h-[9rem] aspect-video flex items-center justify-center">
-                        <div className="flex flex-col items-center gap-2">
-                          <div className={`w-14 h-14 rounded-2xl ${memberColors[i % memberColors.length]} flex items-center justify-center`}>
-                            <span className="text-lg font-bold text-white">{member.name?.charAt(0)?.toUpperCase()}</span>
+                      <div key={member._id || i} className="relative rounded overflow-hidden bg-zoom-darker ring-1 ring-white/10 aspect-video flex items-center justify-center">
+                        <div className="flex flex-col items-center gap-1.5">
+                          <div className={`w-11 h-11 rounded ${memberColors[i % memberColors.length]} flex items-center justify-center`}>
+                            <span className="text-sm font-semibold text-white">{member.name?.charAt(0)?.toUpperCase()}</span>
                           </div>
-                          <span className="text-xs text-on-surface/50">{member.name}</span>
+                          <span className="text-[10px] font-medium text-white/60 truncate max-w-[180px]">{member.name}</span>
+                        </div>
+                        <div className="absolute bottom-1 left-1 bg-black/60 rounded px-1.5 py-0.5">
+                          <span className="text-[10px] font-medium text-white">{member.name}</span>
                         </div>
                       </div>
                     ))}
@@ -987,19 +990,19 @@ export default function Workspace() {
                   <X size={13} />
                 </button>
               </div>
-              <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+              <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-2 space-y-2.5">
                 {chatTab === 'activity' ? (
                   activityLog.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 text-center">
-                      <FileText size={28} className="text-on-surface/15 mb-3" />
-                      <p className="text-sm text-on-surface/40">No activity yet</p>
+                      <FileText size={24} className="text-white/15 mb-2" />
+                      <p className="text-xs text-white/40">No activity yet</p>
                     </div>
                   ) : (
                     activityLog.map((entry, i) => (
-                      <div key={i} className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-primary/60 shrink-0" />
-                        <span className="text-xs text-on-surface/50">{entry.userName}</span>
-                        <span className="text-xs text-on-surface/30">{entry.message}</span>
+                      <div key={i} className="flex items-center gap-1.5 px-1">
+                        <div className="w-1 h-1 rounded-full bg-zoom-blue shrink-0" />
+                        <span className="text-[10px] font-medium text-white/60">{entry.userName}</span>
+                        <span className="text-[10px] text-white/35 truncate">{entry.message}</span>
                       </div>
                     ))
                   )
@@ -1104,18 +1107,18 @@ export default function Workspace() {
           {breakoutOpen && (
             <motion.div
               initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 320, opacity: 1 }}
+              animate={{ width: 300, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="bg-surface-container-low border-l border-outline-variant/20 flex flex-col overflow-hidden shrink-0"
+              className="bg-zoom-dark border-l border-white/10 flex flex-col overflow-hidden shrink-0"
             >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant/20">
-                <span className="text-sm font-semibold text-on-surface">Breakout Rooms</span>
-                <button onClick={() => setBreakoutOpen(false)} className="w-7 h-7 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors">
-                  <X size={16} />
+              <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                <span className="text-xs font-medium text-white/80">Breakout Rooms</span>
+                <button onClick={() => setBreakoutOpen(false)} className="w-5 h-5 rounded flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors">
+                  <X size={13} />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto p-4">
+              <div className="flex-1 overflow-y-auto p-3">
                 <BreakoutPanel
                   breakoutRooms={breakoutRooms}
                   socketRef={socketRef}
@@ -1132,42 +1135,42 @@ export default function Workspace() {
           {settingsOpen && (
             <motion.div
               initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 320, opacity: 1 }}
+              animate={{ width: 300, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="bg-surface-container-low border-l border-outline-variant/20 flex flex-col overflow-hidden shrink-0"
+              className="bg-zoom-dark border-l border-white/10 flex flex-col overflow-hidden shrink-0"
             >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant/20">
-                <span className="text-sm font-semibold text-on-surface">Room Settings</span>
-                <button onClick={() => setSettingsOpen(false)} className="w-7 h-7 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors">
-                  <X size={16} />
+              <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                <span className="text-xs font-medium text-white/80">Room Settings</span>
+                <button onClick={() => setSettingsOpen(false)} className="w-5 h-5 rounded flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors">
+                  <X size={13} />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-5">
+              <div className="flex-1 overflow-y-auto p-3 space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Room Name</label>
+                  <label className="block text-[11px] font-medium text-white/40 mb-1">Room Name</label>
                   <input
                     value={settingsName}
                     onChange={(e) => setSettingsName(e.target.value)}
                     disabled={!isHost}
                     placeholder="Room name"
-                    className="w-full rounded-xl border border-outline-variant/50 bg-surface-container-lowest px-3 py-2.5 text-sm text-on-surface placeholder:text-on-surface/30 outline-none focus:border-primary transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full rounded border border-white/15 bg-white/5 px-2.5 py-1.5 text-xs text-white placeholder:text-white/30 outline-none focus:border-zoom-blue transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Tag</label>
-                  <div className={`flex flex-wrap gap-1.5 ${!isHost ? 'pointer-events-none opacity-60' : ''}`}>
+                  <label className="block text-[11px] font-medium text-white/40 mb-1">Tag</label>
+                  <div className={`flex flex-wrap gap-1 ${!isHost ? 'pointer-events-none opacity-60' : ''}`}>
                     {ROOM_TAGS.map((tag) => (
                       <button
                         key={tag}
                         type="button"
                         disabled={!isHost}
                         onClick={() => setSettingsTag(tag)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
                           settingsTag === tag
-                            ? 'bg-primary text-on-primary'
-                            : 'bg-surface-container-high text-on-surface/60 hover:bg-surface-container hover:text-on-surface'
+                            ? 'bg-zoom-blue text-white'
+                            : 'bg-white/10 text-white/50 hover:bg-white/15 hover:text-white/80'
                         }`}
                       >
                         {tag}
@@ -1177,39 +1180,39 @@ export default function Workspace() {
                 </div>
 
                 {!isHost && (
-                  <p className="text-xs text-on-surface/40 leading-relaxed">
+                  <p className="text-[11px] text-white/30 leading-relaxed">
                     Only the host can edit these settings.
                   </p>
                 )}
 
                 {isHost && (
                   <>
-                    {settingsError && <p className="text-xs text-error">{settingsError}</p>}
+                    {settingsError && <p className="text-xs text-red-400">{settingsError}</p>}
                     <button
                       onClick={handleSaveSettings}
                       disabled={savingSettings || !settingsName.trim()}
-                      className="w-full py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:shadow-md transition-shadow disabled:opacity-50 flex items-center justify-center gap-2"
+                      className="w-full py-2 rounded bg-zoom-blue text-white text-xs font-semibold hover:bg-[#0b5fc7] transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
                     >
                       {savingSettings ? (
-                        <Loader2 size={15} className="animate-spin" />
+                        <Loader2 size={13} className="animate-spin" />
                       ) : settingsSaved ? (
-                        <Check size={15} />
+                        <Check size={13} />
                       ) : (
-                        <Settings size={15} />
+                        <Settings size={13} />
                       )}
                       {savingSettings ? 'Saving...' : settingsSaved ? 'Saved!' : 'Save Changes'}
                     </button>
 
-                    <div className="rounded-xl border border-error/30 bg-error-container/30 p-4">
-                      <p className="text-sm font-semibold text-error mb-1">Danger Zone</p>
-                      <p className="text-xs text-on-surface/50 leading-relaxed mb-3">
+                    <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+                      <p className="text-xs font-semibold text-red-400 mb-0.5">Danger Zone</p>
+                      <p className="text-[11px] text-white/40 leading-relaxed mb-2.5">
                         Deleting this room removes it for all members. This cannot be undone.
                       </p>
                       <button
                         onClick={() => setDeleteConfirmOpen(true)}
-                        className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-error text-white text-xs font-semibold hover:shadow-md transition-shadow"
+                        className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-red-500 text-white text-[11px] font-semibold hover:bg-red-600 transition-colors w-full"
                       >
-                        <Trash2 size={13} />
+                        <Trash2 size={12} />
                         Delete Room
                       </button>
                     </div>

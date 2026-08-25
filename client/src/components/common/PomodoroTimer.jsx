@@ -134,19 +134,19 @@ export default function PomodoroTimer({ isOpen, onToggle }) {
     : phase === 'paused' ? 'Paused'
     : 'Ready'
 
-  const phaseColor = phase === 'work' || phase === 'paused' ? 'text-primary'
-    : 'text-success'
+  const phaseColor = phase === 'work' || phase === 'paused' ? 'text-zoom-blue'
+    : 'text-green-400'
 
   if (!isOpen) {
     return (
       <button
         onClick={onToggle}
-        className="w-12 h-12 rounded-2xl flex items-center justify-center bg-tertiary-container text-on-tertiary-container hover:shadow-md transition-all duration-200 relative"
+        className="relative w-9 h-9 rounded-lg flex items-center justify-center bg-white/10 text-white hover:bg-white/15 transition-all duration-150"
         title="Pomodoro Timer"
       >
-        <Timer size={20} />
+        <Timer size={16} />
         {phase !== 'idle' && (
-          <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary text-on-primary text-[9px] font-bold flex items-center justify-center">
+          <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-zoom-blue text-white text-[8px] font-bold flex items-center justify-center">
             {completedSessions}
           </span>
         )}
@@ -159,26 +159,26 @@ export default function PomodoroTimer({ isOpen, onToggle }) {
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 20, scale: 0.95 }}
-      className="absolute bottom-20 right-4 z-50 w-80 bg-surface-container-low border border-outline-variant/30 rounded-3xl shadow-2xl overflow-hidden"
+      className="absolute bottom-14 right-2 z-50 w-64 bg-zoom-dark border border-white/10 rounded-lg shadow-2xl overflow-hidden"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-5 pb-2">
-        <div className="flex items-center gap-2">
-          <Timer size={18} className="text-primary" />
-          <span className="text-sm font-semibold text-on-surface">Pomodoro</span>
+      <div className="flex items-center justify-between px-3 pt-2.5 pb-1">
+        <div className="flex items-center gap-1.5">
+          <Timer size={13} className="text-zoom-blue" />
+          <span className="text-xs font-semibold text-white">Pomodoro</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <button
             onClick={() => setShowSettings(!showSettings)}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors"
+            className="w-5 h-5 rounded flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors"
           >
-            <Settings2 size={14} />
+            <Settings2 size={12} />
           </button>
           <button
             onClick={onToggle}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors"
+            className="w-5 h-5 rounded flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors"
           >
-            <X size={14} />
+            <X size={12} />
           </button>
         </div>
       </div>
@@ -192,17 +192,17 @@ export default function PomodoroTimer({ isOpen, onToggle }) {
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="px-5 pb-4 space-y-3">
-              <p className="text-[11px] text-on-surface/40 font-medium uppercase tracking-wider">Presets</p>
-              <div className="grid grid-cols-2 gap-2">
+            <div className="px-3 pb-3 space-y-2">
+              <p className="text-[10px] text-white/30 font-medium uppercase tracking-wider">Presets</p>
+              <div className="grid grid-cols-2 gap-1">
                 {PRESETS.map((p) => (
                   <button
                     key={p.label}
                     onClick={() => applyPreset(p)}
-                    className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                    className={`px-2 py-1.5 rounded text-[11px] font-medium transition-all ${
                       preset.label === p.label
-                        ? 'bg-primary text-on-primary'
-                        : 'bg-surface-container text-on-surface/60 hover:bg-surface-container-high'
+                        ? 'bg-zoom-blue text-white'
+                        : 'bg-white/10 text-white/50 hover:bg-white/15'
                     }`}
                   >
                     {p.label}
@@ -211,36 +211,36 @@ export default function PomodoroTimer({ isOpen, onToggle }) {
               </div>
 
               {preset.label === 'Custom' && (
-                <div className="grid grid-cols-3 gap-2 mt-2">
+                <div className="grid grid-cols-3 gap-1 mt-1">
                   <div>
-                    <label className="text-[10px] text-on-surface/40 block mb-1">Focus</label>
+                    <label className="text-[9px] text-white/30 block mb-0.5">Focus</label>
                     <input
                       type="number"
                       value={workMin}
                       onChange={(e) => setWorkMin(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full bg-surface rounded-lg px-2 py-1.5 text-xs text-on-surface border border-outline-variant/20 outline-none focus:border-primary"
+                      className="w-full bg-white/5 rounded px-1.5 py-1 text-[11px] text-white border border-white/10 outline-none focus:border-zoom-blue"
                       min={1}
                       max={120}
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] text-on-surface/40 block mb-1">Short</label>
+                    <label className="text-[9px] text-white/30 block mb-0.5">Short</label>
                     <input
                       type="number"
                       value={shortMin}
                       onChange={(e) => setShortMin(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full bg-surface rounded-lg px-2 py-1.5 text-xs text-on-surface border border-outline-variant/20 outline-none focus:border-primary"
+                      className="w-full bg-white/5 rounded px-1.5 py-1 text-[11px] text-white border border-white/10 outline-none focus:border-zoom-blue"
                       min={1}
                       max={60}
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] text-on-surface/40 block mb-1">Long</label>
+                    <label className="text-[9px] text-white/30 block mb-0.5">Long</label>
                     <input
                       type="number"
                       value={longMin}
                       onChange={(e) => setLongMin(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full bg-surface rounded-lg px-2 py-1.5 text-xs text-on-surface border border-outline-variant/20 outline-none focus:border-primary"
+                      className="w-full bg-white/5 rounded px-1.5 py-1 text-[11px] text-white border border-white/10 outline-none focus:border-zoom-blue"
                       min={1}
                       max={60}
                     />
@@ -253,15 +253,15 @@ export default function PomodoroTimer({ isOpen, onToggle }) {
       </AnimatePresence>
 
       {/* Timer circle */}
-      <div className="flex flex-col items-center py-6 px-5">
-        <div className="relative w-32 h-32 mb-4">
+      <div className="flex flex-col items-center py-4 px-3">
+        <div className="relative w-28 h-28 mb-3">
           <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
             <circle
               cx="60" cy="60" r="54"
               fill="none"
               stroke="currentColor"
               strokeWidth="6"
-              className="text-outline-variant/20"
+              className="text-white/10"
             />
             <circle
               cx="60" cy="60" r="54"
@@ -272,59 +272,57 @@ export default function PomodoroTimer({ isOpen, onToggle }) {
               strokeDasharray={circumference}
               strokeDashoffset={dashOffset}
               className={`transition-all duration-1000 ${
-                phase === 'work' || phase === 'paused' ? 'text-primary' : 'text-success'
+                phase === 'work' || phase === 'paused' ? 'text-zoom-blue' : 'text-green-400'
               }`}
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-3xl font-mono font-bold text-on-surface tracking-tight">
+            <span className="text-2xl font-mono font-bold text-white tracking-tight">
               {formatTime(timeLeft)}
             </span>
-            <span className={`text-[11px] font-semibold mt-1 ${phaseColor}`}>
+            <span className={`text-[10px] font-medium mt-0.5 ${phaseColor}`}>
               {phaseLabel}
             </span>
           </div>
         </div>
 
         {/* Session dots */}
-        <div className="flex items-center gap-2 mb-5">
+        <div className="flex items-center gap-1.5 mb-4">
           {Array.from({ length: totalSessions }).map((_, i) => (
             <div
               key={i}
-              className={`w-2.5 h-2.5 rounded-full transition-all ${
+              className={`w-2 h-2 rounded-full transition-all ${
                 i < completedSessions % totalSessions
-                  ? 'bg-primary scale-110'
+                  ? 'bg-zoom-blue scale-110'
                   : i === completedSessions % totalSessions && phase === 'work'
-                    ? 'bg-primary/30 ring-2 ring-primary/20'
-                    : 'bg-outline-variant/30'
+                    ? 'bg-zoom-blue/30 ring-2 ring-zoom-blue/20'
+                    : 'bg-white/15'
               }`}
             />
           ))}
-          <span className="text-[10px] text-on-surface/30 ml-1">
+          <span className="text-[9px] text-white/25 ml-0.5">
             {completedSessions}/{totalSessions}
           </span>
         </div>
 
         {/* Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
             onClick={handleReset}
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors"
             title="Reset"
           >
-            <RotateCcw size={16} />
+            <RotateCcw size={14} />
           </button>
 
           <button
             onClick={phase === 'paused' || phase === 'idle' ? handleStart : handlePause}
-            className={`w-14 h-14 rounded-2xl flex items-center justify-center text-on-primary shadow-lg hover:shadow-xl transition-all ${
-              phase === 'work' ? 'bg-primary' : phase === 'paused' ? 'bg-primary' : 'bg-success'
-            }`}
+            className="w-11 h-11 rounded-full flex items-center justify-center text-white bg-zoom-blue hover:bg-[#0b5fc7] transition-colors shadow-lg"
           >
-            {phase === 'paused' || phase === 'idle' ? <Play size={22} /> : <Pause size={22} />}
+            {phase === 'paused' || phase === 'idle' ? <Play size={18} /> : <Pause size={18} />}
           </button>
 
-          <div className="w-10 h-10" />
+          <div className="w-8 h-8" />
         </div>
       </div>
 
@@ -335,9 +333,9 @@ export default function PomodoroTimer({ isOpen, onToggle }) {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
-            className="absolute top-16 left-1/2 -translate-x-1/2 bg-primary text-on-primary px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-lg"
+            className="absolute top-12 left-1/2 -translate-x-1/2 bg-zoom-blue text-white px-3 py-1.5 rounded-lg text-[11px] font-medium flex items-center gap-1.5 shadow-lg whitespace-nowrap"
           >
-            <Bell size={14} />
+            <Bell size={12} />
             {phase === 'shortBreak' || phase === 'longBreak' ? 'Focus time is up! Take a break.' : 'Break is over! Time to focus.'}
           </motion.div>
         )}

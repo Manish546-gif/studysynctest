@@ -129,10 +129,10 @@ export default function ScreenRecorder({ canvasRef, isOpen, onToggle, onRecordin
     return (
       <button
         onClick={onToggle}
-        className="w-12 h-12 rounded-2xl flex items-center justify-center bg-surface-container-high text-on-surface hover:bg-surface-container-high/80 transition-all duration-200"
+        className="w-9 h-9 rounded-lg flex items-center justify-center bg-white/10 text-white hover:bg-white/15 transition-all duration-150"
         title="Screen Recording"
       >
-        <Video size={20} />
+        <Video size={16} />
       </button>
     )
   }
@@ -142,76 +142,76 @@ export default function ScreenRecorder({ canvasRef, isOpen, onToggle, onRecordin
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 20, scale: 0.95 }}
-      className="absolute bottom-20 right-20 z-50 w-72 bg-surface-container-low border border-outline-variant/30 rounded-3xl shadow-2xl overflow-hidden"
+      className="absolute bottom-14 right-14 z-50 w-60 bg-zoom-dark border border-white/10 rounded-lg shadow-2xl overflow-hidden"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-5 pb-3">
-        <div className="flex items-center gap-2">
-          <Video size={18} className="text-primary" />
-          <span className="text-sm font-semibold text-on-surface">Recorder</span>
+      <div className="flex items-center justify-between px-3 pt-2.5 pb-1.5">
+        <div className="flex items-center gap-1.5">
+          <Video size={13} className="text-zoom-blue" />
+          <span className="text-xs font-semibold text-white">Recorder</span>
         </div>
         <button
           onClick={() => { stopRecording(); onToggle(); }}
-          className="w-7 h-7 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors"
+          className="w-5 h-5 rounded flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors"
         >
-          <X size={14} />
+          <X size={12} />
         </button>
       </div>
 
       {/* Content */}
-      <div className="px-5 pb-5">
+      <div className="px-3 pb-3">
         {!recording && !previewUrl && (
-          <div className="text-center py-4">
-            <div className="w-16 h-16 rounded-2xl bg-error-container flex items-center justify-center mx-auto mb-4">
-              <Circle size={28} className="text-error" fill="currentColor" />
+          <div className="text-center py-3">
+            <div className="w-12 h-12 rounded-lg bg-red-500/15 flex items-center justify-center mx-auto mb-3">
+              <Circle size={22} className="text-red-400" fill="currentColor" />
             </div>
-            <p className="text-sm text-on-surface/60 mb-1">Record whiteboard session</p>
-            <p className="text-[11px] text-on-surface/30 mb-5">
+            <p className="text-xs text-white/60 mb-0.5">Record whiteboard session</p>
+            <p className="text-[10px] text-white/30 mb-4">
               Captures the whiteboard canvas as a WebM video
             </p>
             <button
               onClick={startRecording}
-              className="w-full py-3 bg-error text-white rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 hover:shadow-lg transition-shadow"
+              className="w-full py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
             >
-              <Circle size={14} fill="currentColor" />
+              <Circle size={12} fill="currentColor" />
               Start Recording
             </button>
           </div>
         )}
 
         {recording && (
-          <div className="text-center py-4">
-            <div className="relative w-16 h-16 rounded-2xl bg-error/10 flex items-center justify-center mx-auto mb-4">
-              <div className="absolute inset-0 rounded-2xl bg-error/20 animate-ping" />
-              <Circle size={28} className="text-error relative z-10" fill="currentColor" />
+          <div className="text-center py-3">
+            <div className="relative w-12 h-12 rounded-lg bg-red-500/10 flex items-center justify-center mx-auto mb-3">
+              <div className="absolute inset-0 rounded-lg bg-red-500/20 animate-ping" />
+              <Circle size={22} className="text-red-400 relative z-10" fill="currentColor" />
             </div>
 
-            <div className="flex items-center justify-center gap-2 mb-1">
-              <div className="w-2 h-2 rounded-full bg-error animate-pulse" />
-              <span className="text-sm font-semibold text-on-surface">
+            <div className="flex items-center justify-center gap-1.5 mb-0.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-xs font-semibold text-white">
                 {paused ? 'Paused' : 'Recording'}
               </span>
             </div>
 
-            <div className="flex items-center justify-center gap-1.5 mb-5">
-              <Clock size={12} className="text-on-surface/40" />
-              <span className="text-lg font-mono font-bold text-on-surface tracking-tight">
+            <div className="flex items-center justify-center gap-1 mb-4">
+              <Clock size={11} className="text-white/30" />
+              <span className="text-base font-mono font-bold text-white tracking-tight">
                 {formatDuration(duration)}
               </span>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <button
                 onClick={togglePause}
-                className="flex-1 py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 border border-outline-variant/30 text-on-surface hover:bg-surface-container transition-colors"
+                className="flex-1 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1 border border-white/15 text-white/70 hover:bg-white/10 transition-colors"
               >
-                {paused ? <><Video size={14} /> Resume</> : <><Pause size={14} /> Pause</>}
+                {paused ? <><Video size={12} /> Resume</> : <><Pause size={12} /> Pause</>}
               </button>
               <button
                 onClick={stopRecording}
-                className="flex-1 py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 bg-error text-white hover:bg-error/90 transition-colors"
+                className="flex-1 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1 bg-red-500 text-white hover:bg-red-600 transition-colors"
               >
-                <Square size={14} fill="currentColor" />
+                <Square size={12} fill="currentColor" />
                 Stop
               </button>
             </div>
@@ -219,29 +219,29 @@ export default function ScreenRecorder({ canvasRef, isOpen, onToggle, onRecordin
         )}
 
         {previewUrl && !recording && (
-          <div className="py-2">
+          <div className="py-1.5">
             <video
               src={previewUrl}
               controls
-              className="w-full rounded-xl mb-4 bg-black aspect-video object-contain"
+              className="w-full rounded mb-3 bg-black aspect-video object-contain"
             />
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-[11px] text-on-surface/40">
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="text-[10px] text-white/35">
                 {formatDuration(duration)} recorded
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={downloadRecording}
                 disabled={saving}
-                className="flex-1 py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 bg-primary text-on-primary hover:shadow-lg transition-shadow disabled:opacity-50"
+                className="flex-1 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 bg-zoom-blue text-white hover:bg-[#0b5fc7] transition-colors disabled:opacity-50"
               >
-                {saving ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                {saving ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
                 {saving ? 'Saving...' : 'Download'}
               </button>
               <button
                 onClick={discardRecording}
-                className="py-3 px-4 rounded-2xl text-sm font-semibold border border-outline-variant/30 text-on-surface/60 hover:bg-surface-container transition-colors"
+                className="py-2 px-3 rounded-lg text-xs font-medium border border-white/15 text-white/50 hover:bg-white/10 transition-colors"
               >
                 Discard
               </button>

@@ -2,8 +2,8 @@ import { useEffect, useRef, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 const CONFIRM_STYLES = {
-  danger: 'bg-error text-on-error hover:opacity-90',
-  primary: 'bg-primary text-on-primary hover:opacity-90',
+  danger: 'bg-red-500 text-white hover:bg-red-600',
+  primary: 'bg-zoom-blue text-white hover:bg-[#0b5fc7]',
 };
 
 export default function ConfirmationModal({
@@ -55,7 +55,7 @@ export default function ConfirmationModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-inverse-surface/30"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget && !loading) onClose?.();
           }}
@@ -69,24 +69,24 @@ export default function ConfirmationModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 8 }}
             transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-            className="w-full max-w-sm rounded-3xl bg-surface-container-low border border-outline-variant/30 shadow-2xl p-6"
+            className="w-full max-w-xs rounded-lg bg-zoom-dark border border-white/10 shadow-2xl p-4"
           >
             <h2
               id="confirmation-modal-title"
-              className="text-lg font-semibold text-on-surface"
+              className="text-sm font-semibold text-white"
             >
               {title}
             </h2>
-            <p className="mt-2 text-sm leading-relaxed text-on-surface/60">
+            <p className="mt-1.5 text-xs leading-relaxed text-white/50">
               {message}
             </p>
 
-            <div className="mt-6 flex items-center justify-end gap-2">
+            <div className="mt-4 flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={loading}
-                className="px-4 py-2 rounded-xl text-sm font-semibold bg-surface-container-high text-on-surface hover:opacity-90 transition-opacity disabled:opacity-50 disabled:pointer-events-none"
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white/10 text-white/80 hover:bg-white/15 transition-colors disabled:opacity-50 disabled:pointer-events-none"
               >
                 Cancel
               </button>
@@ -94,7 +94,7 @@ export default function ConfirmationModal({
                 type="button"
                 onClick={onConfirm}
                 disabled={loading}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-opacity disabled:opacity-50 disabled:pointer-events-none ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 disabled:pointer-events-none ${
                   CONFIRM_STYLES[confirmVariant] || CONFIRM_STYLES.primary
                 }`}
               >
