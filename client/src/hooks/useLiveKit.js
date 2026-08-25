@@ -19,10 +19,13 @@ function logTag(...args) {
 
 function subscribeToAllTracks(room) {
   if (!room) return;
-  room.participants.forEach((p) => {
+  const participants = room.remoteParticipants;
+  if (!participants) return;
+  participants.forEach((p) => {
+    if (!p.trackPublications) return;
     p.trackPublications.forEach((pub) => {
       if (!pub.isSubscribed && !pub.track) {
-        p.setTrackSubscription(pub.trackSid, true);
+        try { p.setTrackSubscription(pub.trackSid, true); } catch {}
       }
     });
   });
@@ -46,39 +49,45 @@ export function useLiveKit(socketRef, roomId, user) {
 
     const camStreams = {};
     const screenStreams = {};
-    let count = 0;
-    let subCount = 0;
 
-    room.participants.forEach((p) => {
-      const camTracks = [];
-      const scrTracks = [];
+    try {
+      const participants = room.remoteParticipants;
+      if (!participants) {
+        logTag('rebuild: no remoteParticipants');
+        return;
+      }
 
-      p.trackPublications.forEach((pub) => {
-        count++;
-        if (pub.track) {
-          subCount++;
-          if (
-            pub.source === Track.Source.ScreenShare ||
-            pub.source === Track.Source.ScreenShareAudio
-          ) {
-            scrTracks.push(pub.track);
-          } else {
-            camTracks.push(pub.track);
-          }
+      participants.forEach((p) => {
+        const camTracks = [];
+        const scrTracks = [];
+
+        if (p.trackPublications) {
+          p.trackPublications.forEach((pub) => {
+            if (!pub.track) return;
+            if (
+              pub.source === Track.Source.ScreenShare ||
+              pub.source === Track.Source.ScreenShareAudio
+            ) {
+              scrTracks.push(pub.track);
+            } else {
+              camTracks.push(pub.track);
+            }
+          });
+        }
+
+        logTag('rebuild', p.identity, '| cams:', camTracks.length, 'screens:', scrTracks.length);
+
+        if (camTracks.length > 0) {
+          camStreams[p.identity] = buildMediaStream(camTracks);
+        }
+        if (scrTracks.length > 0) {
+          screenStreams[p.identity] = buildMediaStream(scrTracks);
         }
       });
+    } catch (err) {
+      console.error('[LiveKit] rebuild error:', err);
+    }
 
-      logTag('rebuild', p.identity, '| cams:', camTracks.length, 'screens:', scrTracks.length);
-
-      if (camTracks.length > 0) {
-        camStreams[p.identity] = buildMediaStream(camTracks);
-      }
-      if (scrTracks.length > 0) {
-        screenStreams[p.identity] = buildMediaStream(scrTracks);
-      }
-    });
-
-    logTag('total pubs:', count, 'subscribed:', subCount);
     setRemoteStreams({ ...camStreams });
     setRemoteScreenStreams({ ...screenStreams });
   }, []);
@@ -87,11 +96,13 @@ export function useLiveKit(socketRef, roomId, user) {
     const room = roomRef.current;
     if (!room || !room.localParticipant) return;
     const tracks = [];
-    room.localParticipant.trackPublications.forEach((pub) => {
-      if (pub.track && pub.source === Track.Source.Camera) {
-        tracks.push(pub.track);
-      }
-    });
+    try {
+      room.localParticipant.trackPublications?.forEach((pub) => {
+        if (pub.track && pub.source === Track.Source.Camera) {
+          tracks.push(pub.track);
+        }
+      });
+    } catch {}
     logTag('local cam tracks:', tracks.length);
     setLocalStream(tracks.length > 0 ? buildMediaStream(tracks) : null);
   }, []);
@@ -100,11 +111,13 @@ export function useLiveKit(socketRef, roomId, user) {
     const room = roomRef.current;
     if (!room || !room.localParticipant) return;
     const tracks = [];
-    room.localParticipant.trackPublications.forEach((pub) => {
-      if (pub.track && (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio)) {
-        tracks.push(pub.track);
-      }
-    });
+    try {
+      room.localParticipant.trackPublications?.forEach((pub) => {
+        if (pub.track && (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio)) {
+          tracks.push(pub.track);
+        }
+      });
+    } catch {}
     logTag('local screen tracks:', tracks.length);
     setScreenStream(tracks.length > 0 ? buildMediaStream(tracks) : null);
   }, []);
@@ -208,7 +221,8 @@ export function useLiveKit(socketRef, roomId, user) {
     subscribeToAllTracks(room);
     rebuild();
 
-    logTag('existing participants:', [...room.participants.keys()].join(', ') || 'none');
+    const names = [...(room.remoteParticipants?.keys() || [])];
+    logTag('existing participants:', names.join(', ') || 'none');
   }, [rebuild, rebuildLocalStream, rebuildLocalScreen]);
 
   const disconnect = useCallback(() => {
