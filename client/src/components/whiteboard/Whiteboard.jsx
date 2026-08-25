@@ -1,863 +1,787 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useRef, useState, useEffect, useCallback } from 'react'
 import {
-  MousePointer2,
-  Pencil,
-  Type,
-  StickyNote,
-  Circle,
-  Square,
-  Eraser,
-  Minus,
-  Plus,
-  Maximize,
-  Trash2,
-  Users,
-  MessageCircle,
-  FileText,
-  Timer,
-  Video,
-  UserPlus,
-} from 'lucide-react';
+  MousePointer2, Pencil, Type, StickyNote, Circle, Square, Eraser,
+  Minus, Plus, Maximize, Minimize, Trash2,
+  Undo2, Redo2, Zap, ArrowUpRight, Download,
+} from 'lucide-react'
 
-const COLORS = ['#1f1b11', '#745c26', '#264aea', '#ba1a1a', '#386a20', '#e87d1e', '#9840b5'];
-const STROKE_WIDTHS = [2, 4, 6, 10];
+const TOOLS = ['select', 'pen', 'text', 'sticky', 'rect', 'circle', 'line', 'arrow', 'eraser', 'laser']
+const COLORS = ['#000000', '#e53e3e', '#dd6b20', '#d69e2e', '#38a169', '#3182ce', '#805ad5', '#d53f8c', '#ffffff']
+const STROKE_WIDTHS = [2, 4, 6, 8]
+const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2]
+const LASER_FADE_MS = 1500
+const CANVAS_TOP_OFFSET = 0
 
-const tools = [
-  { id: 'select', icon: MousePointer2, label: 'Select' },
-  { id: 'pen', icon: Pencil, label: 'Pen' },
-  { id: 'text', icon: Type, label: 'Text' },
-  { id: 'sticky', icon: StickyNote, label: 'Sticky' },
-  { id: 'rect', icon: Square, label: 'Rectangle' },
-  { id: 'circle', icon: Circle, label: 'Circle' },
-  { id: 'eraser', icon: Eraser, label: 'Eraser' },
-];
+function hitTestPoint(action, px, py) {
+  if (!action) return false
+  const pad = 12
+  switch (action.tool) {
+    case 'rect':
+      return px >= action.x - pad && px <= action.x + (action.w ?? 150) + pad &&
+             py >= action.y - pad && py <= action.y + (action.h ?? 100) + pad
+    case 'circle':
+      return px >= action.x - pad && px <= action.x + (action.w ?? 100) + pad &&
+             py >= action.y - pad && py <= action.y + (action.h ?? 100) + pad
+    case 'text':
+      return px >= action.x - pad && px <= action.x + (action.w ?? 200) + pad &&
+             py >= action.y - pad && py <= action.y + (action.h ?? 32) + pad
+    case 'sticky':
+      return px >= action.x - pad && px <= action.x + (action.w ?? 180) + pad &&
+             py >= action.y - pad && py <= action.y + (action.h ?? 180) + pad
+    case 'line': case 'arrow': {
+      const { x1, y1, x2, y2 } = action
+      if (x1 == null || x2 == null) return false
+      const A = { x: px - x1, y: py - y1 }
+      const B = { x: x2 - x1, y: y2 - y1 }
+      const lenSq = B.x * B.x + B.y * B.y
+      if (lenSq === 0) return Math.hypot(A.x, A.y) <= pad
+      let t = Math.max(0, Math.min(1, (A.x * B.x + A.y * B.y) / lenSq))
+      const cx = x1 + t * B.x, cy = y1 + t * B.y
+      return Math.hypot(px - cx, py - cy) <= pad
+    }
+    case 'pen': {
+      if (!action.points?.length) return false
+      for (let i = 1; i < action.points.length; i++) {
+        const p0 = action.points[i - 1], p1 = action.points[i]
+        const A = { x: px - p0.x, y: py - p0.y }
+        const B = { x: p1.x - p0.x, y: p1.y - p0.y }
+        const lenSq = B.x * B.x + B.y * B.y
+        if (lenSq === 0) { if (Math.hypot(A.x, A.y) <= pad) return true; continue }
+        let t = Math.max(0, Math.min(1, (A.x * B.x + A.y * B.y) / lenSq))
+        const cx = p0.x + t * B.x, cy = p0.y + t * B.y
+        if (Math.hypot(px - cx, py - cy) <= pad) return true
+      }
+      return false
+    }
+    default: return false
+  }
+}
 
 export default function Whiteboard({
-  _roomId,
-  connected,
-  roomUsers,
-  remoteCursors,
-  actions = [],
-  onDraw,
-  onCursor,
-  onClear,
-  _onUndo,
-  onLivePath,
-  onLivePathEnd,
-  _onLeave,
-  onToggleChat,
-  chatOpen,
-  fullScreen,
-  onToggleFullScreen,
-  livePaths = [],
-  boardName,
-  standalone,
-  readOnly = false,
-  canvasRef: externalCanvasRef,
-  pomodoroOpen,
-  onTogglePomodoro,
-  recorderOpen,
-  onToggleRecorder,
-  recording,
-  panelTab,
-  onTogglePanel,
-  fileCount,
-  filePreviewOpen,
-  onToggleFilePreview,
+  boardName, standalone, connected, roomUsers, remoteCursors,
+  actions = [], onDraw, onCursor, onClear, onUndo, onLivePath, onLivePathEnd,
+  fullScreen, onToggleFullScreen, canvasRef: externalCanvasRef,
+  pomodoroOpen, onTogglePomodoro, recorderOpen, onToggleRecorder, recording,
+  panelTab, onTogglePanel, fileCount, readOnly, livePaths = [],
 }) {
-  const canvasRef = useRef(null);
-  const containerRef = useRef(null);
-  const _textInputRef = useRef(null);
+  const canvasRef = useRef(null)
+  const containerRef = useRef(null)
 
-  const [activeTool, setActiveTool] = useState('pen');
-  const [color, setColor] = useState('#1f1b11');
-  const [strokeWidth, setStrokeWidth] = useState(4);
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [currentPath, setCurrentPath] = useState([]);
-  const [showColorPicker, setShowColorPicker] = useState(false);
-  const [showStrokePicker, setShowStrokePicker] = useState(false);
-  const [stickyText, setStickyText] = useState('');
-  const [showStickyInput, setShowStickyInput] = useState(false);
-  const [stickyPos, setStickyPos] = useState({ x: 0, y: 0 });
-  const [textInput, setTextInput] = useState('');
-  const [showTextInput, setShowTextInput] = useState(false);
-  const [textPos, setTextPos] = useState({ x: 0, y: 0 });
+  const [activeTool, setActiveTool] = useState('pen')
+  const [color, setColor] = useState('#000000')
+  const [strokeWidth, setStrokeWidth] = useState(4)
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [isPanning, setIsPanning] = useState(false)
+  const [isDrawing, setIsDrawing] = useState(false)
+  const [currentPath, setCurrentPath] = useState([])
+  const [textInput, setTextInput] = useState('')
+  const [showTextInput, setShowTextInput] = useState(false)
+  const [textPos, setTextPos] = useState({ x: 0, y: 0 })
+  const [stickyText, setStickyText] = useState('')
+  const [showStickyInput, setShowStickyInput] = useState(false)
+  const [stickyPos, setStickyPos] = useState({ x: 0, y: 0 })
+  const [shapeStart, setShapeStart] = useState(null)
+  const [shapePreview, setShapePreview] = useState(null)
+  const [selectedActionId, setSelectedActionId] = useState(null)
+  const [dragOffset, setDragOffset] = useState(null)
+  const [undoStack, setUndoStack] = useState([])
+  const [redoStack, setRedoStack] = useState([])
+  const [laserTrails, setLaserTrails] = useState([])
 
-  const panRef = useRef({ x: 0, y: 0 });
-  const lastMouseRef = useRef({ x: 0, y: 0 });
-  const spaceRef = useRef(false);
-  const drawingRef = useRef(false);
-  const lastLiveEmitRef = useRef(0);
+  const panRef = useRef({ x: 0, y: 0 })
+  const lastMouseRef = useRef({ x: 0, y: 0 })
+  const spaceRef = useRef(false)
+  const drawingRef = useRef(false)
+  const lastLiveEmitRef = useRef(0)
+  const fileInputRef = useRef(null)
 
-  // Combine local + remote actions + live paths
-  const allActions = [...actions, ...livePaths];
+  const effectiveCanvasRef = externalCanvasRef || canvasRef
+  const allActions = [...actions, ...livePaths]
 
-  const CANVAS_TOP_OFFSET = 40
-
-  // Screen to canvas coords
-  const screenToCanvas = useCallback((sx, sy) => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return { x: 0, y: 0 };
+  const getPointerPos = useCallback((e) => {
+    const canvas = effectiveCanvasRef.current
+    if (!canvas) return { x: 0, y: 0 }
+    const rect = canvas.getBoundingClientRect()
+    const clientX = e.touches ? e.touches[0]?.clientX ?? e.changedTouches?.[0]?.clientX ?? 0 : e.clientX
+    const clientY = e.touches ? e.touches[0]?.clientY ?? e.changedTouches?.[0]?.clientY ?? 0 : e.clientY
     return {
-      x: (sx - rect.left - pan.x) / zoom,
-      y: (sy - rect.top - CANVAS_TOP_OFFSET - pan.y) / zoom,
-    };
-  }, [pan, zoom]);
-
-  // Canvas to screen coords
-  const _canvasToScreen = useCallback((cx, cy) => ({
-    x: cx * zoom + pan.x,
-    y: cy * zoom + pan.y,
-  }), [pan, zoom]);
-
-  // Draw grid
-  const drawGrid = useCallback((ctx, w, h) => {
-    const gridSize = 24 * zoom;
-    const offsetX = pan.x % gridSize;
-    const offsetY = pan.y % gridSize;
-    ctx.fillStyle = '#d1c5ac';
-    for (let x = offsetX; x < w; x += gridSize) {
-      for (let y = offsetY; y < h; y += gridSize) {
-        ctx.beginPath();
-        ctx.arc(x, y, Math.max(0.5, zoom * 0.8), 0, Math.PI * 2);
-        ctx.fill();
-      }
+      x: (clientX - rect.left - panRef.current.x) / zoom,
+      y: (clientY - rect.top - CANVAS_TOP_OFFSET - panRef.current.y) / zoom,
     }
-  }, [pan, zoom]);
+  }, [zoom, effectiveCanvasRef])
 
-  // Draw all actions on canvas
-  const renderCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
+  const renderAll = useCallback((canvas, ctx, toRender) => {
+    if (!canvas || !ctx) return
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-    canvas.width = rect.width;
-    canvas.height = rect.height;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawGrid(ctx, canvas.width, canvas.height);
-
-    ctx.save();
-    ctx.translate(pan.x, pan.y);
-    ctx.scale(zoom, zoom);
-
-    // Draw all actions
-    for (const action of allActions) {
-      drawAction(ctx, action);
-    }
-
-    // Draw current path being drawn
-    if (isDrawing && currentPath.length > 0 && activeTool === 'pen') {
-      ctx.beginPath();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = strokeWidth;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.moveTo(currentPath[0].x, currentPath[0].y);
-      for (let i = 1; i < currentPath.length; i++) {
-        ctx.lineTo(currentPath[i].x, currentPath[i].y);
-      }
-      ctx.stroke();
-    }
-
-    // Live eraser preview while dragging
-    if (isDrawing && currentPath.length > 0 && activeTool === 'eraser') {
-      ctx.save();
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.beginPath();
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = strokeWidth * 4;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.moveTo(currentPath[0].x, currentPath[0].y);
-      for (let i = 1; i < currentPath.length; i++) {
-        ctx.lineTo(currentPath[i].x, currentPath[i].y);
-      }
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    ctx.restore();
-  }, [allActions, pan, zoom, isDrawing, currentPath, activeTool, color, strokeWidth, drawGrid]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function drawAction(ctx, action) {
-    if (action.type === 'pen' && action.points?.length > 0) {
-      ctx.beginPath();
-      ctx.strokeStyle = action.color || '#000';
-      ctx.lineWidth = action.strokeWidth || 2;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.moveTo(action.points[0].x, action.points[0].y);
-      for (let i = 1; i < action.points.length; i++) {
-        ctx.lineTo(action.points[i].x, action.points[i].y);
-      }
-      ctx.stroke();
-    }
-
-    if (action.type === 'eraser' && action.points?.length > 0) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.beginPath();
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = (action.strokeWidth || 2) * 4;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.moveTo(action.points[0].x, action.points[0].y);
-      for (let i = 1; i < action.points.length; i++) {
-        ctx.lineTo(action.points[i].x, action.points[i].y);
-      }
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    if (action.type === 'rect') {
-      ctx.strokeStyle = action.color || '#000';
-      ctx.lineWidth = action.strokeWidth || 2;
-      ctx.strokeRect(action.x, action.y, action.w, action.h);
-    }
-
-    if (action.type === 'circle') {
-      ctx.beginPath();
-      ctx.strokeStyle = action.color || '#000';
-      ctx.lineWidth = action.strokeWidth || 2;
-      const rx = Math.abs(action.w) / 2;
-      const ry = Math.abs(action.h) / 2;
-      const cx = action.x + action.w / 2;
-      const cy = action.y + action.h / 2;
-      ctx.ellipse(cx, cy, rx || 1, ry || 1, 0, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
-    if (action.type === 'text' && action.text) {
-      ctx.fillStyle = action.color || '#1f1b11';
-      ctx.font = `${(action.strokeWidth || 2) * 8}px Inter, sans-serif`;
-      ctx.fillText(action.text, action.x, action.y);
-    }
-
-    if (action.type === 'sticky' && action.text) {
-      const w = 200;
-      const h = Math.max(100, action.text.length / 2.5 + 40);
-      ctx.fillStyle = action.fill || '#ffd02f';
-      ctx.beginPath();
-      roundRect(ctx, action.x, action.y, w, h, 12);
-      ctx.fill();
-      ctx.fillStyle = '#1f1b11';
-      ctx.font = '13px Inter, sans-serif';
-      wrapText(ctx, action.text, action.x + 16, action.y + 32, w - 32, 20);
-    }
-  }
-
-  function roundRect(ctx, x, y, w, h, r) {
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-  }
-
-  function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
-    const words = text.split(' ');
-    let line = '';
-    let cy = y;
-    for (const word of words) {
-      const test = line + word + ' ';
-      if (ctx.measureText(test).width > maxWidth && line) {
-        ctx.fillText(line.trim(), x, cy);
-        line = word + ' ';
-        cy += lineHeight;
-      } else {
-        line = test;
-      }
-    }
-    ctx.fillText(line.trim(), x, cy);
-  }
-
-  // Animation loop (stable - uses latest render fn via ref, never dies)
-  const renderCanvasRef = useRef(renderCanvas);
-  useEffect(() => {
-    renderCanvasRef.current = renderCanvas;
-  });
-  useEffect(() => {
-    let raf;
-    const loop = () => {
-      renderCanvasRef.current();
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
-  // Keyboard events
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      if (e.code === 'Space' && !e.repeat) {
-        spaceRef.current = true;
-        e.preventDefault();
-      }
-    };
-    const onKeyUp = (e) => {
-      if (e.code === 'Space') spaceRef.current = false;
-    };
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
-    };
-  }, []);
-
-  // Mouse events
-  const handleMouseDown = (e) => {
-    if (readOnly) return;
-    if (e.button === 1 || spaceRef.current || activeTool === 'select') {
-      setIsPanning(true);
-      lastMouseRef.current = { x: e.clientX, y: e.clientY };
-      panRef.current = { ...pan };
-      return;
-    }
-
-    if (activeTool === 'sticky') {
-      const pos = screenToCanvas(e.clientX, e.clientY);
-      setStickyPos(pos);
-      setShowStickyInput(true);
-      setStickyText('');
-      return;
-    }
-
-    if (activeTool === 'text') {
-      const pos = screenToCanvas(e.clientX, e.clientY);
-      setTextPos(pos);
-      setShowTextInput(true);
-      setTextInput('');
-      return;
-    }
-
-    if (activeTool === 'pen' || activeTool === 'eraser') {
-      drawingRef.current = true;
-      setIsDrawing(true);
-      const pos = screenToCanvas(e.clientX, e.clientY);
-      setCurrentPath([pos]);
-    }
-
-    if (activeTool === 'rect' || activeTool === 'circle') {
-      drawingRef.current = true;
-      setIsDrawing(true);
-      const pos = screenToCanvas(e.clientX, e.clientY);
-      setCurrentPath([pos, pos]);
-    }
-  };
-
-  const handleMouseMove = (e) => {
-    // Emit cursor position
-    const pos = screenToCanvas(e.clientX, e.clientY);
-    onCursor?.(pos.x, pos.y);
-
-    if (isPanning) {
-      const dx = e.clientX - lastMouseRef.current.x;
-      const dy = e.clientY - lastMouseRef.current.y;
-      setPan({ x: panRef.current.x + dx, y: panRef.current.y + dy });
-      return;
-    }
-
-    if (drawingRef.current) {
-      if (activeTool === 'pen' || activeTool === 'eraser') {
-        const pos = screenToCanvas(e.clientX, e.clientY);
-        setCurrentPath((prev) => {
-          const next = [...prev, pos];
-          const now = Date.now();
-          if (now - lastLiveEmitRef.current > 60 && next.length > 2) {
-            lastLiveEmitRef.current = now;
-            onLivePath?.({
-              type: activeTool,
-              points: next,
-              color: activeTool === 'eraser' ? '#fff8f0' : color,
-              strokeWidth,
-            });
+    toRender.forEach((action) => {
+      if (action.socketId && livePaths?.some?.(lp => lp.socketId === action.socketId)) return
+      ctx.save()
+      switch (action.tool) {
+        case 'line': case 'arrow': {
+          ctx.strokeStyle = action.color
+          ctx.lineWidth = action.strokeWidth
+          ctx.lineCap = 'round'
+          ctx.beginPath()
+          ctx.moveTo(action.x1, action.y1)
+          ctx.lineTo(action.x2, action.y2)
+          ctx.stroke()
+          if (action.tool === 'arrow' && action.x2 != null) {
+            const dx = action.x2 - action.x1, dy = action.y2 - action.y1
+            const len = Math.sqrt(dx * dx + dy * dy) || 1
+            const nx = dx / len, ny = dy / len
+            const hl = Math.min(16, action.strokeWidth * 4)
+            ctx.fillStyle = action.color
+            ctx.beginPath()
+            ctx.moveTo(action.x2, action.y2)
+            ctx.lineTo(action.x2 - hl * nx - hl * 0.35 * ny, action.y2 - hl * ny + hl * 0.35 * nx)
+            ctx.lineTo(action.x2 - hl * nx + hl * 0.35 * ny, action.y2 - hl * ny - hl * 0.35 * nx)
+            ctx.closePath()
+            ctx.fill()
           }
-          return next;
-        });
+          break
+        }
+        case 'pen':
+          if (action.points?.length > 1) {
+            ctx.strokeStyle = action.color
+            ctx.lineWidth = action.strokeWidth
+            ctx.lineCap = 'round'
+            ctx.lineJoin = 'round'
+            ctx.beginPath()
+            ctx.moveTo(action.points[0].x, action.points[0].y)
+            for (let i = 1; i < action.points.length; i++) {
+              ctx.lineTo(action.points[i].x, action.points[i].y)
+            }
+            ctx.stroke()
+          }
+          break
+        case 'text': {
+          ctx.font = `${action.fontSize || 20}px Inter, sans-serif`
+          ctx.fillStyle = action.color
+          ctx.textBaseline = 'top'
+          const lines = (action.text || '').split('\n')
+          lines.forEach((line, i) => {
+            ctx.fillText(line, action.x, action.y + i * (action.fontSize || 20) * 1.4)
+          })
+          break
+        }
+        case 'sticky': {
+          const sw = action.w || 180, sh = action.h || 180
+          ctx.fillStyle = action.color || '#fef08a'
+          ctx.shadowColor = 'rgba(0,0,0,0.12)'
+          ctx.shadowBlur = 6
+          ctx.shadowOffsetY = 2
+          ctx.beginPath()
+          ctx.roundRect(action.x, action.y, sw, sh, 4)
+          ctx.fill()
+          ctx.shadowColor = 'transparent'
+          ctx.shadowBlur = 0
+          ctx.shadowOffsetY = 0
+          if (action.text) {
+            ctx.fillStyle = '#1e1c26'
+            ctx.font = '14px Inter, sans-serif'
+            ctx.textBaseline = 'top'
+            ctx.save()
+            ctx.beginPath()
+            ctx.rect(action.x, action.y, sw, sh)
+            ctx.clip()
+            action.text.split('\n').forEach((line, i) => {
+              const ty = action.y + 28 + i * 20
+              if (ty < action.y + sh - 8) ctx.fillText(line, action.x + 10, ty)
+            })
+            ctx.restore()
+          }
+          break
+        }
+        case 'rect': {
+          const rw = action.w ?? 150, rh = action.h ?? 100
+          ctx.strokeStyle = action.color
+          ctx.lineWidth = action.strokeWidth
+          ctx.lineCap = 'round'
+          ctx.lineJoin = 'round'
+          ctx.strokeRect(action.x, action.y, rw, rh)
+          break
+        }
+        case 'circle': {
+          const cw = action.w ?? 100, ch = action.h ?? 100
+          ctx.strokeStyle = action.color
+          ctx.lineWidth = action.strokeWidth
+          ctx.lineCap = 'round'
+          ctx.beginPath()
+          ctx.ellipse(action.x + cw / 2, action.y + ch / 2, cw / 2 || 1, ch / 2 || 1, 0, 0, Math.PI * 2)
+          ctx.stroke()
+          break
+        }
       }
-      if (activeTool === 'rect' || activeTool === 'circle') {
-        const pos = screenToCanvas(e.clientX, e.clientY);
-        setCurrentPath((prev) => [prev[0], pos]);
+      ctx.restore()
+    })
+
+    if (selectedActionId) {
+      const sel = actions.find(a => a._id === selectedActionId)
+      if (sel) {
+        ctx.save()
+        let sx, sy, sw, sh
+        switch (sel.tool) {
+          case 'rect': sw = sel.w ?? 150; sh = sel.h ?? 100; sx = sel.x; sy = sel.y; break
+          case 'circle': sw = sel.w ?? 100; sh = sel.h ?? 100; sx = sel.x; sy = sel.y; break
+          case 'text': sw = 200; sh = (sel.fontSize || 20) * 1.4; sx = sel.x; sy = sel.y; break
+          case 'sticky': sw = sel.w ?? 180; sh = sel.h ?? 180; sx = sel.x; sy = sel.y; break
+          case 'pen': {
+            if (!sel.points?.length) break
+            const xs = sel.points.map(p => p.x), ys = sel.points.map(p => p.y)
+            sx = Math.min(...xs) - 8; sy = Math.min(...ys) - 8
+            sw = Math.max(...xs) - sx + 16; sh = Math.max(...ys) - sy + 16; break
+          }
+          case 'line': case 'arrow': {
+            const lx = Math.min(sel.x1, sel.x2 ?? sel.x1)
+            const ly = Math.min(sel.y1, sel.y2 ?? sel.y1)
+            sx = lx - 8; sy = ly - 8
+            sw = Math.abs((sel.x2 ?? sel.x1) - sel.x1) + 16
+            sh = Math.abs((sel.y2 ?? sel.y1) - sel.y1) + 16; break
+          }
+        }
+        if (sx != null) {
+          ctx.strokeStyle = '#0f71ef'
+          ctx.lineWidth = 2
+          ctx.setLineDash([6, 3])
+          ctx.strokeRect(sx, sy, sw, sh)
+          ctx.setLineDash([])
+        }
+        ctx.restore()
       }
     }
-  };
+  }, [actions, selectedActionId, livePaths])
 
-  const handleMouseUp = () => {
+  const syncCanvasSize = useCallback(() => {
+    const canvas = effectiveCanvasRef.current
+    if (!canvas) return
+    canvas.width = canvas.offsetWidth * 2
+    canvas.height = canvas.offsetHeight * 2
+    const ctx = canvas.getContext('2d')
+    renderAll(canvas, ctx, allActions)
+  }, [effectiveCanvasRef, renderAll, allActions])
+
+  useEffect(() => { syncCanvasSize() }, [fullScreen, syncCanvasSize])
+  useEffect(() => {
+    const h = () => syncCanvasSize()
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [syncCanvasSize])
+
+  useEffect(() => {
+    const canvas = effectiveCanvasRef.current
+    if (!canvas) return
+    renderAll(canvas, canvas.getContext('2d'), allActions)
+  }, [allActions, renderAll, effectiveCanvasRef])
+
+  useEffect(() => {
+    let animFrame
+    const tick = () => {
+      setLaserTrails(prev => prev.filter(t => Date.now() - t.time < LASER_FADE_MS))
+      animFrame = requestAnimationFrame(tick)
+    }
+    animFrame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(animFrame)
+  }, [])
+
+  const handleUndoClick = useCallback(() => {
+    const last = actions[actions.length - 1]
+    if (last?._id) {
+      onUndo?.(last._id)
+      setRedoStack(prev => [...prev, { action: last }])
+      if (selectedActionId === last._id) setSelectedActionId(null)
+    }
+  }, [actions, onUndo, selectedActionId])
+
+  const handleRedoClick = useCallback(() => {
+    setRedoStack(prev => {
+      if (!prev.length) return prev
+      const entry = prev[prev.length - 1]
+      const next = prev.slice(0, -1)
+      if (entry?.action) onDraw?.(entry.action)
+      return next
+    })
+  }, [onDraw])
+
+  const handleZoomIn = useCallback(() => {
+    setZoom(z => {
+      const i = ZOOM_LEVELS.findIndex(v => v >= z)
+      return ZOOM_LEVELS[Math.min((i === -1 ? ZOOM_LEVELS.length - 1 : i) + 1, ZOOM_LEVELS.length - 1)]
+    })
+  }, [])
+  const handleZoomOut = useCallback(() => {
+    setZoom(z => {
+      const i = ZOOM_LEVELS.findIndex(v => v >= z)
+      return ZOOM_LEVELS[Math.max((i === -1 ? 0 : i) - 1, 0)]
+    })
+  }, [])
+
+  const handleClear = useCallback(() => {
+    onClear?.()
+    setUndoStack([]); setRedoStack([]); setSelectedActionId(null)
+  }, [onClear])
+
+  const deleteSelected = useCallback(() => {
+    if (selectedActionId && onUndo) {
+      const sel = actions.find(a => a._id === selectedActionId)
+      if (sel) {
+        onUndo(sel._id)
+        setRedoStack(prev => [...prev, { action: sel }])
+        setSelectedActionId(null)
+      }
+    }
+  }, [selectedActionId, actions, onUndo])
+
+  const handleExport = useCallback(() => {
+    const canvas = effectiveCanvasRef.current
+    if (!canvas) return
+    const tmp = document.createElement('canvas')
+    tmp.width = canvas.offsetWidth; tmp.height = canvas.offsetHeight
+    renderAll(tmp, tmp.getContext('2d'), actions)
+    const link = document.createElement('a')
+    link.download = `${boardName || 'whiteboard'}.png`
+    link.href = tmp.toDataURL('image/png')
+    link.click()
+  }, [actions, boardName, renderAll, effectiveCanvasRef])
+
+  const handleImageInsert = useCallback((e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const img = new Image()
+      img.onload = () => {
+        onDraw?.({
+          tool: 'image', x: 100 + Math.random() * 100, y: 100 + Math.random() * 100,
+          w: img.width / 2, h: img.height / 2, src: ev.target.result, color, strokeWidth,
+        })
+      }
+      img.src = ev.target.result
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }, [onDraw, color, strokeWidth])
+
+  useEffect(() => {
+    const handleKey = (e) => {
+      const active = document.activeElement
+      if (active?.tagName === 'INPUT' || active?.tagName === 'TEXTAREA') return
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndoClick(); return }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'Z' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); handleRedoClick(); return }
+      if ((e.ctrlKey || e.metaKey) && e.key === '=') { e.preventDefault(); handleZoomIn(); return }
+      if ((e.ctrlKey || e.metaKey) && e.key === '-') { e.preventDefault(); handleZoomOut(); return }
+      if ((e.ctrlKey || e.metaKey) && e.key === '0') { e.preventDefault(); setZoom(1); setPan({ x: 0, y: 0 }); return }
+      if (e.key === 'Delete' || e.key === 'Backspace') { if (selectedActionId) { e.preventDefault(); deleteSelected() }; return }
+
+      switch (e.key.toLowerCase()) {
+        case 'v': setActiveTool('select'); break
+        case 'p': setActiveTool('pen'); break
+        case 't': setActiveTool('text'); break
+        case 's': setActiveTool('sticky'); break
+        case 'r': setActiveTool('rect'); break
+        case 'o': case 'c': setActiveTool('circle'); break
+        case 'l': setActiveTool('line'); break
+        case 'a': setActiveTool('arrow'); break
+        case 'e': setActiveTool('eraser'); break
+        case 'x': setActiveTool('laser'); break
+      }
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [handleUndoClick, handleRedoClick, handleZoomIn, handleZoomOut, deleteSelected, selectedActionId])
+
+  useEffect(() => {
+    const canvas = effectiveCanvasRef.current
+    if (!canvas) return
+    const onWheel = (e) => {
+      e.preventDefault()
+      setZoom(z => {
+        const delta = e.deltaY > 0 ? -0.05 : 0.05
+        return Math.min(3, Math.max(0.1, z + delta))
+      })
+    }
+    canvas.addEventListener('wheel', onWheel, { passive: false })
+    return () => canvas.removeEventListener('wheel', onWheel)
+  }, [effectiveCanvasRef])
+
+  const handlePointerDown = useCallback((e) => {
+    const pos = getPointerPos(e)
+    lastMouseRef.current = { x: e.clientX || e.touches?.[0]?.clientX || 0, y: e.clientY || e.touches?.[0]?.clientY || 0 }
+
+    if (e.button === 1 || spaceRef.current || activeTool === 'select') {
+      setIsPanning(true)
+      drawingRef.current = false
+      return
+    }
+
+    drawingRef.current = true
+    setIsDrawing(true)
+
+    if (activeTool === 'eraser') {
+      erasePixelsUnder(e)
+      return
+    }
+    if (activeTool === 'laser') {
+      setLaserTrails(prev => [...prev, { id: Date.now(), x: pos.x, y: pos.y, time: Date.now() }])
+      if (onLivePath) onLivePath({ type: 'laser', points: [pos], color: '#e53e3e', strokeWidth: 3 })
+      return
+    }
+    if (activeTool === 'pen') {
+      setCurrentPath([pos])
+      return
+    }
+    if (activeTool === 'text') {
+      setTextPos(pos); setShowTextInput(true); setTextInput('')
+      return
+    }
+    if (activeTool === 'sticky') {
+      setStickyPos(pos); setShowStickyInput(true); setStickyText('')
+      return
+    }
+    if (activeTool === 'rect' || activeTool === 'circle' || activeTool === 'line' || activeTool === 'arrow') {
+      setShapeStart(pos); setShapePreview(pos)
+      return
+    }
+  }, [activeTool, getPointerPos, onLivePath])
+
+  const erasePixelsUnder = useCallback((e) => {
+    const canvas = effectiveCanvasRef.current
+    if (!canvas) return
+    const pos = getPointerPos(e)
+    const ctx = canvas.getContext('2d')
+    ctx.save()
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.beginPath()
+    ctx.arc(pos.x, pos.y, strokeWidth * 3, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+  }, [getPointerPos, strokeWidth, effectiveCanvasRef])
+
+  const handlePointerMove = useCallback((e) => {
+    const pos = getPointerPos(e)
+
+    if (onCursor && !standalone) {
+      const now = Date.now()
+      if (now - lastLiveEmitRef.current > 50) {
+        lastLiveEmitRef.current = now
+        const userName = roomUsers?.find?.(u => u.socketId === u.socketId)?.name || 'User'
+        onCursor({ x: pos.x, y: pos.y, userName })
+      }
+    }
+
     if (isPanning) {
-      setIsPanning(false);
-      return;
+      const dx = e.clientX - lastMouseRef.current.x
+      const dy = e.clientY - lastMouseRef.current.y
+      lastMouseRef.current = { x: e.clientX, y: e.clientY }
+      const newPan = { x: panRef.current.x + dx, y: panRef.current.y + dy }
+      panRef.current = newPan
+      setPan(newPan)
+      return
     }
 
-    if (drawingRef.current) {
-      drawingRef.current = false;
-      setIsDrawing(false);
-      onLivePathEnd?.();
+    if (!drawingRef.current) return
 
-      if ((activeTool === 'pen' || activeTool === 'eraser') && currentPath.length > 1) {
-        const action = {
-          type: activeTool,
-          points: currentPath,
-          color: activeTool === 'eraser' ? '#fff8f0' : color,
-          strokeWidth,
-        };
-        onDraw?.(action);
-      }
+    if (activeTool === 'eraser') { erasePixelsUnder(e); return }
 
-      if (activeTool === 'rect' && currentPath.length === 2) {
-        const [start, end] = currentPath;
-        onDraw?.({
-          type: 'rect',
-          x: start.x,
-          y: start.y,
-          w: end.x - start.x,
-          h: end.y - start.y,
-          color,
-          strokeWidth,
-        });
-      }
-
-      if (activeTool === 'circle' && currentPath.length === 2) {
-        const [start, end] = currentPath;
-        onDraw?.({
-          type: 'circle',
-          x: start.x,
-          y: start.y,
-          w: end.x - start.x,
-          h: end.y - start.y,
-          color,
-          strokeWidth,
-        });
-      }
-
-      setCurrentPath([]);
+    if (activeTool === 'laser') {
+      setLaserTrails(prev => [...prev, { id: Date.now(), x: pos.x, y: pos.y, time: Date.now() }])
+      if (onLivePath) onLivePath({ type: 'laser', points: [pos], color: '#e53e3e', strokeWidth: 3 })
+      return
     }
-  };
-
-  const handleWheel = (e) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.08 : 0.08;
-    const newZoom = Math.min(Math.max(zoom + delta, 0.1), 5);
-
-    const rect = containerRef.current.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-
-    const scale = newZoom / zoom;
-    setPan({
-      x: mx - scale * (mx - pan.x),
-      y: my - scale * (my - pan.y),
-    });
-    setZoom(newZoom);
-  };
-
-  const handleStickySubmit = () => {
-    if (stickyText.trim()) {
-      onDraw?.({
-        type: 'sticky',
-        x: stickyPos.x,
-        y: stickyPos.y,
-        text: stickyText.trim(),
-        fill: color === '#1f1b11' ? '#ffd02f' : color,
-      });
+    if (activeTool === 'pen') {
+      setCurrentPath(prev => [...prev, pos])
+      const canvas = effectiveCanvasRef.current
+      if (canvas && currentPath.length > 0) {
+        const ctx = canvas.getContext('2d')
+        ctx.strokeStyle = color
+        ctx.lineWidth = strokeWidth
+        ctx.lineCap = 'round'
+        ctx.lineJoin = 'round'
+        ctx.beginPath()
+        const prevPoint = currentPath[currentPath.length - 1]
+        ctx.moveTo(prevPoint.x, prevPoint.y)
+        ctx.lineTo(pos.x, pos.y)
+        ctx.stroke()
+      }
+      return
     }
-    setShowStickyInput(false);
-    setStickyText('');
-  };
+    if (shapeStart && ['rect', 'circle', 'line', 'arrow'].includes(activeTool)) {
+      setShapePreview(pos)
+      return
+    }
+  }, [isPanning, activeTool, getPointerPos, color, strokeWidth, shapeStart, currentPath, effectiveCanvasRef, onCursor, onLivePath, standalone, roomUsers, erasePixelsUnder])
 
-  const handleTextSubmit = () => {
+  const handlePointerUp = useCallback((e) => {
+    if (isPanning) { setIsPanning(false); drawingRef.current = false; return }
+    if (!drawingRef.current) return
+    drawingRef.current = false
+    setIsDrawing(false)
+
+    const pos = getPointerPos(e)
+
+    if (activeTool === 'pen' && currentPath.length > 1) {
+      onDraw?.({ tool: 'pen', points: currentPath, color, strokeWidth })
+      setCurrentPath([])
+      return
+    }
+    if (activeTool === 'pen') setCurrentPath([])
+
+    if (activeTool === 'laser') {
+      if (onLivePathEnd) onLivePathEnd()
+      return
+    }
+
+    if ((activeTool === 'rect' || activeTool === 'circle') && shapeStart) {
+      const end = shapePreview || pos
+      const x = Math.min(shapeStart.x, end.x), y = Math.min(shapeStart.y, end.y)
+      const w = Math.abs(end.x - shapeStart.x) || 100, h = Math.abs(end.y - shapeStart.y) || 100
+      if (w > 2 || h > 2) onDraw?.({ tool: activeTool, x, y, w, h, color, strokeWidth })
+      setShapeStart(null); setShapePreview(null)
+      return
+    }
+    if ((activeTool === 'line' || activeTool === 'arrow') && shapeStart) {
+      const end = shapePreview || pos
+      const dx = end.x - shapeStart.x, dy = end.y - shapeStart.y
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        onDraw?.({ tool: activeTool, x1: shapeStart.x, y1: shapeStart.y, x2: end.x, y2: end.y, x: shapeStart.x, y: shapeStart.y, color, strokeWidth })
+      }
+      setShapeStart(null); setShapePreview(null)
+      return
+    }
+
+    if (activeTool === 'select' && selectedActionId && dragOffset) {
+      setDragOffset(null)
+    }
+  }, [isPanning, activeTool, currentPath, shapeStart, shapePreview, color, strokeWidth, onDraw, getPointerPos, selectedActionId, dragOffset, onLivePathEnd])
+
+  const handleTextSubmit = useCallback(() => {
     if (textInput.trim()) {
-      onDraw?.({
-        type: 'text',
-        x: textPos.x,
-        y: textPos.y,
-        text: textInput.trim(),
-        color,
-        strokeWidth,
-      });
+      onDraw?.({ tool: 'text', x: textPos.x, y: textPos.y, w: 200, h: 32, text: textInput, color, strokeWidth, fontSize: 20 })
     }
-    setShowTextInput(false);
-    setTextInput('');
-  };
+    setShowTextInput(false); setTextInput('')
+  }, [textInput, textPos, color, strokeWidth, onDraw])
 
-  const zoomIn = () => setZoom((z) => Math.min(z + 0.2, 5));
-  const zoomOut = () => setZoom((z) => Math.max(z - 0.2, 0.1));
-  const zoomReset = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
+  const handleStickySubmit = useCallback(() => {
+    if (stickyText.trim()) {
+      onDraw?.({ tool: 'sticky', x: stickyPos.x, y: stickyPos.y, w: 180, h: 180, color: '#fef08a', text: stickyText, strokeWidth: 0 })
+    }
+    setShowStickyInput(false); setStickyText('')
+  }, [stickyText, stickyPos, onDraw])
 
-  const getCursorStyle = () => {
-    if (isPanning || spaceRef.current) return 'grabbing';
-    if (activeTool === 'pen' || activeTool === 'eraser') return 'crosshair';
-    if (activeTool === 'select') return 'grab';
-    return 'default';
-  };
+  const handleSelectDown = useCallback((e) => {
+    if (activeTool !== 'select') return false
+    const pos = getPointerPos(e)
+    const reversed = [...actions].reverse()
+    const hit = reversed.find(a => hitTestPoint(a, pos.x, pos.y))
+    if (hit) {
+      setSelectedActionId(hit._id || null)
+      setDragOffset({ x: pos.x - (hit.x || 0), y: pos.y - (hit.y || 0) })
+    } else {
+      setSelectedActionId(null)
+      setIsPanning(true)
+      drawingRef.current = false
+    }
+    return true
+  }, [activeTool, getPointerPos, actions])
+
+  const effectivePointerDown = useCallback((e) => {
+    if (activeTool === 'select') {
+      const handled = handleSelectDown(e)
+      if (handled) return
+    }
+    handlePointerDown(e)
+  }, [activeTool, handleSelectDown, handlePointerDown])
+
+  const cursorStyle = spaceRef.current || isPanning ? 'grab' :
+    activeTool === 'eraser' ? 'crosshair' :
+    activeTool === 'laser' ? 'crosshair' :
+    activeTool === 'text' ? 'text' :
+    activeTool === 'select' ? 'default' : 'crosshair'
+
+  const toolDefs = [
+    { key: 'select', icon: MousePointer2, label: 'Select', shortcut: 'V' },
+    { key: 'pen', icon: Pencil, label: 'Pen', shortcut: 'P' },
+    { key: 'text', icon: Type, label: 'Text', shortcut: 'T' },
+    { key: 'sticky', icon: StickyNote, label: 'Sticky', shortcut: 'S' },
+    { key: 'rect', icon: Square, label: 'Rectangle', shortcut: 'R' },
+    { key: 'circle', icon: Circle, label: 'Circle', shortcut: 'O' },
+    { key: 'line', icon: Minus, label: 'Line', shortcut: 'L' },
+    { key: 'arrow', icon: ArrowUpRight, label: 'Arrow', shortcut: 'A' },
+    { key: 'eraser', icon: Eraser, label: 'Eraser', shortcut: 'E' },
+    { key: 'laser', icon: Zap, label: 'Laser', shortcut: 'X' },
+  ]
 
   return (
-    <div className="flex h-full w-full">
-      {/* Left toolbar */}
-      <div className="w-14 bg-surface-container-low border-r border-outline-variant/30 flex flex-col items-center py-3 gap-1 shrink-0 z-20">
-        {!readOnly && tools.map((tool) => {
-          const Icon = tool.icon;
-          const active = activeTool === tool.id;
-          return (
-            <button
-              key={tool.id}
-              onClick={() => setActiveTool(tool.id)}
-              title={tool.label}
-              className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 ${
-                active
-                  ? 'bg-primary-container text-on-primary-container'
-                  : 'text-on-surface/45 hover:bg-surface-container hover:text-on-surface'
-              }`}
-            >
-              {active && (
-                <motion.div
-                  layoutId="wb-tool"
-                  className="absolute inset-0 bg-primary-container rounded-xl"
-                  transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-                />
-              )}
-              <Icon size={18} className="relative z-10" />
-            </button>
-          );
-        })}
-
-        {/* Color picker trigger */}
-        {!readOnly && (
-        <div className="relative mt-2">
-          <button
-            onClick={() => { setShowColorPicker(!showColorPicker); setShowStrokePicker(false); }}
-            className="w-8 h-8 rounded-full border-2 border-outline-variant/40 hover:scale-110 transition-transform"
-            style={{ backgroundColor: color }}
-            title="Color"
+    <div ref={containerRef} className="w-full h-full bg-white flex flex-col relative select-none">
+      {showTextInput && (
+        <div className="absolute z-50" style={{ left: textPos.x * zoom + pan.x, top: textPos.y * zoom + pan.y }}>
+          <textarea
+            autoFocus
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleTextSubmit() }
+              if (e.key === 'Escape') { setShowTextInput(false); setTextInput('') }
+              e.stopPropagation()
+            }}
+            onBlur={handleTextSubmit}
+            className="bg-white/95 border border-zoom-blue/50 rounded px-2 py-1 text-sm text-black resize-none outline-none min-w-[120px]"
+            style={{ fontSize: 20 * zoom, color }}
+            placeholder="Type here..."
+            rows={1}
           />
-          <AnimatePresence>
-            {showColorPicker && (
-              <motion.div
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -8 }}
-                className="absolute left-12 top-0 bg-surface-container-low border border-outline-variant/30 rounded-xl p-2 flex gap-1.5 flex-col z-50 shadow-lg"
-              >
-                {COLORS.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => { setColor(c); setShowColorPicker(false); }}
-                    className={`w-7 h-7 rounded-full border-2 transition-transform hover:scale-110 ${
-                      color === c ? 'border-on-surface scale-110' : 'border-transparent'
-                    }`}
-                    style={{ backgroundColor: c }}
-                  />
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
-        )}
+      )}
 
-        {/* Stroke width trigger */}
-        {!readOnly && (
-        <div className="relative">
-          <button
-            onClick={() => { setShowStrokePicker(!showStrokePicker); setShowColorPicker(false); }}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface/50 hover:bg-surface-container transition-colors"
-            title="Stroke width"
-          >
-            <div className="rounded-full bg-on-surface" style={{ width: strokeWidth + 4, height: strokeWidth + 4 }} />
-          </button>
-          <AnimatePresence>
-            {showStrokePicker && (
-              <motion.div
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -8 }}
-                className="absolute left-12 top-0 bg-surface-container-low border border-outline-variant/30 rounded-xl p-2 flex flex-col gap-2 z-50 shadow-lg"
-              >
-                {STROKE_WIDTHS.map((sw) => (
-                  <button
-                    key={sw}
-                    onClick={() => { setStrokeWidth(sw); setShowStrokePicker(false); }}
-                    className={`w-10 h-6 rounded-lg flex items-center justify-center transition-colors ${
-                      strokeWidth === sw ? 'bg-primary-container' : 'hover:bg-surface-container'
-                    }`}
-                  >
-                    <div className="rounded-full bg-on-surface" style={{ width: sw + 4, height: sw + 4 }} />
-                  </button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
+      {showStickyInput && (
+        <div className="absolute z-50" style={{ left: stickyPos.x * zoom + pan.x, top: stickyPos.y * zoom + pan.y }}>
+          <textarea
+            autoFocus
+            value={stickyText}
+            onChange={(e) => setStickyText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') { setShowStickyInput(false); setStickyText('') }
+              e.stopPropagation()
+            }}
+            onBlur={handleStickySubmit}
+            className="bg-yellow-100 border border-yellow-300 rounded px-2 py-1 text-sm text-black resize-none outline-none min-w-[150px] min-h-[60px]"
+            placeholder="Sticky note..."
+          />
         </div>
-        )}
+      )}
 
-        <div className="flex-1" />
+      {laserTrails.map(trail => {
+        const progress = Math.min((Date.now() - trail.time) / LASER_FADE_MS, 1)
+        return (
+          <div
+            key={trail.id}
+            className="absolute rounded-full pointer-events-none"
+            style={{
+              left: trail.x * zoom + pan.x - 5,
+              top: trail.y * zoom + pan.y - 5,
+              width: 10, height: 10,
+              backgroundColor: '#e53e3e',
+              opacity: 1 - progress,
+              boxShadow: '0 0 6px 2px rgba(229,62,62,0.4)',
+            }}
+          />
+        )
+      })}
 
-        <div className="border-t border-outline-variant/20 pt-2 w-10 flex flex-col items-center gap-1">
-          <button
-            onClick={onTogglePomodoro}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors relative ${
-              pomodoroOpen
-                ? 'bg-primary-container text-on-primary-container'
-                : 'text-on-surface/40 hover:bg-surface-container hover:text-on-surface'
-            }`}
-            title="Pomodoro Timer"
-          >
-            <Timer size={16} />
+      <div className="flex-1 relative overflow-hidden" style={{ cursor: cursorStyle }}>
+        <canvas
+          ref={effectiveCanvasRef}
+          onMouseDown={effectivePointerDown}
+          onMouseMove={handlePointerMove}
+          onMouseUp={handlePointerUp}
+          onMouseLeave={() => { drawingRef.current = false; setIsDrawing(false); setIsPanning(false) }}
+          onTouchStart={effectivePointerDown}
+          onTouchMove={handlePointerMove}
+          onTouchEnd={handlePointerUp}
+          className="absolute inset-0 w-full h-full touch-none"
+          style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: '0 0' }}
+        />
+      </div>
+
+      <div
+        className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30
+          flex items-center gap-1 bg-zoom-dark rounded-xl px-2.5 py-1.5 shadow-xl border border-white/8"
+      >
+        <button onClick={handleUndoClick} disabled={!actions.length}
+          title="Undo (Ctrl+Z)"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+          <Undo2 size={15} />
+        </button>
+        <button onClick={handleRedoClick} disabled={!redoStack.length}
+          title="Redo (Ctrl+Shift+Z)"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+          <Redo2 size={15} />
+        </button>
+
+        <div className="w-px h-5 bg-white/15 mx-0.5" />
+
+        {toolDefs.map(({ key, icon: Icon, label, shortcut }) => (
+          <button key={key} onClick={() => setActiveTool(key)}
+            title={`${label} (${shortcut})`}
+            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
+              activeTool === key ? 'bg-zoom-blue text-white' : 'text-white/60 hover:text-white hover:bg-white/10'
+            }`}>
+            <Icon size={14} />
           </button>
+        ))}
 
-          <button
-            onClick={onToggleRecorder}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors relative ${
-              recorderOpen
-                ? 'bg-error/10 text-error'
-                : 'text-on-surface/40 hover:bg-surface-container hover:text-on-surface'
-            }`}
-            title="Screen Recording"
-          >
-            <Video size={16} />
-            {recording && (
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-error animate-pulse" />
-            )}
-          </button>
+        <div className="w-px h-5 bg-white/15 mx-0.5" />
 
-          <button
-            onClick={onTogglePanel ? () => onTogglePanel('chat') : onToggleChat}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors relative ${
-              panelTab === 'chat' || chatOpen
-                ? 'bg-primary-container text-on-primary-container'
-                : 'text-on-surface/40 hover:bg-surface-container hover:text-on-surface'
-            }`}
-            title="Chat"
-          >
-            <MessageCircle size={16} />
-          </button>
-
-          <button
-            onClick={onTogglePanel ? () => onTogglePanel('members') : undefined}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors relative ${
-              panelTab === 'members'
-                ? 'bg-primary-container text-on-primary-container'
-                : 'text-on-surface/40 hover:bg-surface-container hover:text-on-surface'
-            }`}
-            title="Members"
-          >
-            <Users size={16} />
-          </button>
-
-          <button
-            onClick={onTogglePanel ? () => onTogglePanel('files') : onToggleFilePreview}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors relative ${
-              panelTab === 'files' || filePreviewOpen
-                ? 'bg-primary-container text-on-primary-container'
-                : 'text-on-surface/40 hover:bg-surface-container hover:text-on-surface'
-            }`}
-            title="Shared Files"
-          >
-            <FileText size={16} />
-            {fileCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full bg-primary text-on-primary text-[9px] font-bold flex items-center justify-center px-1">
-                {fileCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={onTogglePanel ? () => onTogglePanel('invite') : undefined}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors relative ${
-              panelTab === 'invite'
-                ? 'bg-primary-container text-on-primary-container'
-                : 'text-on-surface/40 hover:bg-surface-container hover:text-on-surface'
-            }`}
-            title="Invite"
-          >
-            <UserPlus size={16} />
-          </button>
-        </div>
-
-        <div className="border-t border-outline-variant/20 pt-2 w-10 flex flex-col items-center gap-1">
-          {roomUsers.slice(0, 5).map((u, i) => (
-            <div
-              key={u._id || i}
-              className="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center text-[10px] font-bold text-on-secondary-container ring-2 ring-surface-container-low"
-              title={u.name}
-            >
-              {u.name?.charAt(0)?.toUpperCase()}
-            </div>
+        <div className="flex items-center gap-0.5">
+          {COLORS.map((c) => (
+            <button key={c} onClick={() => setColor(c)} title={c}
+              className={`w-4.5 h-4.5 rounded-full border transition-all ${
+                color === c ? 'border-zoom-blue ring-1 ring-zoom-blue scale-110' : 'border-white/20 hover:border-white/50'
+              }`} style={{ backgroundColor: c }} />
           ))}
         </div>
 
-        <button
-          onClick={onToggleFullScreen}
-          className="w-10 h-10 rounded-xl flex items-center justify-center text-on-surface/40 hover:bg-surface-container hover:text-on-surface transition-colors mt-2"
-          title={fullScreen ? 'Exit full screen' : 'Full screen'}
-        >
-          {fullScreen ? <Maximize size={16} className="rotate-90" /> : <Maximize size={16} />}
+        {activeTool !== 'laser' && activeTool !== 'text' && activeTool !== 'select' && (
+          <>
+            <div className="w-px h-5 bg-white/15 mx-0.5" />
+            <div className="flex items-center gap-0.5">
+              {STROKE_WIDTHS.map((sw) => (
+                <button key={sw} onClick={() => setStrokeWidth(sw)} title={`${sw}px`}
+                  className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${
+                    strokeWidth === sw ? 'bg-zoom-blue/30 text-zoom-blue' : 'text-white/50 hover:text-white hover:bg-white/10'
+                  }`}>
+                  <div className="rounded-full bg-current" style={{ width: sw + 2, height: sw + 2 }} />
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        <div className="w-px h-5 bg-white/15 mx-0.5" />
+
+        <button onClick={handleZoomOut} title="Zoom Out (Ctrl+-)"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors">
+          <Minus size={13} />
+        </button>
+        <span className="text-[10px] text-white/60 font-mono min-w-[36px] text-center select-none">
+          {Math.round(zoom * 100)}%
+        </span>
+        <button onClick={handleZoomIn} title="Zoom In (Ctrl+=)"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors">
+          <Plus size={13} />
+        </button>
+
+        <div className="w-px h-5 bg-white/15 mx-0.5" />
+
+        <button onClick={handleExport} title="Export as PNG"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors">
+          <Download size={13} />
+        </button>
+
+        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageInsert} />
+        <button onClick={() => fileInputRef.current?.click()} title="Insert Image"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
         </button>
 
         {onClear && (
-          <button
-            onClick={onClear}
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-on-surface/30 hover:bg-error-container hover:text-error transition-colors mt-1"
-            title="Clear board"
-          >
-            <Trash2 size={16} />
+          <button onClick={handleClear} title="Clear Board"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 hover:text-red-300 hover:bg-white/10 transition-colors">
+            <Trash2 size={13} />
+          </button>
+        )}
+
+        {onToggleFullScreen && (
+          <button onClick={onToggleFullScreen} title={fullScreen ? 'Exit Full Screen (Esc)' : 'Full Screen'}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors">
+            {fullScreen ? <Minimize size={13} /> : <Maximize size={13} />}
           </button>
         )}
       </div>
-
-      {/* Main canvas */}
-      <div
-        ref={containerRef}
-        className="flex-1 relative overflow-hidden"
-        style={{ cursor: getCursorStyle(), touchAction: 'none' }}
-        onPointerDown={handleMouseDown}
-        onPointerMove={handleMouseMove}
-        onPointerUp={handleMouseUp}
-        onPointerLeave={handleMouseUp}
-        onWheel={handleWheel}
-      >
-        {/* Breadcrumb */}
-        <div className="absolute top-0 left-0 right-0 h-10 bg-surface/80 backdrop-blur-sm border-b border-outline-variant/20 flex items-center px-4 text-xs text-on-surface/50 z-10 gap-2">
-          <span className="text-on-surface font-medium">{boardName || 'Room'}</span>
-          {actions.length > 0 && (
-            <>
-              <div className="w-px h-4 bg-outline-variant/30" />
-              <span>{actions.length} element{actions.length !== 1 ? 's' : ''}</span>
-            </>
-          )}
-          <div className="flex-1" />
-          {standalone ? (
-            <>
-              <div className="w-2 h-2 rounded-full bg-green-500" />
-              <span>Autosaved</span>
-            </>
-          ) : (
-            <>
-              <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-error'}`} />
-              <span>{connected ? 'Connected' : 'Connecting...'}</span>
-              <div className="w-px h-4 bg-outline-variant/30 mx-1" />
-              <Users size={14} />
-              <span>{roomUsers.length} online</span>
-            </>
-          )}
-        </div>
-
-        {/* Canvas */}
-        <canvas
-          ref={(node) => {
-            canvasRef.current = node;
-            if (externalCanvasRef) externalCanvasRef.current = node;
-          }}
-          className="absolute inset-0 top-10"
-          style={{ touchAction: 'none' }}
-        />
-
-        {/* Remote cursors */}
-        {Object.entries(remoteCursors).map(([id, cursor]) => (
-          <motion.div
-            key={id}
-            className="absolute pointer-events-none z-20"
-            animate={{ left: cursor.x * zoom + pan.x, top: cursor.y * zoom + pan.y + 40 }}
-            transition={{ type: 'spring', stiffness: 200, damping: 20 }}
-          >
-            <MousePointer2 size={16} className="text-secondary -rotate-12" fill="currentColor" />
-            <span className="ml-1 inline-block rounded-full bg-secondary px-2 py-0.5 text-[9px] font-semibold text-white">
-              {cursor.name?.split(' ')[0]}
-            </span>
-          </motion.div>
-        ))}
-
-        {/* Sticky note input */}
-        <AnimatePresence>
-          {showStickyInput && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="absolute z-30 bg-primary-container rounded-2xl p-4 shadow-xl w-56"
-              style={{
-                left: stickyPos.x * zoom + pan.x,
-                top: stickyPos.y * zoom + pan.y + 40,
-              }}
-            >
-              <textarea
-                autoFocus
-                value={stickyText}
-                onChange={(e) => setStickyText(e.target.value)}
-                placeholder="Type your note..."
-                className="w-full h-24 bg-transparent text-sm text-on-primary-container placeholder:text-on-primary-container/40 outline-none resize-none"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleStickySubmit(); }
-                  if (e.key === 'Escape') setShowStickyInput(false);
-                }}
-              />
-              <div className="flex justify-end gap-2 mt-2">
-                <button onClick={() => setShowStickyInput(false)} className="text-xs text-on-primary-container/50 px-2 py-1">Cancel</button>
-                <button onClick={handleStickySubmit} className="text-xs font-semibold text-on-primary-container bg-surface/30 px-3 py-1 rounded-lg hover:bg-surface/50">Add</button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Text input */}
-        <AnimatePresence>
-          {showTextInput && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="absolute z-30 bg-surface-container-low border border-outline-variant/30 rounded-xl p-3 shadow-xl"
-              style={{
-                left: textPos.x * zoom + pan.x,
-                top: textPos.y * zoom + pan.y + 40,
-              }}
-            >
-              <input
-                autoFocus
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-                placeholder="Type text..."
-                className="w-64 bg-transparent text-sm text-on-surface placeholder:text-on-surface/30 outline-none"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleTextSubmit();
-                  if (e.key === 'Escape') setShowTextInput(false);
-                }}
-              />
-              <div className="flex justify-end gap-2 mt-2">
-                <button onClick={() => setShowTextInput(false)} className="text-xs text-on-surface/50 px-2 py-1">Cancel</button>
-                <button onClick={handleTextSubmit} className="text-xs font-semibold text-on-primary bg-primary px-3 py-1 rounded-lg hover:opacity-90">Add</button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Zoom controls */}
-        <div className="absolute bottom-4 left-4 flex items-center gap-1 bg-surface-container-low border border-outline-variant/30 rounded-xl px-1 py-1 z-10">
-          <button onClick={zoomOut} className="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface/50 hover:bg-surface-container transition-colors">
-            <Minus size={14} />
-          </button>
-          <button onClick={zoomReset} className="w-12 h-8 rounded-lg flex items-center justify-center text-xs font-medium text-on-surface/60 hover:bg-surface-container transition-colors">
-            {Math.round(zoom * 100)}%
-          </button>
-          <button onClick={zoomIn} className="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface/50 hover:bg-surface-container transition-colors">
-            <Plus size={14} />
-          </button>
-          <div className="w-px h-5 bg-outline-variant/30 mx-0.5" />
-          <button onClick={zoomReset} className="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface/50 hover:bg-surface-container transition-colors">
-            <Maximize size={14} />
-          </button>
-        </div>
-      </div>
     </div>
-  );
+  )
 }
