@@ -248,8 +248,8 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
                 if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
                 params.encodings[0] = {
                   ...params.encodings[0],
-                  maxBitrate: 4500000,
-                  maxFramerate: 60,
+                  maxBitrate: 6500000,
+                  maxFramerate: 90,
                   scaleResolutionDownBy: 1,
                   networkPriority: 'high',
                   adaptivePtime: true,
@@ -303,7 +303,7 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
     try {
       const disp = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          frameRate: { ideal: 45, max: 60 },
+          frameRate: { ideal: 60, max: 90 },
           width: { ideal: 1920, max: 2560 },
           height: { ideal: 1440, max: 2160 },
           cursor: 'always',
@@ -326,8 +326,8 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
           }
           params.encodings[0] = {
             ...params.encodings[0],
-            maxBitrate: 4500000,
-            maxFramerate: 60,
+            maxBitrate: 6500000,
+            maxFramerate: 90,
             scaleResolutionDownBy: 1,
             networkPriority: 'high',
             adaptivePtime: true,
