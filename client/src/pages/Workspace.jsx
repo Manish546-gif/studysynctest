@@ -63,11 +63,11 @@ function VideoTile({ stream, name, isLocal, muted, mirror, presenting, onClick, 
   return (
     <div
       onClick={onClick}
-      className={`relative rounded-xl min-w-[16rem] min-h-[9rem] max-h-[18rem] overflow-hidden bg-surface-container-high aspect-video transition-all ${
+      className={`relative rounded overflow-hidden bg-zoom-darker aspect-video transition-all ${
         active
-          ? 'border-2 border-primary ring-2 ring-primary/30'
-          : 'border border-outline-variant/20'
-      } ${onClick ? 'cursor-pointer hover:border-primary/50' : ''}`}
+          ? 'ring-2 ring-zoom-blue'
+          : 'ring-1 ring-white/10'
+      } ${onClick ? 'cursor-pointer hover:ring-zoom-blue/50' : ''}`}
     >
       {stream ? (
         <video
@@ -79,35 +79,35 @@ function VideoTile({ stream, name, isLocal, muted, mirror, presenting, onClick, 
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center">
-          <div className="w-14 h-14 rounded-2xl bg-primary-container flex items-center justify-center">
-            <span className="text-lg font-bold text-on-primary-container">{name?.charAt(0)?.toUpperCase()}</span>
+          <div className="w-12 h-12 rounded bg-zoom-blue/20 flex items-center justify-center">
+            <span className="text-sm font-semibold text-zoom-blue">{name?.charAt(0)?.toUpperCase()}</span>
           </div>
         </div>
       )}
       {presenting && (
-        <div className="absolute top-2 left-2 flex items-center gap-1 bg-primary text-on-primary rounded-lg px-2 py-1">
-          <Monitor size={11} />
-          <span className="text-[10px] font-bold">Presenting</span>
+        <div className="absolute top-1 left-1 flex items-center gap-0.5 bg-zoom-blue text-white rounded px-1.5 py-0.5">
+          <Monitor size={9} />
+          <span className="text-[9px] font-medium">Presenting</span>
         </div>
       )}
-      <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/50 backdrop-blur-sm rounded-lg px-2 py-1">
-        <span className="text-[11px] font-medium text-white truncate max-w-[100px]">{name}{isLocal ? ' (You)' : ''}</span>
+      <div className="absolute bottom-1 left-1 flex items-center gap-1 bg-black/60 rounded px-1.5 py-0.5">
+        <span className="text-[10px] font-medium text-white truncate max-w-[80px]">{name}{isLocal ? ' (You)' : ''}</span>
         {tabAway && !isLocal && (
-          <span className="text-[9px] bg-orange-500/80 text-white rounded px-1 py-0.5 font-medium">Away</span>
+          <span className="text-[8px] bg-orange-500/80 text-white rounded px-1 py-0.5 font-medium">Away</span>
         )}
       </div>
       {pinned && (
-        <div className="absolute top-2 right-2">
-          <div className="w-6 h-6 rounded-full bg-primary/80 flex items-center justify-center">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
+        <div className="absolute top-1 right-1">
+          <div className="w-4 h-4 rounded bg-zoom-blue flex items-center justify-center">
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
           </div>
         </div>
       )}
       {speakerLevel > 0.15 && !isLocal && (
-        <div className="absolute bottom-2 right-2">
-          <div className="flex items-end gap-0.5 h-3">
+        <div className="absolute bottom-1 right-1">
+          <div className="flex items-end gap-0.5 h-2.5">
             {[0.2, 0.5, 0.8].map((threshold, i) => (
-              <div key={i} className={`w-1 rounded-full transition-all ${speakerLevel > threshold ? 'bg-success h-full' : 'bg-white/20 h-1'}`} />
+              <div key={i} className={`w-0.5 rounded-full transition-all ${speakerLevel > threshold ? 'bg-green-400 h-full' : 'bg-white/20 h-0.5'}`} />
             ))}
           </div>
         </div>
@@ -545,45 +545,46 @@ export default function Workspace() {
       )}
 
       {/* Top Header */}
-      <div className="flex items-center gap-3 px-4 lg:px-6 py-3 bg-surface border-b border-outline-variant/20 shrink-0">
-        <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-sm text-on-surface/50 hover:text-on-surface transition-colors">
-          <ArrowLeft size={16} />
+      <div className="flex items-center gap-2 px-3 py-2 bg-zoom-dark shrink-0">
+        <button onClick={() => navigate('/dashboard')} className="flex items-center gap-1.5 text-xs text-white/60 hover:text-white transition-colors">
+          <ArrowLeft size={14} />
+          <span className="hidden sm:inline">Back</span>
         </button>
-        <div className="w-px h-5 bg-outline-variant/30" />
-        <h1 className="text-sm font-semibold text-on-surface">{room.name}</h1>
+        <div className="w-px h-4 bg-white/10" />
+        <h1 className="text-xs font-semibold text-white truncate max-w-[200px]">{room.name}</h1>
         <button
           onClick={openSettings}
-          className="w-7 h-7 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container hover:text-on-surface transition-colors"
+          className="w-6 h-6 rounded flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors"
           title="Room settings"
         >
-          <Settings size={14} />
+          <Settings size={13} />
         </button>
 
         <button
           onClick={copyCode}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-tertiary-container text-on-tertiary-container rounded-xl text-xs font-bold hover:shadow-sm transition-shadow"
+          className="flex items-center gap-1 px-2 py-1 bg-white/10 hover:bg-white/15 rounded text-xs font-mono text-white/80 transition"
         >
-          <KeyRound size={13} />
-          <span className="font-mono tracking-widest">{room.code}</span>
-          {codeCopied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
+          <KeyRound size={11} />
+          <span className="tracking-wider">{room.code}</span>
+          {codeCopied ? <Check size={11} className="text-green-400" /> : <Copy size={11} />}
         </button>
 
         <button
           onClick={() => setInviteLinkOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 text-on-surface/60 rounded-xl text-xs font-medium transition"
+          className="flex items-center gap-1 px-2 py-1 bg-white/5 hover:bg-white/10 text-white/50 rounded text-xs transition"
           title="Copy invite link"
         >
-          <Link2 size={13} />
-          Invite
+          <Link2 size={11} />
+          <span className="hidden sm:inline">Invite</span>
         </button>
 
         <AnimatePresence>
           {codeCopied && (
             <motion.span
-              initial={{ opacity: 0, x: -8 }}
+              initial={{ opacity: 0, x: -4 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0 }}
-              className="text-xs text-success font-medium"
+              className="text-[10px] text-green-400 font-medium"
             >
               Copied!
             </motion.span>
@@ -591,15 +592,15 @@ export default function Workspace() {
         </AnimatePresence>
 
         <div className="ml-auto flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-error animate-pulse'}`} />
-          <span className="text-xs text-on-surface/40">{connected ? 'Connected' : 'Connecting...'}</span>
+          <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-400' : 'bg-red-400 animate-pulse'}`} />
+          <span className="text-[10px] text-white/40">{connected ? 'Connected' : 'Connecting...'}</span>
           {room.host?._id === user?.id && (
             <button
               onClick={handleDeleteRoom}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface/30 hover:bg-error-container hover:text-error transition-colors ml-2"
+              className="w-6 h-6 rounded flex items-center justify-center text-white/30 hover:text-red-400 hover:bg-white/10 transition-colors"
               title="Delete room"
             >
-              <Trash2 size={14} />
+              <Trash2 size={12} />
             </button>
           )}
         </div>
@@ -961,29 +962,29 @@ export default function Workspace() {
           {chatOpen && (
             <motion.div
               initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 360, opacity: 1 }}
+              animate={{ width: 320, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="bg-surface-container-low border-l border-outline-variant/20 flex flex-col overflow-hidden shrink-0"
+              className="bg-zoom-dark border-l border-white/10 flex flex-col overflow-hidden shrink-0"
             >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant/20">
-                <div className="flex items-center gap-1">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                <div className="flex items-center gap-0.5">
                   {['chat', 'activity'].map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setChatTab(tab)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      className={`px-2.5 py-1 rounded text-[11px] font-medium transition-all ${
                         chatTab === tab
-                          ? 'bg-primary text-on-primary'
-                          : 'text-on-surface/40 hover:bg-surface-container'
+                          ? 'bg-zoom-blue text-white'
+                          : 'text-white/40 hover:text-white/60'
                       }`}
                     >
                       {tab === 'chat' ? 'Chat' : 'Activity'}
                     </button>
                   ))}
                 </div>
-                <button onClick={() => setChatOpen(false)} className="w-7 h-7 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors">
-                  <X size={16} />
+                <button onClick={() => setChatOpen(false)} className="w-5 h-5 rounded flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors">
+                  <X size={13} />
                 </button>
               </div>
               <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -1004,9 +1005,9 @@ export default function Workspace() {
                   )
                 ) : messages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <MessageCircle size={28} className="text-on-surface/15 mb-3" />
-                    <p className="text-sm text-on-surface/40">No messages yet</p>
-                    <p className="text-xs text-on-surface/25 mt-1">Say hello to your study group</p>
+                    <MessageCircle size={24} className="text-white/15 mb-2" />
+                    <p className="text-xs text-white/40">No messages yet</p>
+                    <p className="text-[10px] text-white/25 mt-1">Say hello to your study group</p>
                   </div>
                 ) : (
                   messages.map((msg) => {
@@ -1019,18 +1020,18 @@ export default function Workspace() {
                     const isOwn = msg.userId === user?.id
                     const time = formatMessageTime(msg.createdAt)
                     return (
-                      <div key={msg._id || `${msg.createdAt}-${msg.userId}-${msg.text}`} className="flex items-start gap-2.5">
-                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                          isOwn ? 'bg-primary text-on-primary' : 'bg-primary-container text-on-primary-container'
+                      <div key={msg._id || `${msg.createdAt}-${msg.userId}-${msg.text}`} className="flex items-start gap-2">
+                        <div className={`w-6 h-6 rounded flex items-center justify-center shrink-0 ${
+                          isOwn ? 'bg-zoom-blue text-white' : 'bg-white/10 text-white/60'
                         }`}>
-                          <span className="text-[11px] font-bold">{initials}</span>
+                          <span className="text-[9px] font-semibold">{initials}</span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-baseline gap-2 mb-0.5">
-                            <span className="text-xs font-semibold text-on-surface">{msg.name}{isOwn ? ' (You)' : ''}</span>
-                            <span className="text-[10px] text-on-surface/30">{time}</span>
+                          <div className="flex items-baseline gap-1.5 mb-0.5">
+                            <span className="text-[11px] font-medium text-white/80">{msg.name}{isOwn ? ' (You)' : ''}</span>
+                            <span className="text-[9px] text-white/25">{time}</span>
                           </div>
-                          <p className="text-sm text-on-surface/70 leading-relaxed break-words">{msg.text}</p>
+                          <p className="text-xs text-white/60 leading-relaxed break-words">{msg.text}</p>
                         </div>
                       </div>
                     )
@@ -1038,21 +1039,21 @@ export default function Workspace() {
                 )}
               </div>
               {chatTab === 'chat' && (
-              <form onSubmit={handleSendChat} className="p-3 border-t border-outline-variant/20">
-                <div className="flex items-center gap-2 bg-surface-container-lowest rounded-xl px-3 py-2 border border-outline-variant/20">
+              <form onSubmit={handleSendChat} className="p-2 border-t border-white/10">
+                <div className="flex items-center gap-1.5 bg-white/5 rounded px-2.5 py-1.5 border border-white/10">
                   <input
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     onKeyDown={handleChatKeyDown}
                     placeholder="Type a message..."
-                    className="flex-1 bg-transparent text-sm text-on-surface placeholder:text-on-surface/30 outline-none"
+                    className="flex-1 bg-transparent text-xs text-white placeholder:text-white/30 outline-none"
                   />
-                  <button type="submit" className="text-primary p-1.5 rounded-lg hover:bg-primary-container/30 transition-colors">
-                    <Send size={16} />
+                  <button type="submit" className="text-zoom-blue p-1 hover:bg-zoom-blue/10 rounded transition-colors">
+                    <Send size={13} />
                   </button>
                 </div>
                 {typingLabel && (
-                  <p className="text-on-surface/40 text-xs italic mt-1.5 px-1">{typingLabel}</p>
+                  <p className="text-white/30 text-[10px] italic mt-1 px-1">{typingLabel}</p>
                 )}
               </form>
               )}
@@ -1065,29 +1066,29 @@ export default function Workspace() {
           {membersOpen && (
             <motion.div
               initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 320, opacity: 1 }}
+              animate={{ width: 280, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="bg-surface-container-low border-l border-outline-variant/20 flex flex-col overflow-hidden shrink-0"
+              className="bg-zoom-dark border-l border-white/10 flex flex-col overflow-hidden shrink-0"
             >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant/20">
-                <span className="text-sm font-semibold text-on-surface">Members ({displayMembers.length})</span>
-                <button onClick={() => setMembersOpen(false)} className="w-7 h-7 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors">
-                  <X size={16} />
+              <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                <span className="text-xs font-medium text-white/80">Members ({displayMembers.length})</span>
+                <button onClick={() => setMembersOpen(false)} className="w-5 h-5 rounded flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors">
+                  <X size={13} />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
                 {displayMembers.map((member, i) => (
-                  <div key={member._id || i} className="flex items-center gap-3 p-3 rounded-xl hover:bg-surface-container transition-colors">
-                    <div className={`w-10 h-10 rounded-xl ${memberColors[i % memberColors.length]} flex items-center justify-center text-white font-bold text-sm`}>
+                  <div key={member._id || i} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/5 transition-colors">
+                    <div className={`w-7 h-7 rounded ${memberColors[i % memberColors.length]} flex items-center justify-center text-white font-medium text-[10px]`}>
                       {member.name?.charAt(0)?.toUpperCase() || '?'}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-on-surface truncate">
+                      <p className="text-[11px] font-medium text-white/80 truncate">
                         {member.name || 'Unknown'}
-                        {member._id === user?.id && <span className="ml-1 text-[10px] text-primary">(You)</span>}
+                        {member._id === user?.id && <span className="ml-1 text-[9px] text-zoom-blue">(You)</span>}
                       </p>
-                      <p className="text-[11px] text-on-surface/40">
+                      <p className="text-[9px] text-white/30">
                         {member._id === room.host?._id ? 'Host' : 'Member'}
                       </p>
                     </div>
@@ -1266,89 +1267,89 @@ export default function Workspace() {
       <ShortcutOverlay open={shortcutOpen} onClose={() => setShortcutOpen(false)} />
 
       {/* Reaction toast notifications */}
-      <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[80] flex flex-col items-center gap-2 pointer-events-none">
+      <div className="fixed top-12 left-1/2 -translate-x-1/2 z-[80] flex flex-col items-center gap-1.5 pointer-events-none">
         <AnimatePresence>
           {reactionToasts.map((t) => (
             <motion.div
               key={t.id}
-              initial={{ opacity: 0, y: -20, scale: 0.9 }}
+              initial={{ opacity: 0, y: -12, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -10, scale: 0.95 }}
-              className="bg-surface-container-high border border-outline-variant/20 rounded-2xl px-4 py-2.5 shadow-lg flex items-center gap-2"
+              exit={{ opacity: 0, y: -8, scale: 0.97 }}
+              className="bg-zoom-dark border border-white/10 rounded-lg px-3 py-1.5 shadow-lg flex items-center gap-1.5"
             >
-              <span className="text-lg">{t.emoji}</span>
-              <span className="text-sm text-on-surface font-medium">{t.name}</span>
+              <span className="text-sm">{t.emoji}</span>
+              <span className="text-[11px] text-white/70 font-medium">{t.name}</span>
             </motion.div>
           ))}
         </AnimatePresence>
       </div>
 
       {/* Bottom Control Bar */}
-      <div className="flex items-center justify-center gap-3 px-6 py-4 bg-surface border-t border-outline-variant/20 shrink-0">
+      <div className="flex items-center justify-center gap-1.5 px-4 py-2 bg-zoom-dark border-t border-white/5 shrink-0">
         <button
           onClick={toggleMic}
-          className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
+          className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
             micOn
-              ? 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80'
-              : 'bg-error text-white'
+              ? 'bg-white/10 text-white hover:bg-white/15'
+              : 'bg-red-500 text-white hover:bg-red-600'
           }`}
           title={micOn ? 'Mute mic' : 'Unmute mic'}
         >
-          {micOn ? <Mic size={20} /> : <MicOff size={20} />}
+          {micOn ? <Mic size={16} /> : <MicOff size={16} />}
         </button>
 
         <button
           onClick={toggleCam}
-          className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
+          className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
             camOn
-              ? 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80'
-              : 'bg-error text-white'
+              ? 'bg-white/10 text-white hover:bg-white/15'
+              : 'bg-red-500 text-white hover:bg-red-600'
           }`}
           title={camOn ? 'Turn off camera' : 'Turn on camera'}
         >
-          {camOn ? <Video size={20} /> : <VideoOff size={20} />}
+          {camOn ? <Video size={16} /> : <VideoOff size={16} />}
         </button>
 
         <button
           onClick={() => toggleScreenShare(shareAudio)}
-          className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
+          className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
             screenSharing
-              ? 'bg-primary text-on-primary'
-              : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80'
+              ? 'bg-zoom-blue text-white'
+              : 'bg-white/10 text-white hover:bg-white/15'
           }`}
           title={screenSharing ? 'Stop sharing' : 'Share screen'}
         >
-          {screenSharing ? <MonitorOff size={20} /> : <Monitor size={20} />}
+          {screenSharing ? <MonitorOff size={16} /> : <Monitor size={16} />}
         </button>
 
         {screenSharing && (
           <button
             onClick={() => setShareAudio((v) => !v)}
-            className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
+            className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
               shareAudio
-                ? 'bg-primary text-on-primary'
-                : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80'
+                ? 'bg-zoom-blue text-white'
+                : 'bg-white/10 text-white hover:bg-white/15'
             }`}
             title={shareAudio ? 'Mute shared audio' : 'Share audio'}
           >
-            {shareAudio ? <Volume2 size={20} /> : <VolumeOff size={20} />}
+            {shareAudio ? <Volume2 size={16} /> : <VolumeOff size={16} />}
           </button>
         )}
 
-        <div className="w-px h-8 bg-outline-variant/30 mx-1" />
+        <div className="w-px h-5 bg-white/10 mx-1" />
 
         <button
           onClick={() => {
             if (whiteboardOpen) { toggleWbPanel('chat'); return; }
             setChatOpen((v) => !v); setMembersOpen(false); setSettingsOpen(false);
           }}
-          className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
-            whiteboardOpen ? (wbPanelTab === 'chat' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80')
-              : (chatOpen ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80')
+          className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
+            whiteboardOpen ? (wbPanelTab === 'chat' ? 'bg-zoom-blue text-white' : 'bg-white/10 text-white hover:bg-white/15')
+              : (chatOpen ? 'bg-zoom-blue text-white' : 'bg-white/10 text-white hover:bg-white/15')
           }`}
           title="Chat"
         >
-          <MessageCircle size={20} />
+          <MessageCircle size={16} />
         </button>
 
         <button
@@ -1356,21 +1357,21 @@ export default function Workspace() {
             if (whiteboardOpen) { toggleWbPanel('members'); return; }
             setMembersOpen((v) => !v); setChatOpen(false); setSettingsOpen(false);
           }}
-          className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
-            whiteboardOpen ? (wbPanelTab === 'members' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80')
-              : (membersOpen ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80')
+          className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
+            whiteboardOpen ? (wbPanelTab === 'members' ? 'bg-zoom-blue text-white' : 'bg-white/10 text-white hover:bg-white/15')
+              : (membersOpen ? 'bg-zoom-blue text-white' : 'bg-white/10 text-white hover:bg-white/15')
           }`}
           title="Members"
         >
-          <Users size={20} />
+          <Users size={16} />
         </button>
 
         <button
           onClick={() => setInviteLinkOpen(true)}
-          className="w-12 h-12 rounded-2xl flex items-center justify-center bg-surface-container-high text-on-surface hover:bg-surface-container-high/80 transition-all duration-200"
+          className="w-9 h-9 rounded-lg flex items-center justify-center bg-white/10 text-white hover:bg-white/15 transition-all duration-150"
           title="Invite"
         >
-          <UserPlus size={20} />
+          <UserPlus size={16} />
         </button>
 
         <button
@@ -1380,36 +1381,36 @@ export default function Workspace() {
             setRecorderOpen(false)
             setWhiteboardOpen(true)
           }}
-          className="w-12 h-12 rounded-2xl flex items-center justify-center bg-tertiary-container text-on-tertiary-container hover:shadow-md transition-all duration-200"
+          className="w-9 h-9 rounded-lg flex items-center justify-center bg-white/10 text-white hover:bg-white/15 transition-all duration-150"
           title="Open Whiteboard"
         >
-          <Pencil size={20} />
+          <Pencil size={16} />
         </button>
 
-        <div className="w-px h-8 bg-outline-variant/30 mx-1" />
+        <div className="w-px h-5 bg-white/10 mx-1" />
 
         <button
           onClick={() => { setPomodoroOpen((v) => !v); setRecorderOpen(false); setFilePreviewOpen(false); }}
-          className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
+          className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
             pomodoroOpen
-              ? 'bg-primary text-on-primary'
-              : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80'
+              ? 'bg-zoom-blue text-white'
+              : 'bg-white/10 text-white hover:bg-white/15'
           }`}
           title="Pomodoro Timer"
         >
-          <Timer size={20} />
+          <Timer size={16} />
         </button>
 
         <button
           onClick={() => { setRecorderOpen((v) => !v); setPomodoroOpen(false); setFilePreviewOpen(false); }}
-          className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
+          className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
             recorderOpen
-              ? 'bg-error text-white'
-              : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80'
+              ? 'bg-red-500 text-white'
+              : 'bg-white/10 text-white hover:bg-white/15'
           }`}
           title="Screen Recording"
         >
-          <Video size={20} />
+          <Video size={16} />
         </button>
 
         <button
@@ -1417,37 +1418,37 @@ export default function Workspace() {
             if (whiteboardOpen) { toggleWbPanel('files'); return; }
             setFilePreviewOpen((v) => !v); setPomodoroOpen(false); setRecorderOpen(false); setSettingsOpen(false);
           }}
-          className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
-            whiteboardOpen ? (wbPanelTab === 'files' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80')
-              : (filePreviewOpen ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80')
+          className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
+            whiteboardOpen ? (wbPanelTab === 'files' ? 'bg-zoom-blue text-white' : 'bg-white/10 text-white hover:bg-white/15')
+              : (filePreviewOpen ? 'bg-zoom-blue text-white' : 'bg-white/10 text-white hover:bg-white/15')
           }`}
           title="File Preview"
         >
-          <FileText size={20} />
+          <FileText size={16} />
         </button>
 
-        <div className="w-px h-8 bg-outline-variant/30 mx-1" />
+        <div className="w-px h-5 bg-white/10 mx-1" />
 
         <ReactionPicker onReaction={sendReaction} onToggleHand={toggleHand} />
 
         {viewerCount > 0 && (
-          <div className="flex items-center gap-1 px-2.5 py-1.5 bg-success/10 text-success rounded-xl text-xs font-medium" title="Screen share viewers">
-            <Eye size={14} />
+          <div className="flex items-center gap-1 px-2 py-1 bg-green-500/20 text-green-400 rounded text-[10px] font-medium" title="Screen share viewers">
+            <Eye size={12} />
             <span>{viewerCount}</span>
           </div>
         )}
 
         <button
           onClick={() => setBreakoutOpen(!breakoutOpen)}
-          className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
-            breakoutOpen ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-high/80'
+          className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
+            breakoutOpen ? 'bg-zoom-blue text-white' : 'bg-white/10 text-white hover:bg-white/15'
           }`}
           title="Breakout Rooms"
         >
-          <SplitSquareHorizontal size={20} />
+          <SplitSquareHorizontal size={16} />
         </button>
 
-        <div className="w-px h-8 bg-outline-variant/30 mx-1" />
+        <div className="w-px h-5 bg-white/10 mx-1" />
 
         <button
           onClick={() => {
@@ -1456,10 +1457,10 @@ export default function Workspace() {
               navigate('/dashboard')
             }
           }}
-          className="w-12 h-12 rounded-2xl flex items-center justify-center bg-error text-white hover:bg-error/90 transition-all duration-200"
+          className="w-9 h-9 rounded-lg flex items-center justify-center bg-red-500 text-white hover:bg-red-600 transition-all duration-150"
           title="Leave room"
         >
-          <PhoneOff size={20} />
+          <PhoneOff size={16} />
         </button>
       </div>
     </div>
