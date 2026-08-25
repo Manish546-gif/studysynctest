@@ -43,7 +43,7 @@ router.post('/token', auth, async (req, res) => {
       canPublishData: true,
     });
 
-    const token = at.toJwt();
+    const token = await at.toJwt();
 
     const serverUrl = LIVEKIT_URL || undefined;
 
