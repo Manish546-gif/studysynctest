@@ -11,6 +11,16 @@ const ICE_SERVERS = {
   rtcpMuxPolicy: 'require',
 };
 
+const SCREEN_ENCODING = {
+  maxBitrate: 20000000,
+  maxFramerate: 120,
+  scaleResolutionDownBy: 1,
+  networkPriority: 'high',
+  priority: 'high',
+  adaptivePtime: true,
+  degradationPreference: 'maintain-resolution',
+};
+
 export function useWebRTC(socketRef, roomId, _localUserId) {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState({});
@@ -21,7 +31,9 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
   const peersRef = useRef({});
   const localStreamRef = useRef(null);
   const screenTrackRef = useRef(null);
+  const screenAudioTrackRef = useRef(null);
   const cameraTrackRef = useRef(null);
+  const micTrackRef = useRef(null);
   const adoptedDisplayRef = useRef(false);
   const switchingRef = useRef(false);
 
@@ -81,6 +93,20 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
     return pc;
   }, [socketRef]);
 
+  const renegotiate = useCallback(async (remoteId) => {
+    const pc = peersRef.current[remoteId];
+    if (!pc) return;
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      if (socketRef.current) {
+        socketRef.current.emit('webrtc-offer', { target: remoteId, offer });
+      }
+    } catch (err) {
+      console.error('Renegotiation offer failed:', err);
+    }
+  }, [socketRef]);
+
   const createOffer = useCallback(async (remoteSocketId, stream) => {
     const pc = createPeer(remoteSocketId, stream, true);
     try {
@@ -96,6 +122,69 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
       console.error('Error creating offer:', err);
     }
   }, [createPeer, socketRef]);
+
+  const applyScreenEncoding = useCallback((sender) => {
+    if (!sender) return;
+    sender.getParameters().then((params) => {
+      if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
+      params.encodings[0] = { ...params.encodings[0], ...SCREEN_ENCODING };
+      sender.setParameters(params).catch(() => {});
+    });
+  }, []);
+
+  const addTrackToAllPeers = useCallback((track, stream) => {
+    Object.entries(peersRef.current).forEach(([remoteId, pc]) => {
+      try {
+        const existingSender = pc.getSenders().find((s) => s.track && s.track.kind === track.kind);
+        if (existingSender) {
+          existingSender.replaceTrack(track);
+          if (track.kind === 'video') applyScreenEncoding(existingSender);
+        } else {
+          pc.addTrack(track, stream);
+          renegotiate(remoteId);
+        }
+      } catch (err) {
+        console.error('Failed to add track to peer:', err);
+      }
+    });
+  }, [renegotiate, applyScreenEncoding]);
+
+  const replaceAudioTrack = useCallback((track) => {
+    Object.entries(peersRef.current).forEach(([remoteId, pc]) => {
+      try {
+        const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
+        if (sender) {
+          sender.replaceTrack(track);
+        } else if (track) {
+          const stream = localStreamRef.current || new MediaStream([track]);
+          pc.addTrack(track, stream);
+          renegotiate(remoteId);
+        }
+      } catch (err) {
+        console.error('Failed to swap outgoing audio track:', err);
+      }
+    });
+  }, [renegotiate]);
+
+  const replaceVideoTrack = useCallback((track) => {
+    Object.entries(peersRef.current).forEach(([remoteId, pc]) => {
+      try {
+        const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
+        if (sender) {
+          sender.replaceTrack(track);
+          if (track && track.kind === 'video' && track.label && track.label.includes('screen')) {
+            applyScreenEncoding(sender);
+          }
+        } else if (track) {
+          const stream = localStreamRef.current || new MediaStream([track]);
+          pc.addTrack(track, stream);
+          renegotiate(remoteId);
+        }
+      } catch (err) {
+        console.error('Failed to swap outgoing video track:', err);
+      }
+    });
+  }, [renegotiate, applyScreenEncoding]);
 
   useEffect(() => {
     const socket = socketRef.current;
@@ -192,8 +281,6 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
     return stream;
   }, [getLocalStream, socketRef]);
 
-  // Lazy-start media on first mic/cam use. Attaches tracks to already-
-  // established peers and renegotiates so late-joiners see existing feeds.
   const ensureStream = useCallback(async () => {
     if (localStreamRef.current) return localStreamRef.current;
     const stream = await getLocalStream(true, true);
@@ -213,85 +300,67 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
 
   const toggleMic = useCallback(async () => {
     const stream = localStreamRef.current || (await ensureStream());
-    if (stream) {
-      const audioTrack = stream.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        setMicOn(audioTrack.enabled);
-      }
+    if (!stream) return;
+    const audioTrack = stream.getAudioTracks()[0];
+    if (!audioTrack) return;
+
+    const enabling = !audioTrack.enabled;
+    audioTrack.enabled = enabling;
+    setMicOn(enabling);
+    micTrackRef.current = enabling ? audioTrack : null;
+
+    if (enabling) {
+      replaceAudioTrack(audioTrack);
     }
-  }, [ensureStream]);
+  }, [ensureStream, replaceAudioTrack]);
 
   const toggleCam = useCallback(async () => {
     const stream = localStreamRef.current || (await ensureStream());
-    if (stream) {
-      const videoTrack = stream.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
-        setCamOn(videoTrack.enabled);
-      }
-    }
-  }, [ensureStream]);
+    if (!stream) return;
+    const videoTrack = stream.getVideoTracks()[0];
+    if (!videoTrack) return;
 
-  // Swap the outgoing video track on every peer without renegotiation. If a
-  // peer has no video sender yet (joined before any media), fall back to
-  // addTrack + fresh offer so the new track actually reaches them.
-  const replaceVideoTrack = useCallback((track) => {
-    Object.entries(peersRef.current).forEach(([remoteId, pc]) => {
-      try {
-        const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
-        if (sender) {
-          sender.replaceTrack(track).then(() => {
-            // Apply high-quality encoding for screen share tracks
-            if (track && track.kind === 'video' && track.label && track.label.includes('screen')) {
-              sender.getParameters().then((params) => {
-                if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
-                params.encodings[0] = {
-                  ...params.encodings[0],
-                  maxBitrate: 6500000,
-                  maxFramerate: 90,
-                  scaleResolutionDownBy: 1,
-                  networkPriority: 'high',
-                  adaptivePtime: true,
-                };
-                sender.setParameters(params).catch(() => {});
-              });
-            }
-          });
-        } else if (track) {
-          const stream = localStreamRef.current || new MediaStream([track]);
-          pc.addTrack(track, stream);
-          createOffer(remoteId, stream);
-        }
-      } catch (err) {
-        console.error('Failed to swap outgoing video track:', err);
-      }
-    });
-  }, [createOffer]);
+    const enabling = !videoTrack.enabled;
+    videoTrack.enabled = enabling;
+    setCamOn(enabling);
+
+    if (enabling && !screenSharing) {
+      replaceVideoTrack(videoTrack);
+    }
+  }, [ensureStream, replaceVideoTrack, screenSharing]);
 
   const stopScreenShare = useCallback(() => {
     if (!screenTrackRef.current) return;
-    if (screenTrackRef.current) {
-      screenTrackRef.current.stop();
-      screenTrackRef.current = null;
+    screenTrackRef.current.stop();
+    screenTrackRef.current = null;
+
+    if (screenAudioTrackRef.current) {
+      screenAudioTrackRef.current.stop();
+      screenAudioTrackRef.current = null;
     }
+
     const cam = cameraTrackRef.current;
     cameraTrackRef.current = null;
     if (cam) {
       replaceVideoTrack(cam);
     } else if (adoptedDisplayRef.current) {
-      // We had no camera before sharing; drop the display stream entirely.
       adoptedDisplayRef.current = false;
       localStreamRef.current = null;
       setLocalStream(null);
       setCamOn(false);
     }
+
+    const mic = micTrackRef.current;
+    if (mic) {
+      replaceAudioTrack(mic);
+    }
+
     setScreenStream(null);
     setScreenSharing(false);
     if (socketRef.current) {
       socketRef.current.emit('screen-share-changed', { sharing: false });
     }
-  }, [replaceVideoTrack, socketRef]);
+  }, [replaceVideoTrack, replaceAudioTrack, socketRef]);
 
   const toggleScreenShare = useCallback(async (shareAudio = false) => {
     if (switchingRef.current) return null;
@@ -303,51 +372,54 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
     try {
       const disp = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          frameRate: { ideal: 60, max: 90 },
-          width: { ideal: 1920, max: 2560 },
+          frameRate: { ideal: 120, max: 240 },
+          width: { ideal: 2560, max: 3840 },
           height: { ideal: 1440, max: 2160 },
           cursor: 'always',
           displaySurface: 'monitor',
         },
-        audio: shareAudio ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false } : false,
+        audio: shareAudio
+          ? {
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false,
+              sampleRate: 48000,
+              channelCount: 2,
+            }
+          : false,
       });
+
       const screenTrack = disp.getVideoTracks()[0];
       if (!screenTrack) return null;
 
-    
-      try {
-        const sender = peersRef.current && Object.values(peersRef.current)
-          .map(pc => pc.getSenders().find(s => s.track === screenTrack))
-          .find(Boolean);
-        if (sender) {
-          const params = sender.getParameters();
-          if (!params.encodings || params.encodings.length === 0) {
-            params.encodings = [{}];
-          }
-          params.encodings[0] = {
-            ...params.encodings[0],
-            maxBitrate: 6500000,
-            maxFramerate: 90,
-            scaleResolutionDownBy: 1,
-            networkPriority: 'high',
-            adaptivePtime: true,
-          };
-          await sender.setParameters(params);
-        }
-      } catch {}
+      const dispAudioTrack = disp.getAudioTracks()[0] || null;
 
       screenTrack.addEventListener('ended', () => stopScreenShare());
+      if (dispAudioTrack) {
+        dispAudioTrack.addEventListener('ended', () => {
+          if (screenAudioTrackRef.current) {
+            screenAudioTrackRef.current = null;
+            const mic = micTrackRef.current;
+            if (mic) replaceAudioTrack(mic);
+          }
+        });
+      }
+
       screenTrackRef.current = screenTrack;
 
       let stream = localStreamRef.current;
       if (!stream) {
-        // No camera/mic yet: adopt the display capture as the outgoing stream.
         adoptedDisplayRef.current = true;
         localStreamRef.current = disp;
         setLocalStream(disp);
       }
       cameraTrackRef.current = stream ? stream.getVideoTracks()[0] || null : null;
       replaceVideoTrack(screenTrack);
+
+      if (dispAudioTrack) {
+        screenAudioTrackRef.current = dispAudioTrack;
+        replaceAudioTrack(dispAudioTrack);
+      }
 
       setScreenStream(disp);
       setScreenSharing(true);
@@ -361,7 +433,7 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
     } finally {
       switchingRef.current = false;
     }
-  }, [screenSharing, stopScreenShare, replaceVideoTrack, socketRef]);
+  }, [screenSharing, stopScreenShare, replaceVideoTrack, replaceAudioTrack, socketRef]);
 
   const stopMedia = useCallback(() => {
     const wasSharing = !!screenTrackRef.current;
@@ -372,16 +444,23 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
         socketRef.current.emit('screen-share-changed', { sharing: false });
       }
     }
+    if (screenAudioTrackRef.current) {
+      screenAudioTrackRef.current.stop();
+      screenAudioTrackRef.current = null;
+    }
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
     }
     adoptedDisplayRef.current = false;
     cameraTrackRef.current = null;
+    micTrackRef.current = null;
     switchingRef.current = false;
     setLocalStream(null);
     setScreenSharing(false);
     setScreenStream(null);
+    setMicOn(false);
+    setCamOn(false);
     Object.values(peersRef.current).forEach((pc) => pc.close());
     peersRef.current = {};
     setRemoteStreams({});
