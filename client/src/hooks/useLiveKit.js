@@ -32,7 +32,8 @@ export function useLiveKit(_socketRef, roomId, user) {
     room.participants.forEach((participant) => {
       const tracks = [];
       participant.trackPublications.forEach((pub) => {
-        if (pub.track && pub.source !== Track.Source.ScreenShare && pub.source !== Track.Source.ScreenShareAudio) {
+        if (pub.track && pub.source !== Track.Source.ScreenShareAudio) {
+          // Include camera, microphone, AND screen share tracks
           tracks.push(pub.track);
         }
       });
@@ -107,18 +108,13 @@ export function useLiveKit(_socketRef, roomId, user) {
   }, [rebuildRemoteStreams]);
 
   const handleTrackSubscribed = useCallback((track, publication, participant) => {
-    if (track.source === Track.Source.ScreenShare || track.source === Track.Source.ScreenShareAudio) {
-      rebuildLocalScreenStream();
-      rebuildScreenStream();
-    } else {
-      rebuildRemoteStreams();
-    }
-  }, [rebuildRemoteStreams, rebuildScreenStream, rebuildLocalScreenStream]);
+    rebuildRemoteStreams();
+    rebuildLocalScreenStream();
+  }, [rebuildRemoteStreams, rebuildLocalScreenStream]);
 
   const handleTrackUnsubscribed = useCallback((track) => {
     rebuildRemoteStreams();
-    rebuildScreenStream();
-  }, [rebuildRemoteStreams, rebuildScreenStream]);
+  }, [rebuildRemoteStreams]);
 
   const handleLocalTrackPublished = useCallback((publication) => {
     if (publication.source === Track.Source.Camera) {
