@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -52,7 +52,7 @@ import useRoomReactions from '../hooks/useRoomReactions'
 
 const ROOM_TAGS = ['Study', 'Project', 'Review', 'Homework', 'Exam Prep', 'Discussion']
 
-function VideoTile({ stream, name, isLocal, muted, mirror, presenting, onClick, active, contain, tabAway, speakerLevel, pinned }) {
+function VideoTile({ stream, name, isLocal, muted, mirror, presenting, onClick, active, contain, tabAway, speakerLevel, pinned, watchLabel }) {
   const videoRef = useRef(null)
 
   useEffect(() => {
@@ -82,13 +82,23 @@ function VideoTile({ stream, name, isLocal, muted, mirror, presenting, onClick, 
       } ${onClick ? 'cursor-pointer hover:ring-zoom-blue/50' : ''}`}
     >
       {stream ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted={muted}
-          className={`w-full h-full ${contain ? 'object-contain' : 'object-cover'} ${mirror ? '-scale-x-100' : ''}`}
-        />
+        <>
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted={muted}
+            className={`w-full h-full ${contain ? 'object-contain' : 'object-cover'} ${mirror ? '-scale-x-100' : ''}`}
+          />
+          {watchLabel && (
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-zoom-blue text-white rounded-lg text-[11px] font-semibold pointer-events-none">
+                <Monitor size={12} />
+                {watchLabel}
+              </div>
+            </div>
+          )}
+        </>
       ) : (
         <div className="w-full h-full flex items-center justify-center">
           <div className="w-12 h-12 rounded bg-zoom-blue/20 flex items-center justify-center">
@@ -127,6 +137,21 @@ function VideoTile({ stream, name, isLocal, muted, mirror, presenting, onClick, 
     </div>
   )
 }
+
+const MemoizedVideoTile = React.memo(VideoTile, (prev, next) => {
+  return prev.stream === next.stream
+    && prev.name === next.name
+    && prev.muted === next.muted
+    && prev.active === next.active
+    && prev.pinned === next.pinned
+    && prev.mirror === next.mirror
+    && prev.presenting === next.presenting
+    && prev.tabAway === next.tabAway
+    && prev.watchLabel === next.watchLabel
+    && (next.speakerLevel || 0) < 0.15
+    && (prev.speakerLevel || 0) < 0.15
+    && prev.isLocal === next.isLocal
+})
 
 function formatMessageTime(value) {
   if (!value) return ''
@@ -518,12 +543,14 @@ export default function Workspace() {
     pinnedId === 'local'
       ? !!(localStream || screenSharing)
       : !!(pinnedId && (remoteStreams[pinnedId] || remoteScreenStreams[pinnedId]));
-  const stageTarget = pinnedValid ? pinnedId : presenterIds.length > 0 ? presenterIds[0] : null;
+  // Stage only shows when user explicitly clicked "Watch" on a screen share.
+  // No auto-follow — user chooses what to watch.
+  const stageTarget = pinnedValid ? pinnedId : null;
   const stageIsLocal = stageTarget === 'local';
   const stageStream = stageIsLocal
     ? (screenSharing && screenStream ? screenStream : localStream)
     : (stageTarget ? (remoteScreenStreams[stageTarget] || remoteStreams[stageTarget]) : null);
-  const stageActive = !!stageStream;
+  const stageActive = !!stageTarget && !!stageStream;
   const stageName = stageIsLocal
     ? `${user?.name || 'You'} (You)`
     : screenSharers[stageTarget] || displayMembers.find((m) => m._id === stageTarget)?.name || 'Participant';
@@ -534,6 +561,7 @@ export default function Workspace() {
     else if (pinnedId && pinnedId !== 'local' && !remoteStreams[pinnedId] && !remoteScreenStreams[pinnedId]) setPinnedId(null);
   }, [pinnedId, remoteStreams, remoteScreenStreams, localStream, screenSharing]);
 
+  // Exit fullscreen when leaving watch mode
   useEffect(() => {
     if (!stageActive && document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
@@ -813,7 +841,7 @@ export default function Workspace() {
                 {/* Switcher: pick which shared screen to watch */}
                 {presenterIds.length > 1 && (
                   <div className="shrink-0 flex items-center gap-2 flex-wrap">
-                    <span className="text-[11px] font-medium text-on-surface/50">Shared screens:</span>
+                    <span className="text-[11px] font-medium text-on-surface/50">Watching:</span>
                     {presenterIds.map((pid) => (
                       <button
                         key={pid}
@@ -897,7 +925,7 @@ export default function Workspace() {
                 {/* Filmstrip of cameras */}
                 <div className="shrink-0 flex gap-2 overflow-x-auto pb-1">
                   <div className="w-44 shrink-0">
-                    <VideoTile
+                    <MemoizedVideoTile
                       stream={localStream}
                       name={user?.name || 'You'}
                       isLocal={true}
@@ -909,60 +937,69 @@ export default function Workspace() {
                       pinned={pinnedId === 'local'}
                     />
                   </div>
-                  {remoteUserIds.map((socketId) => (
-                    <div key={socketId} className="w-44 shrink-0">
-                      <VideoTile
-                        stream={remoteScreenStreams[socketId] || remoteStreams[socketId]}
-                        name={
-                          displayMembers.find((m) => m._id === socketId)?.name || 'Participant'
-                        }
-                        isLocal={false}
-                        muted={false}
-                        presenting={!!screenSharers[socketId] || !!remoteScreenStreams[socketId]}
-                        active={stageTarget === socketId}
-                        onClick={() => setPinnedId(stageTarget === socketId ? null : socketId)}
-                        pinned={pinnedId === socketId}
-                        tabAway={tabVisibility[socketId] && !tabVisibility[socketId].visible}
-                        speakerLevel={speakerLevels[socketId] || 0}
-                      />
-                    </div>
-                  ))}
+                  {remoteUserIds.map((socketId) => {
+                    const isStageTarget = stageTarget === socketId;
+                    const isScreenSharer = !!screenSharers[socketId] || !!remoteScreenStreams[socketId];
+                    return (
+                      <div key={socketId} className="w-44 shrink-0">
+                        <MemoizedVideoTile
+                          stream={remoteScreenStreams[socketId] || remoteStreams[socketId]}
+                          name={
+                            displayMembers.find((m) => m._id === socketId)?.name || 'Participant'
+                          }
+                          isLocal={false}
+                          muted={true}
+                          presenting={isScreenSharer}
+                          active={isStageTarget}
+                          onClick={() => setPinnedId(isStageTarget ? null : socketId)}
+                          pinned={pinnedId === socketId}
+                          tabAway={tabVisibility[socketId] && !tabVisibility[socketId].visible}
+                          speakerLevel={0}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               </>
             ) : (
               <div className="flex-1 overflow-y-auto">
                 <div className="grid gap-2 justify-center content-start" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
                   {/* Local video */}
-                  <VideoTile
+                  <MemoizedVideoTile
                     stream={localStream}
                     name={user?.name || 'You'}
                     isLocal={true}
                     muted={true}
                     mirror={!screenSharing}
                     presenting={screenSharing}
-                    onClick={() => setPinnedId(pinnedId === 'local' ? null : 'local')}
+                    watchLabel={screenSharing ? 'Watch Stream' : null}
+                    onClick={() => screenSharing && setPinnedId('local')}
                     pinned={pinnedId === 'local'}
                     tabAway={false}
                     speakerLevel={0}
                   />
 
-                  {/* Remote videos */}
-                  {remoteUserIds.map((socketId) => (
-                    <VideoTile
-                      key={socketId}
-                      stream={remoteScreenStreams[socketId] || remoteStreams[socketId]}
-                      name={
-                        displayMembers.find((m) => m._id === socketId)?.name || 'Participant'
-                      }
-                      isLocal={false}
-                      muted={false}
-                      presenting={!!screenSharers[socketId] || !!remoteScreenStreams[socketId]}
-                      onClick={() => setPinnedId(pinnedId === socketId ? null : socketId)}
-                      pinned={pinnedId === socketId}
-                      tabAway={tabVisibility[socketId] && !tabVisibility[socketId].visible}
-                      speakerLevel={speakerLevels[socketId] || 0}
-                    />
-                  ))}
+                  {/* Remote videos — all muted, only the screen shares get Watch button */}
+                  {remoteUserIds.map((socketId) => {
+                    const isScreenSharer = !!screenSharers[socketId] || !!remoteScreenStreams[socketId];
+                    return (
+                      <MemoizedVideoTile
+                        key={socketId}
+                        stream={remoteScreenStreams[socketId] || remoteStreams[socketId]}
+                        name={
+                          displayMembers.find((m) => m._id === socketId)?.name || 'Participant'
+                        }
+                        isLocal={false}
+                        muted={true}
+                        presenting={isScreenSharer}
+                        watchLabel={isScreenSharer ? 'Watch Stream' : null}
+                        onClick={() => isScreenSharer && setPinnedId(socketId)}
+                        pinned={pinnedId === socketId}
+                        tabAway={tabVisibility[socketId] && !tabVisibility[socketId].visible}
+                        speakerLevel={0}
+                      />
+                    );
+                  })}
 
                   {/* Audio-only participants (no video stream) */}
                   {displayMembers
