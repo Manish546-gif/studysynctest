@@ -200,7 +200,8 @@ export default function Workspace() {
   const [shortcutOpen, setShortcutOpen] = useState(false)
   const [pinnedId, setPinnedId] = useState(null)
   const [reactionToasts, setReactionToasts] = useState([])
-  const [shareAudio, setShareAudio] = useState(false)
+  const [shareAudio, setShareAudio] = useState(true)
+  const [screenSharePickerOpen, setScreenSharePickerOpen] = useState(false)
   const toastIdRef = useRef(0)
   const pomodoroSessionsRef = useRef(0)
   const sessionStartRef = useRef(Date.now())
@@ -209,6 +210,7 @@ export default function Workspace() {
   const isTypingRef = useRef(false)
   const halfScreenCanvasRef = useRef(null)
   const fullScreenCanvasRef = useRef(null)
+  const screenSharePickerRef = useRef(null)
 
   const {
     socket: socketRef,
@@ -264,6 +266,23 @@ export default function Workspace() {
     stopMedia,
   } = useLiveKit(socketRef, roomId, user)
 
+  // Close screen share picker when sharing starts
+  useEffect(() => {
+    if (screenSharing) setScreenSharePickerOpen(false);
+  }, [screenSharing]);
+
+  // Close picker on click outside
+  useEffect(() => {
+    if (!screenSharePickerOpen) return;
+    const handler = (e) => {
+      if (screenSharePickerRef.current && !screenSharePickerRef.current.contains(e.target)) {
+        setScreenSharePickerOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handler);
+    return () => document.removeEventListener('pointerdown', handler);
+  }, [screenSharePickerOpen]);
+
   const { floatingReactions, raisedHands: _raisedHands, sendReaction, toggleHand } = useRoomReactions(socketRef)
 
 
@@ -303,13 +322,13 @@ export default function Workspace() {
       if (e.ctrlKey || e.metaKey) {
         if (e.key === 'm' || e.key === 'M') { e.preventDefault(); toggleMic() }
         if (e.key === 'd' || e.key === 'D') { e.preventDefault(); toggleCam() }
-        if (e.shiftKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); toggleScreenShare() }
+        if (e.shiftKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); if (screenSharing) { toggleScreenShare(); } else { setScreenSharePickerOpen(true); } }
         if (e.shiftKey && (e.key === 'r' || e.key === 'R')) { e.preventDefault(); setRecorderOpen((v) => !v) }
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [toggleMic, toggleCam, toggleScreenShare])
+  }, [toggleMic, toggleCam, toggleScreenShare, screenSharing])
 
   // --- Tab visibility tracking ---
   useEffect(() => {
@@ -1395,22 +1414,68 @@ export default function Workspace() {
         </button>
 
         {canScreenShare && (
-          <button
-            onClick={() => toggleScreenShare(shareAudio)}
-            className={`w-10 h-10 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center transition-all duration-150 shrink-0 ${
-              screenSharing
-                ? 'bg-zoom-blue text-white'
-                : 'bg-white/10 text-white hover:bg-white/15'
-            }`}
-            title={screenSharing ? 'Stop sharing' : 'Share screen'}
-          >
-            {screenSharing ? <MonitorOff size={16} /> : <Monitor size={16} />}
-          </button>
+          <div className="relative shrink-0" ref={screenSharePickerRef}>
+            <button
+              onClick={() => {
+                if (screenSharing) {
+                  toggleScreenShare();
+                } else {
+                  setScreenSharePickerOpen((v) => !v);
+                }
+              }}
+              className={`w-10 h-10 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
+                screenSharing
+                  ? 'bg-zoom-blue text-white'
+                  : 'bg-white/10 text-white hover:bg-white/15'
+              }`}
+              title={screenSharing ? 'Stop sharing' : 'Share screen'}
+            >
+              {screenSharing ? <MonitorOff size={16} /> : <Monitor size={16} />}
+            </button>
+            {/* Screen share picker popover */}
+            <AnimatePresence>
+              {screenSharePickerOpen && !screenSharing && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-zoom-dark border border-white/10 rounded-lg p-3 shadow-xl z-50 w-56"
+                >
+                  <p className="text-[11px] font-semibold text-white mb-2">Share Screen</p>
+                  <button
+                    onClick={() => {
+                      setShareAudio((v) => !v);
+                    }}
+                    className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-white/10 transition-colors mb-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      {shareAudio ? <Volume2 size={13} className="text-white" /> : <VolumeOff size={13} className="text-white/50" />}
+                      <span className={`text-[11px] font-medium ${shareAudio ? 'text-white' : 'text-white/50'}`}>Share audio</span>
+                    </div>
+                    <div className={`w-7 h-4 rounded-full transition-colors relative ${shareAudio ? 'bg-zoom-blue' : 'bg-white/20'}`}>
+                      <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${shareAudio ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setScreenSharePickerOpen(false);
+                      toggleScreenShare(shareAudio);
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-zoom-blue text-white rounded text-[11px] font-semibold hover:bg-[#0b5fc7] transition-colors"
+                  >
+                    <Monitor size={12} />
+                    Start sharing
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         )}
 
         {screenSharing && canScreenShare && (
           <button
-            onClick={() => setShareAudio((v) => !v)}
+            onClick={() => toggleScreenShare(shareAudio)}
             className={`w-10 h-10 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center transition-all duration-150 shrink-0 ${
               shareAudio
                 ? 'bg-zoom-blue text-white'

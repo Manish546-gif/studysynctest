@@ -349,6 +349,40 @@ export function useLiveKit(socketRef, roomId, user) {
     if (!room || !room.localParticipant) return null;
 
     if (screenSharing) {
+      // If called with shareAudio true/false while sharing, toggle audio mid-share
+      if (typeof shareAudio === 'boolean') {
+        try {
+          const currentAudioPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+          if (shareAudio && !currentAudioPub) {
+            // Re-enable screen share with audio
+            await room.localParticipant.setScreenShareEnabled(true, {
+              video: {
+                resolution: { width: 1920, height: 1080 },
+                maxFramerate: 30,
+                degradationPreference: 'maintain-resolution',
+              },
+              audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+            });
+            return null;
+          }
+          if (!shareAudio) {
+            // Re-enable screen share without audio
+            await room.localParticipant.setScreenShareEnabled(true, {
+              video: {
+                resolution: { width: 1920, height: 1080 },
+                maxFramerate: 30,
+                degradationPreference: 'maintain-resolution',
+              },
+              audio: false,
+            });
+            return null;
+          }
+        } catch (err) {
+          console.warn('[LiveKit] Failed to toggle screen share audio:', err);
+          return null;
+        }
+      }
+      // Default: stop sharing
       await room.localParticipant.setScreenShareEnabled(false);
       setScreenSharing(false);
       setScreenStream(null);
