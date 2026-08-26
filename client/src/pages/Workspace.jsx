@@ -32,6 +32,8 @@ import {
   Volume2,
   VolumeOff,
   TriangleAlert,
+  Wifi,
+  WifiOff,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -258,6 +260,7 @@ export default function Workspace() {
     canScreenShare,
     mediaError,
     clearMediaError: setMediaError,
+    networkQuality,
     connect: connectLiveKit,
     disconnect: disconnectLiveKit,
     toggleMic,
@@ -1601,6 +1604,24 @@ export default function Workspace() {
         </button>
 
         <div className="w-px h-5 bg-white/10 mx-1" />
+
+        {networkQuality !== null && (
+          <div
+            className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium ${
+              networkQuality === 0
+                ? 'text-red-400 bg-red-500/10'
+                : networkQuality <= 2
+                  ? 'text-yellow-400 bg-yellow-500/10'
+                  : 'text-green-400 bg-green-500/10'
+            }`}
+            title={`Network: ${networkQuality === 0 ? 'Lost' : networkQuality <= 2 ? 'Poor' : networkQuality <= 3 ? 'Good' : 'Excellent'}`}
+          >
+            {networkQuality === 0 ? <WifiOff size={12} /> : <Wifi size={12} />}
+            <span className="hidden sm:inline">
+              {networkQuality === 0 ? 'Lost' : networkQuality <= 2 ? 'Poor' : networkQuality <= 3 ? 'Good' : 'Great'}
+            </span>
+          </div>
+        )}
 
         <button
           onClick={() => {

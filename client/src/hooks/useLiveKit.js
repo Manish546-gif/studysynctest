@@ -47,6 +47,7 @@ export function useLiveKit(socketRef, roomId, user) {
   const [screenSharing, setScreenSharing] = useState(false);
   const [screenStream, setScreenStream] = useState(null);
   const [mediaError, setMediaError] = useState(null);
+  const [networkQuality, setNetworkQuality] = useState(null);
 
   const roomRef = useRef(null);
   const connectedRef = useRef(false);
@@ -224,7 +225,7 @@ export function useLiveKit(socketRef, roomId, user) {
     logTag('device type:', isMobile ? 'mobile' : 'desktop');
 
     const room = new Room({
-      adaptiveStream: false,
+      adaptiveStream: true,
       dynacast: true,
       audioCaptureDefaults: {
         echoCancellation: true,
@@ -244,7 +245,8 @@ export function useLiveKit(socketRef, roomId, user) {
           },
       publishDefaults: {
         simulcast: true,
-        videoCodec: 'vp9',
+        videoCodec: 'vp8',
+        degradationPreference: 'maintain-framerate',
         videoSimulcastLayers: [
           VideoPresets.h180,
           VideoPresets.h360,
@@ -253,13 +255,24 @@ export function useLiveKit(socketRef, roomId, user) {
         screenShareEncoding: {
           maxBitrate: 18_000_000,
           maxFramerate: 30,
+          degradationPreference: 'maintain-framerate',
         },
+        screenShareSimulcastLayers: [
+          VideoPresets.h360,
+          VideoPresets.h720,
+          VideoPresets.h1440,
+        ],
       },
     });
 
     room.on(RoomEvent.Connected, () => {
       logTag('CONNECTED');
       connectedRef.current = true;
+    });
+
+    room.on(RoomEvent.NetworkQualityChanged, (quality, prevQuality) => {
+      logTag('NetworkQuality:', quality, 'prev:', prevQuality);
+      setNetworkQuality(quality);
     });
 
     room.on(RoomEvent.ParticipantConnected, (participant) => {
@@ -477,6 +490,7 @@ export function useLiveKit(socketRef, roomId, user) {
     canScreenShare,
     mediaError,
     clearMediaError,
+    networkQuality,
     connect,
     disconnect,
     toggleMic,
