@@ -3,6 +3,7 @@ import {
   Room,
   RoomEvent,
   Track,
+  VideoPresets,
 } from 'livekit-client';
 
 function buildMediaStream(tracks) {
@@ -78,20 +79,64 @@ export function useLiveKit(socketRef, roomId, user) {
     return msg;
   }, [secureContext, hasMediaDevices]);
 
+  const rebuildParticipant = useCallback((participant) => {
+    const room = roomRef.current;
+    if (!room || !participant) return;
+
+    const camTracks = [];
+    const scrTracks = [];
+
+    if (participant.trackPublications) {
+      participant.trackPublications.forEach((pub) => {
+        if (!pub.track) return;
+        if (
+          pub.source === Track.Source.ScreenShare ||
+          pub.source === Track.Source.ScreenShareAudio
+        ) {
+          scrTracks.push(pub.track);
+        } else {
+          camTracks.push(pub.track);
+        }
+      });
+    }
+
+    const identity = participant.identity;
+    logTag('rebuildParticipant', identity, '| cams:', camTracks.length, 'screens:', scrTracks.length);
+
+    setRemoteStreams((prev) => {
+      const next = { ...prev };
+      if (camTracks.length > 0) {
+        next[identity] = buildMediaStream(camTracks);
+      } else {
+        delete next[identity];
+      }
+      return next;
+    });
+    setRemoteScreenStreams((prev) => {
+      const next = { ...prev };
+      if (scrTracks.length > 0) {
+        next[identity] = buildMediaStream(scrTracks);
+      } else {
+        delete next[identity];
+      }
+      return next;
+    });
+  }, []);
+
   const rebuild = useCallback(() => {
     const room = roomRef.current;
     if (!room) return;
+
+    const participants = room.remoteParticipants;
+    if (!participants) {
+      logTag('rebuild: no remoteParticipants');
+      return;
+    }
 
     const camStreams = {};
     const screenStreams = {};
 
     try {
-      const participants = room.remoteParticipants;
-      if (!participants) {
-        logTag('rebuild: no remoteParticipants');
-        return;
-      }
-
       participants.forEach((p) => {
         const camTracks = [];
         const scrTracks = [];
@@ -180,7 +225,7 @@ export function useLiveKit(socketRef, roomId, user) {
 
     const room = new Room({
       adaptiveStream: false,
-      dynacast: false,
+      dynacast: true,
       audioCaptureDefaults: {
         echoCancellation: true,
         noiseSuppression: true,
@@ -195,8 +240,21 @@ export function useLiveKit(socketRef, roomId, user) {
         : {
             facingMode: 'user',
             resolution: { width: 1920, height: 1080 },
-            maxFramerate: 60,
+            maxFramerate: 30,
           },
+      publishDefaults: {
+        simulcast: true,
+        videoCodec: 'vp8',
+        videoSimulcastLayers: [
+          VideoPresets.h180,
+          VideoPresets.h360,
+          VideoPresets.h720,
+        ],
+        screenShareEncoding: {
+          maxBitrate: 6_000_000,
+          maxFramerate: 30,
+        },
+      },
     });
 
     room.on(RoomEvent.Connected, () => {
@@ -208,42 +266,30 @@ export function useLiveKit(socketRef, roomId, user) {
       logTag('participant joined:', participant.identity);
       setTimeout(() => {
         subscribeToAllTracks(room);
-        rebuild();
+        rebuildParticipant(participant);
       }, 500);
     });
 
     room.on(RoomEvent.ParticipantDisconnected, (participant) => {
       logTag('participant left:', participant.identity);
-      rebuild();
+      setRemoteStreams((prev) => { const n = { ...prev }; delete n[participant.identity]; return n; });
+      setRemoteScreenStreams((prev) => { const n = { ...prev }; delete n[participant.identity]; return n; });
     });
 
     room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
       logTag('TrackSubscribed:', track.kind, 'from', participant.identity, 'source:', pub.source);
-      rebuild();
+      rebuildParticipant(participant);
     });
 
     room.on(RoomEvent.TrackUnsubscribed, (track, pub, participant) => {
       logTag('TrackUnsubscribed:', track.kind, 'from', participant.identity, 'source:', pub.source);
-      rebuild();
+      rebuildParticipant(participant);
     });
 
     room.on(RoomEvent.LocalTrackPublished, (pub) => {
-      logTag('LocalTrackPublished:', pub.source);
-      if (pub.source === Track.Source.Camera) {
-        try {
-          pub.setVideoEncoding?.({
-            maxBitrate: 8_000_000,
-            maxFramerate: 60,
-          });
-        } catch {}
+      logTag('LocalTrackPublished:', pub.source, 'simulcast layers:', pub.simulcastLayers?.length || 0);
+      if (pub.source === Track.Source.Camera || pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) {
         rebuildLocalStream();
-      } else if (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) {
-        try {
-          pub.setVideoEncoding?.({
-            maxBitrate: 12_000_000,
-            maxFramerate: 60,
-          });
-        } catch {}
         rebuildLocalScreen();
       }
     });
@@ -280,7 +326,7 @@ export function useLiveKit(socketRef, roomId, user) {
 
     const names = [...(room.remoteParticipants?.keys() || [])];
     logTag('existing participants:', names.join(', ') || 'none');
-  }, [rebuild, rebuildLocalStream, rebuildLocalScreen]);
+  }, [rebuild, rebuildParticipant, rebuildLocalStream, rebuildLocalScreen]);
 
   const disconnect = useCallback(() => {
     if (roomRef.current) {
@@ -330,9 +376,9 @@ export function useLiveKit(socketRef, roomId, user) {
       const constraints = isMobile
         ? { resolution: { width: 1280, height: 720 }, maxFramerate: 30 }
         : {
-            resolution: { width: 1920, height: 1080 },
-            maxFramerate: 60,
-            degradationPreference: 'maintain-resolution',
+            resolution: { width: 1280, height: 720 },
+            maxFramerate: 30,
+            degradationPreference: 'maintain-framerate',
           };
       try {
         await room.localParticipant.setCameraEnabled(true, constraints);
