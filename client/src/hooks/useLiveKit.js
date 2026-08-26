@@ -346,11 +346,13 @@ export function useLiveKit(socketRef, roomId, user) {
 
   const toggleScreenShare = useCallback(async (shareAudio) => {
     const room = roomRef.current;
+    logTag('toggleScreenShare called, shareAudio:', shareAudio, 'screenSharing:', screenSharing, 'room:', !!room, 'localParticipant:', !!room?.localParticipant);
     if (!room || !room.localParticipant) return null;
 
     if (screenSharing) {
       // shareAudio undefined → stop sharing
       if (shareAudio === undefined) {
+        logTag('stopping screen share');
         await room.localParticipant.setScreenShareEnabled(false);
         setScreenSharing(false);
         setScreenStream(null);
@@ -358,6 +360,7 @@ export function useLiveKit(socketRef, roomId, user) {
         return null;
       }
       // shareAudio true/false → toggle audio mid-share
+      logTag('toggling screen share audio to:', shareAudio);
       try {
         await room.localParticipant.setScreenShareEnabled(true, {
           video: {
@@ -384,6 +387,7 @@ export function useLiveKit(socketRef, roomId, user) {
     }
 
     try {
+      logTag('starting screen share, audio:', shareAudio);
       await room.localParticipant.setScreenShareEnabled(true, {
         video: {
           resolution: { width: 1920, height: 1080 },
@@ -394,10 +398,12 @@ export function useLiveKit(socketRef, roomId, user) {
           ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
           : false,
       });
+      logTag('screen share started successfully');
       setScreenSharing(true);
       socketRef.current?.emit('screen-share-changed', { sharing: true });
       return room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
     } catch (err) {
+      console.error('[LiveKit] screen share error:', err);
       diagnoseMediaFailure(err);
       setScreenSharing(false);
       return null;

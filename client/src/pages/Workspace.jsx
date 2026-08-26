@@ -279,8 +279,9 @@ export default function Workspace() {
         setScreenSharePickerOpen(false);
       }
     };
-    document.addEventListener('pointerdown', handler);
-    return () => document.removeEventListener('pointerdown', handler);
+    // Use mousedown (fires before click) to close when clicking outside
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, [screenSharePickerOpen]);
 
   const { floatingReactions, raisedHands: _raisedHands, sendReaction, toggleHand } = useRoomReactions(socketRef)
