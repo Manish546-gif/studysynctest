@@ -24,17 +24,28 @@ const isMobileDevice = () => {
     (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
 };
 
-function subscribeToAllTracks(room) {
+function subscribeToAllTracks(room, video = false) {
   if (!room) return;
   const participants = room.remoteParticipants;
   if (!participants) return;
   participants.forEach((p) => {
     if (!p.trackPublications) return;
     p.trackPublications.forEach((pub) => {
-      if (!pub.isSubscribed && !pub.track) {
-        try { p.setTrackSubscription(pub.trackSid, true); } catch {}
-      }
+      if (pub.isSubscribed || pub.track) return;
+      const isVideo = pub.source === Track.Source.Camera;
+      if (isVideo && !video) return;
+      try { p.setTrackSubscription(pub.trackSid, true); } catch {}
     });
+  });
+}
+
+function setVideoSubscription(room, identity, subscribe) {
+  if (!room) return;
+  const participant = room.remoteParticipants?.get(identity);
+  if (!participant?.trackPublications) return;
+  participant.trackPublications.forEach((pub) => {
+    if (pub.source !== Track.Source.Camera) return;
+    try { participant.setTrackSubscription(pub.trackSid, subscribe); } catch {}
   });
 }
 
@@ -52,6 +63,7 @@ export function useLiveKit(socketRef, roomId, user) {
   const roomRef = useRef(null);
   const connectedRef = useRef(false);
   const screenShareTrackRef = useRef(null);
+  const pinnedIdentityRef = useRef(null);
 
   // Media APIs only exist on secure contexts (HTTPS or localhost).
   // On http://<lan-ip> the whole namespace is missing — the #1 cause of
@@ -497,6 +509,43 @@ export function useLiveKit(socketRef, roomId, user) {
 
   const clearMediaError = useCallback(() => setMediaError(null), []);
 
+  const setPinnedIdentity = useCallback((identity) => {
+    const room = roomRef.current;
+    const prev = pinnedIdentityRef.current;
+    pinnedIdentityRef.current = identity;
+    if (!room) return;
+
+    const prevId = prev === 'local' ? null : prev;
+    const nextId = identity === 'local' ? null : identity;
+
+    if (prevId === nextId) return;
+
+    logTag('setPinnedIdentity:', prevId, '->', nextId);
+
+    // Unsubscribe video from previous pinned
+    if (prevId) setVideoSubscription(room, prevId, false);
+
+    // Subscribe video to new pinned
+    if (nextId) setVideoSubscription(room, nextId, true);
+  }, []);
+
+  // Ensure screen share video is always subscribed for remote participants
+  useEffect(() => {
+    const room = roomRef.current;
+    if (!room) return;
+    const interval = setInterval(() => {
+      room.remoteParticipants?.forEach((p) => {
+        p.trackPublications?.forEach((pub) => {
+          if ((pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio)
+              && !pub.isSubscribed && !pub.track) {
+            try { p.setTrackSubscription(pub.trackSid, true); } catch {}
+          }
+        });
+      });
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     return () => disconnect();
   }, [disconnect]);
@@ -518,6 +567,7 @@ export function useLiveKit(socketRef, roomId, user) {
     toggleMic,
     toggleCam,
     toggleScreenShare,
+    setPinnedIdentity,
     stopMedia,
   };
 }

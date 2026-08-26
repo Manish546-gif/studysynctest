@@ -56,9 +56,10 @@ const ROOM_TAGS = ['Study', 'Project', 'Review', 'Homework', 'Exam Prep', 'Discu
 
 function VideoTile({ stream, name, isLocal, muted, mirror, presenting, onClick, active, contain, tabAway, speakerLevel, pinned, watchLabel }) {
   const videoRef = useRef(null)
+  const hasVideo = stream && stream.getVideoTracks().length > 0
 
   useEffect(() => {
-    if (videoRef.current && stream) {
+    if (videoRef.current && stream && hasVideo) {
       const el = videoRef.current
       el.srcObject = stream
       // iOS blocks autoplay when unmuted — start muted, unmute after playback begins
@@ -83,7 +84,7 @@ function VideoTile({ stream, name, isLocal, muted, mirror, presenting, onClick, 
           : 'ring-1 ring-white/10'
       } ${onClick ? 'cursor-pointer hover:ring-zoom-blue/50' : ''}`}
     >
-      {stream ? (
+      {hasVideo ? (
         <>
           <video
             ref={videoRef}
@@ -266,8 +267,14 @@ export default function Workspace() {
     toggleMic,
     toggleCam,
     toggleScreenShare,
+    setPinnedIdentity,
     stopMedia,
   } = useLiveKit(socketRef, roomId, user)
+
+  // Sync pinned identity with LiveKit subscription management
+  useEffect(() => {
+    setPinnedIdentity(pinnedId);
+  }, [pinnedId, setPinnedIdentity]);
 
   // Close screen share picker when sharing starts
   useEffect(() => {
