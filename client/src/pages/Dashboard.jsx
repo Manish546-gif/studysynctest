@@ -134,6 +134,13 @@ export default function Dashboard() {
     return () => clearTimeout(timer)
   }, [modal])
 
+  useEffect(() => {
+    if (!modal) return
+    const { overflow } = document.body.style
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = overflow }
+  }, [modal])
+
   const handleCreateRoom = async (e) => {
     e.preventDefault()
     if (!newRoomName.trim()) return
@@ -485,7 +492,7 @@ export default function Dashboard() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed inset-0 flex items-center justify-center z-50 p-4"
+              className="fixed inset-0 flex items-center justify-center z-[60] p-4"
             >
               <div className="bg-surface rounded-[24px] shadow-2xl w-full max-w-[28rem] p-6" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-6">
@@ -546,7 +553,7 @@ export default function Dashboard() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed inset-0 flex items-center justify-center z-50 p-4"
+              className="fixed inset-0 flex items-center justify-center z-[60] p-4"
             >
               <div className="bg-surface rounded-[24px] shadow-2xl w-full max-w-[28rem] p-8 text-center" onClick={(e) => e.stopPropagation()}>
                 <div className="w-16 h-16 rounded-2xl bg-success-container flex items-center justify-center mx-auto mb-4">
@@ -601,7 +608,7 @@ export default function Dashboard() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed inset-0 flex items-center justify-center z-50 p-4"
+              className="fixed inset-0 flex items-center justify-center z-[60] p-4"
             >
               <div className="bg-surface rounded-[24px] shadow-2xl w-full max-w-[28rem] p-6" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-6">

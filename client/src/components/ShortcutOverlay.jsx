@@ -37,7 +37,7 @@ export default function ShortcutOverlay({ open, onClose }) {
             initial={{ scale: 0.96, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.96, opacity: 0 }}
-            className="bg-zoom-dark border border-white/10 rounded-lg w-full max-w-[400px] p-4 shadow-2xl"
+            className="bg-zoom-dark border border-white/10 rounded-lg w-full max-w-[400px] max-h-[80vh] overflow-y-auto p-4 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">

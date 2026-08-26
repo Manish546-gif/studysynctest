@@ -27,7 +27,7 @@ export default function ReactionPicker({ onReaction, onToggleHand }) {
         <Smile size={16} />
       </button>
       {open && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-zoom-dark border border-white/10 rounded-lg p-1.5 flex gap-0.5 shadow-2xl z-50">
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-zoom-dark border border-white/10 rounded-lg p-1.5 flex gap-0.5 shadow-2xl z-50 max-w-[360px] overflow-x-auto">
           {EMOJIS.map((emoji) => (
             <button
               key={emoji}

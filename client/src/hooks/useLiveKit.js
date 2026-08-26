@@ -244,14 +244,14 @@ export function useLiveKit(socketRef, roomId, user) {
           },
       publishDefaults: {
         simulcast: true,
-        videoCodec: 'vp8',
+        videoCodec: 'vp9',
         videoSimulcastLayers: [
           VideoPresets.h180,
           VideoPresets.h360,
           VideoPresets.h720,
         ],
         screenShareEncoding: {
-          maxBitrate: 6_000_000,
+          maxBitrate: 18_000_000,
           maxFramerate: 30,
         },
       },
@@ -410,7 +410,7 @@ export function useLiveKit(socketRef, roomId, user) {
       try {
         await room.localParticipant.setScreenShareEnabled(true, {
           video: {
-            resolution: { width: 1920, height: 1080 },
+            resolution: { width: 2560, height: 1440 },
             maxFramerate: 30,
             degradationPreference: 'maintain-resolution',
           },
@@ -436,7 +436,7 @@ export function useLiveKit(socketRef, roomId, user) {
       logTag('starting screen share, audio:', shareAudio);
       await room.localParticipant.setScreenShareEnabled(true, {
         video: {
-          resolution: { width: 1920, height: 1080 },
+          resolution: { width: 2560, height: 1440 },
           maxFramerate: 30,
           degradationPreference: 'maintain-resolution',
         },

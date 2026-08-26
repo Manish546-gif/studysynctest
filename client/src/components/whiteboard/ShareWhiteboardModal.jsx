@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { X, Globe, Eye, Pencil, Link2 } from 'lucide-react'
 import { api } from '../../services/api'
@@ -19,6 +19,12 @@ export default function ShareWhiteboardModal({ board, onClose }) {
 
   const entries = currentBoard.sharedWith || []
   const shareUrl = `${window.location.origin}/whiteboards/${board._id}`
+
+  useEffect(() => {
+    const { overflow } = document.body.style
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = overflow }
+  }, [])
 
   const copyLink = () => {
     navigator.clipboard.writeText(shareUrl)
@@ -179,7 +185,7 @@ export default function ShareWhiteboardModal({ board, onClose }) {
               Shared with ({entries.length})
             </p>
             {entries.length ? (
-              <div className="space-y-2">
+              <div className="max-h-48 overflow-y-auto space-y-2">
                 {entries.map((e) => {
                   const u = e.user || {}
                   return (
