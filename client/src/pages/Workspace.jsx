@@ -1389,7 +1389,7 @@ export default function Workspace() {
       </AnimatePresence>
 
       {/* Bottom Control Bar */}
-      <div className="flex items-center justify-center gap-1.5 px-4 py-2 bg-zoom-dark border-t border-white/5 shrink-0 overflow-x-auto">
+      <div className="flex items-center justify-center gap-1.5 px-4 py-2 bg-zoom-dark border-t border-white/5 shrink-0">
         <button
           onClick={toggleMic}
           className={`w-10 h-10 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center transition-all duration-150 shrink-0 ${
