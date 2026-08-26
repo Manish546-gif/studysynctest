@@ -51,6 +51,7 @@ export function useLiveKit(socketRef, roomId, user) {
 
   const roomRef = useRef(null);
   const connectedRef = useRef(false);
+  const screenShareTrackRef = useRef(null);
 
   // Media APIs only exist on secure contexts (HTTPS or localhost).
   // On http://<lan-ip> the whole namespace is missing — the #1 cause of
@@ -245,7 +246,7 @@ export function useLiveKit(socketRef, roomId, user) {
           },
       publishDefaults: {
         simulcast: true,
-        videoCodec: 'vp8',
+        videoCodec: 'vp9',
         degradationPreference: 'maintain-framerate',
         videoSimulcastLayers: [
           VideoPresets.h180,
@@ -412,6 +413,12 @@ export function useLiveKit(socketRef, roomId, user) {
       // shareAudio undefined → stop sharing
       if (shareAudio === undefined) {
         logTag('stopping screen share');
+        // Clean up ended event listener
+        if (screenShareTrackRef.current) {
+          const { track, onEnded } = screenShareTrackRef.current;
+          track?.removeEventListener('ended', onEnded);
+          screenShareTrackRef.current = null;
+        }
         await room.localParticipant.setScreenShareEnabled(false);
         setScreenSharing(false);
         setScreenStream(null);
@@ -460,7 +467,22 @@ export function useLiveKit(socketRef, roomId, user) {
       logTag('screen share started successfully');
       setScreenSharing(true);
       socketRef.current?.emit('screen-share-changed', { sharing: true });
-      return room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+
+      // Listen for browser's native "Stop sharing" button (Chrome/Edge popup)
+      const ssPub = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+      const ssTrack = ssPub?.track?.mediaStreamTrack;
+      if (ssTrack) {
+        const onEnded = () => {
+          logTag('Screen share track ended (browser stop sharing)');
+          setScreenSharing(false);
+          setScreenStream(null);
+          socketRef.current?.emit('screen-share-changed', { sharing: false });
+        };
+        ssTrack.addEventListener('ended', onEnded);
+        screenShareTrackRef.current = { track: ssTrack, onEnded };
+      }
+
+      return ssPub;
     } catch (err) {
       console.error('[LiveKit] screen share error:', err);
       diagnoseMediaFailure(err);
