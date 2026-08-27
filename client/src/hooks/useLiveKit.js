@@ -254,7 +254,7 @@ export function useLiveKit(socketRef, roomId, user) {
         : {
             facingMode: 'user',
             resolution: { width: 1920, height: 1080 },
-            maxFramerate: 30,
+            maxFramerate: 50,
           },
       publishDefaults: {
         simulcast: true,
