@@ -317,6 +317,10 @@ export function useSocket(roomId) {
     socketRef.current?.emit('youtube-stop');
   }, []);
 
+  const emitYoutubeSync = useCallback((currentTime) => {
+    socketRef.current?.emit('youtube-sync', { currentTime });
+  }, []);
+
   const emitStickyAdd = useCallback((note) => {
     socketRef.current?.emit('sticky-add', note);
   }, []);
@@ -393,6 +397,7 @@ export function useSocket(roomId) {
     emitYoutubePlay,
     emitYoutubePause,
     emitYoutubeStop,
+    emitYoutubeSync,
     emitStickyAdd,
     emitStickyUpdate,
     emitStickyDelete,

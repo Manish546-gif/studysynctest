@@ -774,6 +774,14 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('youtube-state', null);
   });
 
+  // Lightweight periodic time sync from host (no play/pause change)
+  socket.on('youtube-sync', (data) => {
+    const roomId = socket.roomId;
+    if (!roomId || !youtubeStates[roomId]) return;
+    youtubeStates[roomId].currentTime = data?.currentTime || 0;
+    socket.to(roomId).emit('youtube-state', youtubeStates[roomId]);
+  });
+
   // --- Sticky notes ---
   socket.on('sticky-add', async (data) => {
     const roomId = socket.roomId;

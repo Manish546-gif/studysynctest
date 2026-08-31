@@ -284,6 +284,7 @@ export default function Workspace() {
     emitYoutubePlay,
     emitYoutubePause,
     emitYoutubeStop,
+    emitYoutubeSync,
     emitStickyAdd,
     emitStickyUpdate,
     emitStickyDelete,
@@ -712,14 +713,35 @@ export default function Workspace() {
     }
   }, [stageIsYoutube, youtubeState?.videoId])
 
-  // --- YouTube stage: sync play/pause from remote control ---
+  // --- YouTube stage: sync play/pause/seek from remote control ---
   useEffect(() => {
     if (!stageIsYoutube || !ytStagePlayerRef.current || !ytStageReadyRef.current) return
+    const player = ytStagePlayerRef.current
     try {
-      if (youtubeState?.playing) ytStagePlayerRef.current.playVideo()
-      else ytStagePlayerRef.current.pauseVideo()
+      // Seek to host's time if more than 2s drift
+      const hostTime = youtubeState?.currentTime || 0
+      const localTime = player.getCurrentTime?.() || 0
+      if (hostTime > 0 && Math.abs(hostTime - localTime) > 2) {
+        player.seekTo(hostTime, true)
+      }
+      if (youtubeState?.playing) player.playVideo()
+      else player.pauseVideo()
     } catch {}
-  }, [youtubeState?.playing, stageIsYoutube])
+  }, [youtubeState?.playing, youtubeState?.currentTime, stageIsYoutube])
+
+  // --- YouTube host: periodic time sync every 3s ---
+  useEffect(() => {
+    if (!isHost || !stageIsYoutube || !youtubeState?.videoId) return
+    const iv = setInterval(() => {
+      const player = ytStagePlayerRef.current
+      if (!player || !ytStageReadyRef.current) return
+      try {
+        const ct = player.getCurrentTime?.()
+        if (ct != null) emitYoutubeSync(ct)
+      } catch {}
+    }, 3000)
+    return () => clearInterval(iv)
+  }, [isHost, stageIsYoutube, youtubeState?.videoId])
 
   // --- YouTube stage: cleanup player when leaving ---
   useEffect(() => {
@@ -1084,13 +1106,13 @@ export default function Workspace() {
                   {/* YouTube host controls overlay */}
                   {stageIsYoutube && isHost && (
                     <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/70 rounded-lg px-2.5 py-1.5">
-                      <button onClick={emitYoutubePlay} className="w-7 h-7 rounded-md flex items-center justify-center bg-green-500/20 text-green-400 hover:bg-green-500/30 transition" title="Play">
+                      <button onClick={() => emitYoutubePlay(ytStagePlayerRef.current?.getCurrentTime?.() || 0)} className="w-7 h-7 rounded-md flex items-center justify-center bg-green-500/20 text-green-400 hover:bg-green-500/30 transition" title="Play">
                         <Play size={13} />
                       </button>
-                      <button onClick={emitYoutubePause} className="w-7 h-7 rounded-md flex items-center justify-center bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 transition" title="Pause">
+                      <button onClick={() => emitYoutubePause(ytStagePlayerRef.current?.getCurrentTime?.() || 0)} className="w-7 h-7 rounded-md flex items-center justify-center bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 transition" title="Pause">
                         <Pause size={13} />
                       </button>
-                      <button onClick={emitYoutubeStop} className="w-7 h-7 rounded-md flex items-center justify-center bg-red-500/20 text-red-400 hover:bg-red-500/30 transition" title="Stop & remove">
+                      <button onClick={() => emitYoutubeStop()} className="w-7 h-7 rounded-md flex items-center justify-center bg-red-500/20 text-red-400 hover:bg-red-500/30 transition" title="Stop & remove">
                         <Square size={13} />
                       </button>
                     </div>
