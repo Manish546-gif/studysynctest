@@ -36,6 +36,7 @@ import {
   WifiOff,
   ListChecks,
   Hand,
+  MonitorPlay,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -55,6 +56,7 @@ import PollsPanel from '../components/PollsPanel'
 import TodosPanel from '../components/TodosPanel'
 import AgendaPanel from '../components/AgendaPanel'
 import YoutubePanel from '../components/YoutubePanel'
+import YoutubeWatchPanel from '../components/YoutubeWatchPanel'
 import StickyNotesPanel from '../components/StickyNotesPanel'
 import WaitingRoomPanel from '../components/WaitingRoomPanel'
 import ShortcutOverlay from '../components/ShortcutOverlay'
@@ -209,6 +211,7 @@ export default function Workspace() {
   const [breakoutRooms, setBreakoutRooms] = useState([])
   const [toolsOpen, setToolsOpen] = useState(false)
   const [toolsTab, setToolsTab] = useState('poll') // 'poll' | 'todo' | 'agenda' | 'youtube' | 'notes' | 'waiting'
+  const [youtubeOpen, setYoutubeOpen] = useState(false)
   const [handRaisedUsers, setHandRaisedUsers] = useState([])
   const [viewerCount, setViewerCount] = useState(0)
   const [shortcutOpen, setShortcutOpen] = useState(false)
@@ -1391,7 +1394,6 @@ export default function Workspace() {
                   ['poll', 'Polls'],
                   ['todo', 'Tasks'],
                   ['agenda', 'Agenda'],
-                  ['youtube', 'YouTube'],
                   ['notes', 'Notes'],
                   ['waiting', 'Waiting'],
                 ].map(([key, label]) => (
@@ -1432,16 +1434,6 @@ export default function Workspace() {
                     emitAddAgenda={emitAddAgenda}
                     emitToggleAgenda={emitToggleAgenda}
                     emitDeleteAgenda={emitDeleteAgenda}
-                  />
-                )}
-                {toolsTab === 'youtube' && (
-                  <YoutubePanel
-                    youtubeState={youtubeState}
-                    isHost={room?.host?._id === user?.id}
-                    emitYoutubeSet={emitYoutubeSet}
-                    emitYoutubePlay={emitYoutubePlay}
-                    emitYoutubePause={emitYoutubePause}
-                    emitYoutubeStop={emitYoutubeStop}
                   />
                 )}
                 {toolsTab === 'notes' && (
@@ -1494,6 +1486,20 @@ export default function Workspace() {
             emitFileDeleted={emitFileDeleted}
             isOpen={filePreviewOpen}
             onToggle={() => setFilePreviewOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {youtubeOpen && (
+          <YoutubeWatchPanel
+            youtubeState={youtubeState}
+            isHost={room?.host?._id === user?.id}
+            emitYoutubeSet={emitYoutubeSet}
+            emitYoutubePlay={emitYoutubePlay}
+            emitYoutubePause={emitYoutubePause}
+            emitYoutubeStop={emitYoutubeStop}
+            onClose={() => setYoutubeOpen(false)}
           />
         )}
       </AnimatePresence>
@@ -1701,7 +1707,19 @@ export default function Workspace() {
         <div className="w-px h-5 bg-white/10 mx-1" />
 
         <button
-          onClick={() => { setPomodoroOpen((v) => !v); setRecorderOpen(false); setFilePreviewOpen(false); }}
+          onClick={() => { setYoutubeOpen((v) => !v); setPomodoroOpen(false); setRecorderOpen(false); setFilePreviewOpen(false); }}
+          className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
+            youtubeOpen
+              ? 'bg-red-500 text-white'
+              : 'bg-white/10 text-white hover:bg-white/15'
+          }`}
+          title="YouTube Watch Together"
+        >
+          <MonitorPlay size={16} />
+        </button>
+
+        <button
+          onClick={() => { setPomodoroOpen((v) => !v); setRecorderOpen(false); setFilePreviewOpen(false); setYoutubeOpen(false); }}
           className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
             pomodoroOpen
               ? 'bg-zoom-blue text-white'
@@ -1713,7 +1731,7 @@ export default function Workspace() {
         </button>
 
         <button
-          onClick={() => { setRecorderOpen((v) => !v); setPomodoroOpen(false); setFilePreviewOpen(false); }}
+          onClick={() => { setRecorderOpen((v) => !v); setPomodoroOpen(false); setFilePreviewOpen(false); setYoutubeOpen(false); }}
           className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
             recorderOpen
               ? 'bg-red-500 text-white'
@@ -1727,7 +1745,7 @@ export default function Workspace() {
         <button
           onClick={() => {
             if (whiteboardOpen) { toggleWbPanel('files'); return; }
-            setFilePreviewOpen((v) => !v); setPomodoroOpen(false); setRecorderOpen(false); setSettingsOpen(false);
+            setFilePreviewOpen((v) => !v); setPomodoroOpen(false); setRecorderOpen(false); setSettingsOpen(false); setYoutubeOpen(false);
           }}
           className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
             whiteboardOpen ? (wbPanelTab === 'files' ? 'bg-zoom-blue text-white' : 'bg-white/10 text-white hover:bg-white/15')
