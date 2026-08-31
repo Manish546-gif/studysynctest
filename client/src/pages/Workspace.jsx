@@ -1103,12 +1103,6 @@ export default function Workspace() {
 
         {/* Center */}
         <div className="flex-1 flex flex-col overflow-hidden relative">
-          {/* YouTube player container — always in DOM so ref is never null */}
-          <div
-            ref={ytStageContainerRef}
-            className="absolute inset-0 z-10 bg-black"
-            style={{ display: stageIsYoutube && youtubeState?.videoId ? '' : 'none' }}
-          />
           <div className="flex-1 p-3 flex flex-col gap-2 min-h-0 w-full">
             {stageActive ? (
               <>
@@ -1139,6 +1133,13 @@ export default function Workspace() {
                   data-screen-share="true"
                   className="relative flex-1 min-h-0 rounded-lg overflow-hidden bg-black ring-1 ring-black/10"
                 >
+                  {/* YouTube player — lives inside stage so requestFullscreen() captures it */}
+                  {stageIsYoutube && youtubeState?.videoId && (
+                    <div
+                      ref={ytStageContainerRef}
+                      className="absolute inset-0 z-20 bg-black"
+                    />
+                  )}
                   {!stageIsYoutube && (
                     <video
                       ref={(node) => {
