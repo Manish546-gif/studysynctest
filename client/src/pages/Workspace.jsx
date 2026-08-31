@@ -1163,27 +1163,27 @@ export default function Workspace() {
                       className="w-full h-full object-contain"
                     />
                   )}
-                  <div className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 rounded px-1.5 py-0.5 pointer-events-none">
+                  <div className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 rounded px-1.5 py-0.5 pointer-events-none z-30">
                     {stageIsYoutube ? <MonitorPlay size={11} className="text-red-400" /> : <Monitor size={11} className="text-white" />}
                     <span className="text-[11px] font-medium text-white">{stageName}</span>
                   </div>
                   <button
                     onClick={toggleStageFullscreen}
-                    className="absolute top-2 right-2 w-7 h-7 rounded flex items-center justify-center bg-black/50 text-white hover:bg-black/70 transition-colors"
+                    className="absolute top-2 right-2 z-30 w-7 h-7 rounded flex items-center justify-center bg-black/50 text-white hover:bg-black/70 transition-colors"
                     title={document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen'}
                   >
                     <Maximize size={13} />
                   </button>
                   <button
                     onClick={() => setPinnedId(null)}
-                    className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 rounded-lg bg-black/60 text-white text-[11px] font-medium hover:bg-black/80 transition-colors"
+                    className="absolute bottom-2 right-2 z-30 flex items-center gap-1 px-2 py-1 rounded-lg bg-black/60 text-white text-[11px] font-medium hover:bg-black/80 transition-colors"
                     title="Back to gallery"
                   >
                     <X size={13} /> Exit spotlight
                   </button>
                   {/* YouTube host controls overlay */}
                   {stageIsYoutube && isHost && (
-                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/70 rounded-lg px-2.5 py-1.5">
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 bg-black/70 rounded-lg px-2.5 py-1.5">
                       <button onClick={() => emitYoutubePlay(ytStagePlayerRef.current?.getCurrentTime?.() || 0)} className="w-7 h-7 rounded-md flex items-center justify-center bg-green-500/20 text-green-400 hover:bg-green-500/30 transition" title="Play">
                         <Play size={13} />
                       </button>
