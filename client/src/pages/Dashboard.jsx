@@ -87,6 +87,7 @@ export default function Dashboard() {
   const [modal, setModal] = useState(null)
   const [newRoomName, setNewRoomName] = useState('')
   const [newRoomDesc, setNewRoomDesc] = useState('')
+  const [newRoomIsPublic, setNewRoomIsPublic] = useState(true)
   const [creatingRoom, setCreatingRoom] = useState(false)
   const [createError, setCreateError] = useState('')
   const [joinCode, setJoinCode] = useState('')
@@ -147,10 +148,11 @@ export default function Dashboard() {
     setCreatingRoom(true)
     setCreateError('')
     try {
-      const data = await api.createRoom({ name: newRoomName.trim(), description: newRoomDesc.trim() })
+      const data = await api.createRoom({ name: newRoomName.trim(), description: newRoomDesc.trim(), isPublic: newRoomIsPublic })
       setRooms((prev) => [data.room, ...prev])
       setNewRoomName('')
       setNewRoomDesc('')
+      setNewRoomIsPublic(true)
       setCreatedRoom(data.room)
       setModal('created')
     } catch (err) {
@@ -522,6 +524,26 @@ export default function Dashboard() {
                       rows={3}
                       className="w-full rounded-2xl border border-outline-variant/50 bg-surface-container-lowest px-4 py-3 text-sm text-on-surface placeholder:text-on-surface/30 outline-none resize-none focus:border-primary-container transition-colors"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Room Type</label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewRoomIsPublic(true)}
+                        className={`flex-1 py-2.5 rounded-xl text-xs font-medium border transition-all ${newRoomIsPublic ? 'bg-primary-container/20 border-primary-container text-primary-container' : 'border-outline-variant/50 text-on-surface/40 hover:bg-surface-container'}`}
+                      >
+                        Public
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewRoomIsPublic(false)}
+                        className={`flex-1 py-2.5 rounded-xl text-xs font-medium border transition-all ${!newRoomIsPublic ? 'bg-primary-container/20 border-primary-container text-primary-container' : 'border-outline-variant/50 text-on-surface/40 hover:bg-surface-container'}`}
+                      >
+                        Private
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-on-surface/30 mt-1">{newRoomIsPublic ? 'Anyone can join; new users require host approval' : 'Only invited members can join'}</p>
                   </div>
                   {createError && (
                     <p className="text-xs text-error">{createError}</p>

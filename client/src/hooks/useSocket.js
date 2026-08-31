@@ -70,6 +70,17 @@ export function useSocket(roomId) {
         } catch {}
       }
     });
+    socket.on('waiting-denied', (data) => {
+      if (data?.userId && socket.auth?.token) {
+        try {
+          const payload = JSON.parse(atob(socket.auth.token.split('.')[1]));
+          if (data.userId === payload.id || data.userId === payload._id) {
+            setAdmitted(false);
+            setWaitingRoom([]);
+          }
+        } catch {}
+      }
+    });
     socket.on('room-state', (data) => {
       if (data) {
         setRoomVisibility({ isPublic: !!data.isPublic, waitingRoom: data.waitingRoom || [] });

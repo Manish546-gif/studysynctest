@@ -5,7 +5,7 @@ const auth = require('../middleware/auth');
 
 router.post('/', auth, async (req, res) => {
   try {
-    const { name, description, tag } = req.body;
+    const { name, description, tag, isPublic } = req.body;
     if (!name) return res.status(400).json({ error: 'Room name is required' });
 
     const code = await Room.generateCode();
@@ -17,6 +17,7 @@ router.post('/', auth, async (req, res) => {
       code,
       host: req.user._id,
       members: [req.user._id],
+      isPublic: isPublic !== undefined ? !!isPublic : true,
     });
 
     const populated = await room.populate('host', 'name email avatar');

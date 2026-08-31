@@ -23,12 +23,16 @@ export default function WaitingRoomPanel({ waitingRoom, roomUsers, isHost, emitW
 
   return (
     <div className="space-y-1.5">
-      {waitingRoom.map((userId) => {
-        const member = roomUsers.find((u) => String(u._id || u.userId) === String(userId))
+      {waitingRoom.map((entry) => {
+        // entry can be a populated object {_id, name, avatar} or a plain userId string
+        const userId = typeof entry === 'object' ? (entry._id || entry.userId) : entry
+        const member = typeof entry === 'object' && entry.name
+          ? entry
+          : roomUsers.find((u) => String(u._id || u.userId) === String(userId)) || {}
         const name = member?.name || 'Unknown'
         const initials = name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
         return (
-          <div key={userId} className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-2.5 py-2">
+          <div key={String(userId)} className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-2.5 py-2">
             <div className="w-7 h-7 rounded-full bg-zoom-blue/20 flex items-center justify-center text-[10px] font-bold text-zoom-blue shrink-0">
               {initials}
             </div>

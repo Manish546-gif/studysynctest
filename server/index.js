@@ -120,12 +120,51 @@ io.on('connection', (socket) => {
       socket.roomId = roomId;
       socket.join(roomId);
 
+      // --- Waiting room enforcement ---
+      let admitted = false;
+      if (isHost) {
+        admitted = true;
+      } else if (room.isPublic || room.approvedUsers.some((id) => id.toString() === socket.user._id.toString()) || room.members.some((id) => id.toString() === socket.user._id.toString())) {
+        // Public rooms: anyone can join (after first admission); approved users skip waiting; members always admitted
+        admitted = true;
+      }
+
+      if (!admitted) {
+        // Add to waiting room — do NOT add to activeRooms
+        await persistRoomField(roomId, (r) => {
+          if (!r.waitingRoom.some((id) => id.toString() === socket.user._id.toString())) {
+            r.waitingRoom.push(socket.user._id);
+          }
+        });
+
+        // Populate waiting room with user details for the host
+        const updatedRoom = await Room.findById(roomId).populate('waitingRoom', 'name avatar');
+        const waitingDetails = (updatedRoom.waitingRoom || []).map((u) => ({ _id: u._id, name: u.name, avatar: u.avatar }));
+
+        // Broadcast to everyone in room (host sees waiting list, waiting user sees waiting screen)
+        io.to(roomId).emit('waiting-update', { waiting: waitingDetails });
+
+        // Send admission status to the joining user
+        socket.emit('room-state', {
+          isPublic: updatedRoom.isPublic,
+          waitingRoom: waitingDetails,
+          admitted: false,
+        });
+
+        console.log(`${socket.user.name} waiting for room ${room.name}`);
+        return;
+      }
+
+      // --- Admitted: add to activeRooms ---
       if (!activeRooms.has(roomId)) activeRooms.set(roomId, new Map());
       activeRooms.get(roomId).set(socket.id, {
         _id: socket.user._id,
         name: socket.user.name,
         avatar: socket.user.avatar,
       });
+
+      const users = Array.from(activeRooms.get(roomId).values());
+      io.to(roomId).emit('room-users', users);
 
       // Send initial state to the joining user
       socket.emit('whiteboard-state', room.whiteboardActions || []);
@@ -134,9 +173,6 @@ io.on('connection', (socket) => {
       socket.emit('todo-state', room.todos || []);
       socket.emit('agenda-state', room.agenda || []);
       socket.emit('sticky-state', { notes: room.stickyNotes || [] });
-
-      const users = Array.from(activeRooms.get(roomId).values());
-      io.to(roomId).emit('room-users', users);
 
       // Late joiners screen-share state
       const shares = roomScreenShares.get(roomId);
@@ -147,42 +183,16 @@ io.on('connection', (socket) => {
         );
       }
 
-      // --- Waiting room enforcement ---
-      let admitted = false;
-      if (isHost) {
-        admitted = true;
-        console.log(`${socket.user.name} (host) joined room ${room.name}`);
-      } else if (room.isPublic && room.approvedUsers.some((id) => id.toString() === socket.user._id.toString())) {
-        admitted = true;
-        console.log(`${socket.user.name} joined room ${room.name} (approved)`);
-      } else {
-        // Not approved → add to waiting room
-        if (!room.waitingRoom.some((id) => id.toString() === socket.user._id.toString())) {
-          await persistRoomField(roomId, (r) => {
-            if (!r.waitingRoom.some((id) => id.toString() === socket.user._id.toString())) {
-              r.waitingRoom.push(socket.user._id);
-            }
-          });
-        }
-        const updated = await Room.findById(roomId);
-        io.to(roomId).emit('waiting-update', { waiting: updated.waitingRoom || [] });
-        notify(room.host, {
-          type: 'waiting_join',
-          title: `${socket.user.name} is waiting`,
-          body: `${socket.user.name} wants to join "${room.name}"`,
-          from: socket.user._id,
-          roomId: room._id,
-        });
-        console.log(`${socket.user.name} waiting for room ${room.name}`);
-      }
-
-      // Send admission status to the joining user
-      const latestRoom = await Room.findById(roomId);
+      // Send admission status and waiting room to the joining user
+      const latestRoom = await Room.findById(roomId).populate('waitingRoom', 'name avatar');
+      const waitingDetails = (latestRoom.waitingRoom || []).map((u) => ({ _id: u._id, name: u.name, avatar: u.avatar }));
       socket.emit('room-state', {
         isPublic: latestRoom.isPublic,
-        waitingRoom: latestRoom.waitingRoom || [],
-        admitted,
+        waitingRoom: waitingDetails,
+        admitted: true,
       });
+
+      console.log(`${socket.user.name} joined room ${room.name}${isHost ? ' (host)' : ''}`);
     } catch (err) {
       socket.emit('error', err.message);
     }
@@ -893,7 +903,6 @@ io.on('connection', (socket) => {
   socket.on('waiting-admit', async (data) => {
     const roomId = socket.roomId;
     if (!roomId) return;
-    // Check host via socket.roomHost OR by comparing user ID to room.host
     const room = await Room.findById(roomId);
     const isHost = socket.roomHost === true || (room && room.host.toString() === socket.user._id.toString());
     if (!isHost) return;
@@ -903,14 +912,51 @@ io.on('connection', (socket) => {
       await persistRoomField(roomId, (r) => {
         r.waitingRoom = (r.waitingRoom || []).filter((id) => String(id) !== String(targetId));
         if (!r.members.some((m) => String(m) === String(targetId))) r.members.push(targetId);
-        // Track approved users so public rooms skip waiting next time
         if (!r.approvedUsers) r.approvedUsers = [];
         if (!r.approvedUsers.some((id) => String(id) === String(targetId))) r.approvedUsers.push(targetId);
       });
-      const updated = await Room.findById(roomId);
-      io.to(roomId).emit('waiting-update', { waiting: updated.waitingRoom || [] });
-      io.to(roomId).emit('waiting-admitted', { userId: targetId });
-    } catch {}
+      const updatedRoom = await Room.findById(roomId).populate('waitingRoom', 'name avatar');
+      const waitingDetails = (updatedRoom.waitingRoom || []).map((u) => ({ _id: u._id, name: u.name, avatar: u.avatar }));
+      io.to(roomId).emit('waiting-update', { waiting: waitingDetails });
+
+      // Find the admitted user's socket and send them full room state
+      const roomSockets = await io.in(roomId).fetchSockets();
+      for (const s of roomSockets) {
+        if (s.user._id.toString() === String(targetId)) {
+          // Add them to activeRooms
+          if (!activeRooms.has(roomId)) activeRooms.set(roomId, new Map());
+          activeRooms.get(roomId).set(s.id, {
+            _id: s.user._id,
+            name: s.user.name,
+            avatar: s.user.avatar,
+          });
+          s.roomHost = false;
+
+          // Emit full room state to admitted user
+          const latestRoom = await Room.findById(roomId);
+          s.emit('whiteboard-state', latestRoom.whiteboardActions || []);
+          s.emit('chat-history', latestRoom.messages || []);
+          s.emit('poll-state', latestRoom.polls || []);
+          s.emit('todo-state', latestRoom.todos || []);
+          s.emit('agenda-state', latestRoom.agenda || []);
+          s.emit('sticky-state', { notes: latestRoom.stickyNotes || [] });
+          s.emit('waiting-admitted', { userId: targetId });
+
+          // Send updated user list to everyone
+          const users = Array.from(activeRooms.get(roomId).values());
+          io.to(roomId).emit('room-users', users);
+
+          // Late joiners screen-share state
+          const shares = roomScreenShares.get(roomId);
+          if (shares && shares.size > 0) {
+            s.emit('screen-sharers', Array.from(shares.entries()).map(([uid, uname]) => ({ userId: uid, userName: uname })));
+          }
+          break;
+        }
+      }
+    } catch (err) {
+      console.error('waiting-admit error:', err);
+    }
   });
 
   socket.on('waiting-deny', async (data) => {
@@ -919,7 +965,22 @@ io.on('connection', (socket) => {
     const room = await Room.findById(roomId);
     const isHost = socket.roomHost === true || (room && room.host.toString() === socket.user._id.toString());
     if (!isHost) return;
-    io.to(roomId).emit('waiting-denied', { userId: data?.userId });
+    const targetId = data?.userId;
+    if (!targetId) return;
+    await persistRoomField(roomId, (r) => {
+      r.waitingRoom = (r.waitingRoom || []).filter((id) => String(id) !== String(targetId));
+    });
+    // Notify the denied user
+    const roomSockets = await io.in(roomId).fetchSockets();
+    for (const s of roomSockets) {
+      if (s.user._id.toString() === String(targetId)) {
+        s.emit('waiting-denied', { userId: targetId });
+        break;
+      }
+    }
+    const updatedRoom = await Room.findById(roomId).populate('waitingRoom', 'name avatar');
+    const waitingDetails = (updatedRoom.waitingRoom || []).map((u) => ({ _id: u._id, name: u.name, avatar: u.avatar }));
+    io.to(roomId).emit('waiting-update', { waiting: waitingDetails });
   });
 
   // Toggle room public/private (host only)
@@ -931,7 +992,9 @@ io.on('connection', (socket) => {
     if (!isHost) return;
     const isPublic = !!data?.isPublic;
     await persistRoomField(roomId, (r) => { r.isPublic = isPublic; });
-    io.to(roomId).emit('room-state', { isPublic, waitingRoom: (await Room.findById(roomId)).waitingRoom || [] });
+    const updatedRoom = await Room.findById(roomId).populate('waitingRoom', 'name avatar');
+    const waitingDetails = (updatedRoom.waitingRoom || []).map((u) => ({ _id: u._id, name: u.name, avatar: u.avatar }));
+    io.to(roomId).emit('room-state', { isPublic, waitingRoom: waitingDetails });
   });
 
   // --- Clean up viewer tracking on disconnect ---

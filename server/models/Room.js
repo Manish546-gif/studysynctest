@@ -62,7 +62,7 @@ const roomSchema = new mongoose.Schema({
   messages: [messageSchema],
   files: [fileSchema],
   isActive: { type: Boolean, default: true },
-  isPublic: { type: Boolean, default: false },
+  isPublic: { type: Boolean, default: true },
   subject: { type: String, default: '' },
   inviteLinkCode: { type: String, default: '' },
   breakoutRooms: [{
