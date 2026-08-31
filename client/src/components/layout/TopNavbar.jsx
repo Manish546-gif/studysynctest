@@ -167,12 +167,21 @@ export default function TopNavbar({ onToggleSidebar, sidebarOpen }) {
                 >
                   <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant/20">
                     <h3 className="font-display text-sm font-bold text-on-surface">Notifications</h3>
-                    {unreadCount > 0 && (
-                      <button onClick={markAllRead} className="flex items-center gap-1 text-[11px] font-medium text-primary hover:text-primary/80 transition-colors">
-                        <CheckCheck size={12} />
-                        Mark all read
+                    <div className="flex items-center gap-1">
+                      {unreadCount > 0 && (
+                        <button onClick={markAllRead} className="flex items-center gap-1 text-[11px] font-medium text-primary hover:text-primary/80 transition-colors">
+                          <CheckCheck size={12} />
+                          Mark all read
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setOpen(false)}
+                        className="ml-2 p-1.5 rounded-lg text-on-surface/40 hover:text-on-surface hover:bg-surface-container transition-colors"
+                        aria-label="Close notifications"
+                      >
+                        <X size={15} />
                       </button>
-                    )}
+                    </div>
                   </div>
 
                   <div className="overflow-y-auto flex-1">
