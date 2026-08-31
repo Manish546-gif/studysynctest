@@ -1433,7 +1433,7 @@ export default function Workspace() {
               animate={{ width: 320, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="bg-zoom-dark border-l border-white/10 flex flex-col overflow-hidden shrink-0"
+              className="bg-zoom-dark border-l border-white/10 flex flex-col overflow-hidden shrink-0 max-w-[92vw] fixed inset-y-0 right-0 z-40 sm:static sm:z-auto"
             >
               <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
                 <div className="flex items-center gap-0.5">
@@ -1643,7 +1643,7 @@ export default function Workspace() {
               animate={{ width: 280, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="bg-zoom-dark border-l border-white/10 flex flex-col overflow-hidden shrink-0"
+              className="bg-zoom-dark border-l border-white/10 flex flex-col overflow-hidden shrink-0 max-w-[92vw] fixed inset-y-0 right-0 z-40 sm:static sm:z-auto"
             >
               <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
                 <span className="text-xs font-medium text-white/80">Members ({displayMembers.length})</span>
@@ -1681,7 +1681,7 @@ export default function Workspace() {
               animate={{ width: 300, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="bg-zoom-dark border-l border-white/10 flex flex-col overflow-hidden shrink-0"
+              className="bg-zoom-dark border-l border-white/10 flex flex-col overflow-hidden shrink-0 max-w-[92vw] fixed inset-y-0 right-0 z-40 sm:static sm:z-auto"
             >
               <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
                 <span className="text-xs font-medium text-white/80">Breakout Rooms</span>
@@ -1709,7 +1709,7 @@ export default function Workspace() {
               animate={{ width: 300, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="bg-zoom-dark border-l border-white/10 flex flex-col overflow-hidden shrink-0"
+              className="bg-zoom-dark border-l border-white/10 flex flex-col overflow-hidden shrink-0 max-w-[92vw] fixed inset-y-0 right-0 z-40 sm:static sm:z-auto"
             >
               <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
                 <span className="text-xs font-medium text-white/80">Room Settings</span>
@@ -1801,7 +1801,7 @@ export default function Workspace() {
               animate={{ width: 300, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="bg-zoom-dark border-l border-white/10 flex flex-col overflow-hidden shrink-0"
+              className="bg-zoom-dark border-l border-white/10 flex flex-col overflow-hidden shrink-0 max-w-[92vw] fixed inset-y-0 right-0 z-40 sm:static sm:z-auto"
             >
               <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
                 <span className="text-xs font-medium text-white/80">Study Tools</span>
@@ -2004,7 +2004,7 @@ export default function Workspace() {
       </AnimatePresence>
 
       {/* Bottom Control Bar */}
-      <div className="flex items-center justify-center gap-1.5 px-4 py-2 bg-zoom-dark border-t border-white/5 shrink-0">
+      <div className="flex flex-wrap items-center justify-center gap-1.5 px-2 sm:px-4 py-2 bg-zoom-dark border-t border-white/5 shrink-0">
         <button
           onClick={toggleMic}
           className={`w-10 h-10 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center transition-all duration-150 shrink-0 ${
