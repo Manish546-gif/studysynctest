@@ -737,9 +737,14 @@ io.on('connection', (socket) => {
   socket.on('youtube-set', (data) => {
     const roomId = socket.roomId;
     if (!roomId) return;
-    const url = String(data?.url || '').trim();
-    const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
-    const videoId = match ? match[1] : null;
+    const raw = String(data?.url || '').trim();
+    let videoId = null;
+    if (/^[a-zA-Z0-9_-]{11}$/.test(raw)) {
+      videoId = raw;
+    } else {
+      const match = raw.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+      videoId = match ? match[1] : null;
+    }
     if (!videoId) return;
     if (!youtubeStates[roomId]) youtubeStates[roomId] = { videoId, playing: false, currentTime: 0, setBy: socket.user.name };
     else { youtubeStates[roomId].videoId = videoId; youtubeStates[roomId].setBy = socket.user.name; }
