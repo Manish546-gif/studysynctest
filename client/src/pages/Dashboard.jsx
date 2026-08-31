@@ -178,11 +178,7 @@ export default function Dashboard() {
   }
 
   const handleJoinRoom = async (roomId) => {
-    try {
-      await api.joinRoom(roomId)
-    } catch {
-      // room already joined or unreachable — open it anyway
-    }
+    // Do NOT call api.joinRoom — let the socket join-room handler manage admission via waiting room
     navigate(`/workspace/${roomId}`)
   }
 

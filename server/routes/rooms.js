@@ -66,11 +66,7 @@ router.post('/verify', auth, async (req, res) => {
 
     if (!room) return res.status(404).json({ error: 'Invalid room code' });
 
-    if (!room.members.includes(req.user._id)) {
-      room.members.push(req.user._id);
-      await room.save();
-    }
-
+    // Do NOT auto-add to members — the socket join-room handler manages admission via waiting room
     res.json({ room });
   } catch (err) {
     res.status(500).json({ error: err.message });

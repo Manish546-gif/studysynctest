@@ -124,8 +124,8 @@ io.on('connection', (socket) => {
       let admitted = false;
       if (isHost) {
         admitted = true;
-      } else if (room.isPublic || room.approvedUsers.some((id) => id.toString() === socket.user._id.toString()) || room.members.some((id) => id.toString() === socket.user._id.toString())) {
-        // Public rooms: anyone can join (after first admission); approved users skip waiting; members always admitted
+      } else if (room.approvedUsers.some((id) => id.toString() === socket.user._id.toString())) {
+        // Previously approved users always admitted
         admitted = true;
       }
 
