@@ -5,7 +5,15 @@ const messageSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   name: { type: String, default: '' },
   avatar: { type: String, default: '' },
-  text: { type: String, required: true },
+  text: { type: String, default: '' },
+  file: {
+    fileName: { type: String, default: '' },
+    storedName: { type: String, default: '' },
+    mimeType: { type: String, default: '' },
+    size: { type: Number, default: 0 },
+    url: { type: String, default: '' },
+    _id: { type: String, default: '' },
+  },
   createdAt: { type: Date, default: Date.now },
 }, { _id: true });
 

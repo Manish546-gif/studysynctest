@@ -264,8 +264,8 @@ export function useSocket(roomId) {
     socketRef.current?.emit('live-path-end');
   }, []);
 
-  const emitMessage = useCallback((text) => {
-    socketRef.current?.emit('send-message', { text });
+  const emitMessage = useCallback((text, file) => {
+    socketRef.current?.emit('send-message', file ? { text, file } : { text });
   }, []);
 
   const emitPinMessage = useCallback((msgId, pinned) => {

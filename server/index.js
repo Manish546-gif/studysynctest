@@ -229,7 +229,8 @@ io.on('connection', (socket) => {
     if (!roomId) return;
 
     const text = typeof data?.text === 'string' ? data.text.trim() : '';
-    if (!text) return;
+    const file = data?.file && typeof data.file === 'object' ? data.file : null;
+    if (!text && !file) return;
 
     const message = {
       userId: socket.user._id,
@@ -237,6 +238,14 @@ io.on('connection', (socket) => {
       avatar: socket.user.avatar || '',
       text,
       createdAt: new Date(),
+    };
+    if (file) message.file = {
+      fileName: String(file.fileName || 'file'),
+      storedName: String(file.storedName || ''),
+      mimeType: String(file.mimeType || ''),
+      size: Number(file.size || 0),
+      url: String(file.url || ''),
+      _id: String(file._id || ''),
     };
 
     io.to(roomId).emit('chat-message', message);

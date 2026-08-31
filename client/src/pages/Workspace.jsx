@@ -42,6 +42,8 @@ import {
   Square,
   Clapperboard,
   Pin,
+  Paperclip,
+  FileText as FileIcon,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -172,6 +174,17 @@ const MemoizedVideoTile = React.memo(VideoTile, (prev, next) => {
     && prev.isLocal === next.isLocal
 })
 
+function formatBytes(bytes) {
+  if (!bytes && bytes !== 0) return ''
+  const n = Number(bytes)
+  if (!n || n < 0) return ''
+  const units = ['B', 'KB', 'MB', 'GB']
+  let i = 0
+  let v = n
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
+  return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`
+}
+
 function formatMessageTime(value) {
   if (!value) return ''
   const date = new Date(value)
@@ -209,6 +222,7 @@ export default function Workspace() {
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
   const [chatInput, setChatInput] = useState('')
+  const [chatAttaching, setChatAttaching] = useState(false)
   const [mentionQuery, setMentionQuery] = useState(null)
   const [mentionIndex, setMentionIndex] = useState(0)
   const [chatTab, setChatTab] = useState('chat') // 'chat' | 'activity'
@@ -614,6 +628,34 @@ export default function Workspace() {
     emitMessage(chatInput.trim())
     setChatInput('')
     setMentionQuery(null)
+  }
+
+  const chatFileInputRef = useRef(null)
+  const handleChatAttach = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (file.size > 25 * 1024 * 1024) {
+      toast('File exceeds 25 MB limit', 'error')
+      return
+    }
+    setChatAttaching(true)
+    try {
+      const { file: saved } = await api.uploadRoomFile(roomId, file)
+      emitMessage('', {
+        _id: saved._id,
+        fileName: saved.fileName,
+        storedName: saved.storedName,
+        mimeType: saved.mimeType,
+        size: saved.size,
+        url: saved.url,
+      })
+      toast('File sent', 'success')
+    } catch (err) {
+      toast('Upload failed: ' + (err?.message || 'unknown error'), 'error')
+    } finally {
+      setChatAttaching(false)
+    }
   }
 
   const handleChatInputChange = (e) => {
@@ -1493,11 +1535,28 @@ export default function Workspace() {
                               }`}>
                                 <span className="text-[9px] font-semibold">{initials}</span>
                               </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-baseline gap-1.5 mb-0.5">
-                                  <span className="text-[11px] font-medium text-white/80">{msg.name}{isOwn ? ' (You)' : ''}</span>
-                                  <span className="text-[9px] text-white/25">{time}</span>
-                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-baseline gap-1.5 mb-0.5">
+                                    <span className="text-[11px] font-medium text-white/80">{msg.name}{isOwn ? ' (You)' : ''}</span>
+                                    <span className="text-[9px] text-white/25">{time}</span>
+                                  </div>
+                                  {msg.file && (
+                                    <a
+                                      href={msg.file.url || api.getFileUrl?.(roomId, msg.file.storedName) || '#'}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      onClick={(e) => { if (!(msg.file.url || msg.file.storedName)) e.preventDefault() }}
+                                      className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 mb-0.5 hover:border-zoom-blue/50 hover:bg-white/10 transition-colors max-w-full"
+                                    >
+                                      <span className="w-7 h-7 rounded bg-zoom-blue/20 text-zoom-blue flex items-center justify-center shrink-0">
+                                        <FileIcon size={13} />
+                                      </span>
+                                      <span className="min-w-0">
+                                        <span className="block text-[11px] font-medium text-white/80 truncate">{msg.file.fileName || 'file'}</span>
+                                        <span className="block text-[9px] text-white/30">{formatBytes(msg.file.size)}</span>
+                                      </span>
+                                    </a>
+                                  )}
                                 <div className="flex items-start gap-2 group/message">
                                   <p className="text-xs text-white/60 leading-relaxed break-words">{renderMentions(msg.text, roomUsers)}</p>
                                   <div className="flex items-center opacity-0 group-hover/message:opacity-100 transition-opacity shrink-0">
@@ -1524,6 +1583,21 @@ export default function Workspace() {
               {chatTab === 'chat' && (
                 <form onSubmit={handleSendChat} className="p-2 border-t border-white/10 relative">
                   <div className="flex items-center gap-1.5 bg-white/5 rounded px-2.5 py-1.5 border border-white/10">
+                    <input
+                      ref={chatFileInputRef}
+                      type="file"
+                      className="hidden"
+                      onChange={handleChatAttach}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => chatFileInputRef.current?.click()}
+                      disabled={chatAttaching}
+                      className="text-white/40 hover:text-white/80 p-1 rounded transition-colors disabled:opacity-50"
+                      title="Attach file"
+                    >
+                      {chatAttaching ? <Loader2 size={13} className="animate-spin" /> : <Paperclip size={13} />}
+                    </button>
                     <input
                       value={chatInput}
                       onChange={handleChatInputChange}
