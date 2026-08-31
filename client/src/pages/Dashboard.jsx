@@ -22,6 +22,7 @@ import {
   PenTool,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
 import { api } from '../services/api'
 import { SkeletonRoomCard } from '../components/common/Skeleton'
 import ConfirmationModal from '../components/common/ConfirmationModal'
@@ -81,6 +82,7 @@ function timeAgo(date) {
 export default function Dashboard() {
   const statsRef = useRef(null)
   const { user } = useAuth()
+  const { toast } = useToast()
   const navigate = useNavigate()
   const [rooms, setRooms] = useState([])
   const [loading, setLoading] = useState(true)
@@ -155,8 +157,10 @@ export default function Dashboard() {
       setNewRoomIsPublic(true)
       setCreatedRoom(data.room)
       setModal('created')
+      toast('Room created successfully', 'success')
     } catch (err) {
       setCreateError(err.message || 'Failed to create room')
+      toast(err.message || 'Failed to create room', 'error')
     } finally {
       setCreatingRoom(false)
     }
@@ -172,6 +176,7 @@ export default function Dashboard() {
       navigate(`/workspace/${data.room._id}`)
     } catch (err) {
       setJoinError(err.message || 'Invalid room code')
+      toast(err.message || 'Invalid room code', 'error')
     } finally {
       setJoining(false)
     }
@@ -189,8 +194,10 @@ export default function Dashboard() {
       await api.deleteRoom(deleteTargetId)
       setRooms((prev) => prev.filter((r) => r._id !== deleteTargetId))
       setDeleteTargetId(null)
+      toast('Room deleted', 'info')
     } catch (err) {
       alert(err.message)
+      toast(err.message || 'Failed to delete room', 'error')
     } finally {
       setDeletingRoom(false)
     }
