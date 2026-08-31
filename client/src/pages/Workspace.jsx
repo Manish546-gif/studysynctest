@@ -313,8 +313,13 @@ export default function Workspace() {
   } = useLiveKit(socketRef, roomId, user)
 
   // Sync pinned identity with LiveKit subscription management
+  // Only sync real participant IDs — skip 'youtube' and 'local' (not LiveKit identities)
   useEffect(() => {
-    setPinnedIdentity(pinnedId);
+    if (pinnedId && pinnedId !== 'local' && pinnedId !== 'youtube') {
+      setPinnedIdentity(pinnedId);
+    } else {
+      setPinnedIdentity(null);
+    }
   }, [pinnedId, setPinnedIdentity]);
 
   // Close screen share picker when sharing starts
@@ -649,6 +654,7 @@ export default function Workspace() {
   // Drop stale pins (stream died / media stopped) and leave fullscreen.
   useEffect(() => {
     if (pinnedId === 'local' && !localStream && !screenSharing) setPinnedId(null);
+    else if (pinnedId === 'youtube') { /* YouTube pin managed by youtubeState */ }
     else if (pinnedId && pinnedId !== 'local' && !remoteStreams[pinnedId] && !remoteScreenStreams[pinnedId]) setPinnedId(null);
   }, [pinnedId, remoteStreams, remoteScreenStreams, localStream, screenSharing]);
 
@@ -730,6 +736,8 @@ export default function Workspace() {
   useEffect(() => {
     if (youtubeState?.videoId && pinnedId !== 'youtube') {
       setPinnedId('youtube')
+    } else if (!youtubeState?.videoId && pinnedId === 'youtube') {
+      setPinnedId(null)
     }
   }, [youtubeState?.videoId])
 
