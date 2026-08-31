@@ -859,98 +859,6 @@ export default function Workspace() {
                   />
                 )}
         </AnimatePresence>
-
-        {/* Tools sidebar (Polls / To-dos / Agenda / Hand raises) */}
-        <AnimatePresence>
-          {toolsOpen && (
-            <motion.div
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 300, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="bg-zoom-dark border-l border-white/10 flex flex-col overflow-hidden shrink-0"
-            >
-              <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
-                <span className="text-xs font-medium text-white/80">Study Tools</span>
-                <button onClick={() => setToolsOpen(false)} className="w-5 h-5 rounded flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors">
-                  <X size={13} />
-                </button>
-              </div>
-
-              {Object.keys(raisedHands).length > 0 && (
-                <div className="px-3 py-2 border-b border-white/10">
-                  <p className="text-[11px] font-medium text-amber-400 mb-1.5 flex items-center gap-1.5">
-                    <Hand size={12} />
-                    Hand Raised ({Object.keys(raisedHands).length})
-                  </p>
-                  <div className="space-y-1">
-                    {Object.entries(raisedHands).map(([sid, name]) => (
-                      <div key={sid} className="flex items-center gap-2 bg-amber-400/10 border border-amber-400/20 rounded px-2 py-1">
-                        <span className="w-5 h-5 rounded-full bg-amber-400/20 flex items-center justify-center text-amber-300">
-                          <Hand size={11} />
-                        </span>
-                        <span className="text-[11px] text-white/80">{name}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-1 px-3 pt-2.5 border-b border-white/10 mb-2">
-                <button
-                  onClick={() => setToolsTab('poll')}
-                  className={`flex-1 px-2 py-1.5 rounded-t text-[11px] font-medium transition ${toolsTab === 'poll' ? 'bg-white/10 text-white border-b-2 border-zoom-blue' : 'text-white/40 hover:text-white/70'}`}
-                >
-                  Polls
-                </button>
-                <button
-                  onClick={() => setToolsTab('todo')}
-                  className={`flex-1 px-2 py-1.5 rounded-t text-[11px] font-medium transition ${toolsTab === 'todo' ? 'bg-white/10 text-white border-b-2 border-zoom-blue' : 'text-white/40 hover:text-white/70'}`}
-                >
-                  To-dos
-                </button>
-                <button
-                  onClick={() => setToolsTab('agenda')}
-                  className={`flex-1 px-2 py-1.5 rounded-t text-[11px] font-medium transition ${toolsTab === 'agenda' ? 'bg-white/10 text-white border-b-2 border-zoom-blue' : 'text-white/40 hover:text-white/70'}`}
-                >
-                  Agenda
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-3">
-                {toolsTab === 'poll' && (
-                  <PollsPanel
-                    polls={polls}
-                    user={user}
-                    isHost={room?.host?._id === user?.id}
-                    emitCreatePoll={emitCreatePoll}
-                    emitPollVote={emitPollVote}
-                    emitPollClose={emitPollClose}
-                  />
-                )}
-                {toolsTab === 'todo' && (
-                  <TodosPanel
-                    todos={todos}
-                    roomUsers={roomUsers}
-                    user={user}
-                    emitAddTodo={emitAddTodo}
-                    emitToggleTodo={emitToggleTodo}
-                    emitDeleteTodo={emitDeleteTodo}
-                  />
-                )}
-                {toolsTab === 'agenda' && (
-                  <AgendaPanel
-                    agenda={agenda}
-                    emitAddAgenda={emitAddAgenda}
-                    emitToggleAgenda={emitToggleAgenda}
-                    emitDeleteAgenda={emitDeleteAgenda}
-                  />
-                )}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
             <div
               className="absolute top-0 right-0 bottom-0 w-1.5 cursor-col-resize group hover:bg-zoom-blue/40 active:bg-zoom-blue/60 transition-colors"
               onPointerDown={(e) => {
@@ -970,6 +878,7 @@ export default function Workspace() {
               }}
               onPointerCancel={() => { whiteboardResizing.current = false; }}
             />
+          </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1426,9 +1335,98 @@ export default function Workspace() {
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
 
-      {/* Floating panels */}
+        <AnimatePresence>
+          {toolsOpen && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 300, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="bg-zoom-dark border-l border-white/10 flex flex-col overflow-hidden shrink-0"
+            >
+              <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                <span className="text-xs font-medium text-white/80">Study Tools</span>
+                <button onClick={() => setToolsOpen(false)} className="w-5 h-5 rounded flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors">
+                  <X size={13} />
+                </button>
+              </div>
+
+              {Object.keys(raisedHands).length > 0 && (
+                <div className="px-3 py-2 border-b border-white/10">
+                  <p className="text-[11px] font-medium text-amber-400 mb-1.5 flex items-center gap-1.5">
+                    <Hand size={12} />
+                    Hand Raised ({Object.keys(raisedHands).length})
+                  </p>
+                  <div className="space-y-1">
+                    {Object.entries(raisedHands).map(([sid, name]) => (
+                      <div key={sid} className="flex items-center gap-2 bg-amber-400/10 border border-amber-400/20 rounded px-2 py-1">
+                        <span className="w-5 h-5 rounded-full bg-amber-400/20 flex items-center justify-center text-amber-300">
+                          <Hand size={11} />
+                        </span>
+                        <span className="text-[11px] text-white/80">{name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-1 px-3 pt-2.5 border-b border-white/10 mb-2">
+                <button
+                  onClick={() => setToolsTab('poll')}
+                  className={`flex-1 px-2 py-1.5 rounded-t text-[11px] font-medium transition ${toolsTab === 'poll' ? 'bg-white/10 text-white border-b-2 border-zoom-blue' : 'text-white/40 hover:text-white/70'}`}
+                >
+                  Polls
+                </button>
+                <button
+                  onClick={() => setToolsTab('todo')}
+                  className={`flex-1 px-2 py-1.5 rounded-t text-[11px] font-medium transition ${toolsTab === 'todo' ? 'bg-white/10 text-white border-b-2 border-zoom-blue' : 'text-white/40 hover:text-white/70'}`}
+                >
+                  To-dos
+                </button>
+                <button
+                  onClick={() => setToolsTab('agenda')}
+                  className={`flex-1 px-2 py-1.5 rounded-t text-[11px] font-medium transition ${toolsTab === 'agenda' ? 'bg-white/10 text-white border-b-2 border-zoom-blue' : 'text-white/40 hover:text-white/70'}`}
+                >
+                  Agenda
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-3">
+                {toolsTab === 'poll' && (
+                  <PollsPanel
+                    polls={polls}
+                    user={user}
+                    isHost={room?.host?._id === user?.id}
+                    emitCreatePoll={emitCreatePoll}
+                    emitPollVote={emitPollVote}
+                    emitPollClose={emitPollClose}
+                  />
+                )}
+                {toolsTab === 'todo' && (
+                  <TodosPanel
+                    todos={todos}
+                    roomUsers={roomUsers}
+                    user={user}
+                    emitAddTodo={emitAddTodo}
+                    emitToggleTodo={emitToggleTodo}
+                    emitDeleteTodo={emitDeleteTodo}
+                  />
+                )}
+                {toolsTab === 'agenda' && (
+                  <AgendaPanel
+                    agenda={agenda}
+                    emitAddAgenda={emitAddAgenda}
+                    emitToggleAgenda={emitToggleAgenda}
+                    emitDeleteAgenda={emitDeleteAgenda}
+                  />
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+      </div>
       <AnimatePresence>
         {pomodoroOpen && (
           <PomodoroTimer isOpen={pomodoroOpen} onToggle={() => setPomodoroOpen(false)} />
