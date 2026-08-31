@@ -723,14 +723,24 @@ export default function Workspace() {
 
   // --- YouTube stage: cleanup player when leaving ---
   useEffect(() => {
-    if (stageIsYoutube) return
+    if (stageIsYoutube && youtubeState?.videoId) return
     if (ytStagePlayerRef.current) {
       try { ytStagePlayerRef.current.destroy() } catch {}
       ytStagePlayerRef.current = null
       ytStageReadyRef.current = false
-      if (ytStageContainerRef.current) ytStageContainerRef.current.innerHTML = ''
+      if (ytStageContainerRef.current) {
+        ytStageContainerRef.current.innerHTML = ''
+        ytStageContainerRef.current.style.display = 'none'
+      }
     }
-  }, [stageIsYoutube])
+  }, [stageIsYoutube, youtubeState?.videoId])
+
+  // Re-show container when entering YouTube stage
+  useEffect(() => {
+    if (stageIsYoutube && youtubeState?.videoId && ytStageContainerRef.current) {
+      ytStageContainerRef.current.style.display = ''
+    }
+  }, [stageIsYoutube, youtubeState?.videoId])
 
   // --- Auto-pin to YouTube when a video is shared (all users) ---
   useEffect(() => {
@@ -1028,8 +1038,8 @@ export default function Workspace() {
                   data-screen-share="true"
                   className="relative flex-1 min-h-0 rounded-lg overflow-hidden bg-black ring-1 ring-black/10"
                 >
-                  {stageIsYoutube ? (
-                    <div ref={ytStageContainerRef} className="w-full h-full" />
+                  {stageIsYoutube && youtubeState?.videoId ? (
+                    <div ref={ytStageContainerRef} className="w-full h-full bg-black" />
                   ) : (
                     <video
                       ref={(node) => {
