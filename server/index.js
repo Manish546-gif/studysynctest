@@ -130,6 +130,8 @@ io.on('connection', (socket) => {
       socket.emit('poll-state', room.polls || []);
       socket.emit('todo-state', room.todos || []);
       socket.emit('agenda-state', room.agenda || []);
+      socket.emit('sticky-state', { notes: room.stickyNotes || [] });
+      socket.emit('waiting-update', { waiting: room.waitingRoom || [] });
 
       const users = Array.from(activeRooms.get(roomId).values());
       io.to(roomId).emit('room-users', users);
@@ -727,6 +729,121 @@ io.on('connection', (socket) => {
       userName: socket.user.name,
       timestamp: Date.now(),
     });
+  });
+
+  // --- YouTube watch-together (in-memory, real-time only) ---
+  const youtubeStates = {};
+
+  socket.on('youtube-set', (data) => {
+    const roomId = socket.roomId;
+    if (!roomId) return;
+    const url = String(data?.url || '').trim();
+    const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+    const videoId = match ? match[1] : null;
+    if (!videoId) return;
+    if (!youtubeStates[roomId]) youtubeStates[roomId] = { videoId, playing: false, currentTime: 0, setBy: socket.user.name };
+    else { youtubeStates[roomId].videoId = videoId; youtubeStates[roomId].setBy = socket.user.name; }
+    io.to(roomId).emit('youtube-state', youtubeStates[roomId]);
+  });
+
+  socket.on('youtube-play', (data) => {
+    const roomId = socket.roomId;
+    if (!roomId || !youtubeStates[roomId]) return;
+    youtubeStates[roomId].playing = true;
+    youtubeStates[roomId].currentTime = data?.currentTime || 0;
+    io.to(roomId).emit('youtube-state', youtubeStates[roomId]);
+  });
+
+  socket.on('youtube-pause', (data) => {
+    const roomId = socket.roomId;
+    if (!roomId || !youtubeStates[roomId]) return;
+    youtubeStates[roomId].playing = false;
+    youtubeStates[roomId].currentTime = data?.currentTime || 0;
+    io.to(roomId).emit('youtube-state', youtubeStates[roomId]);
+  });
+
+  socket.on('youtube-stop', () => {
+    const roomId = socket.roomId;
+    if (!roomId) return;
+    delete youtubeStates[roomId];
+    io.to(roomId).emit('youtube-state', null);
+  });
+
+  // --- Sticky notes ---
+  socket.on('sticky-add', async (data) => {
+    const roomId = socket.roomId;
+    if (!roomId) return;
+    try {
+      await persistRoomField(roomId, (room) => {
+        room.stickyNotes.push({
+          text: String(data?.text || '').slice(0, 500),
+          color: String(data?.color || '#fef08a'),
+          x: Number(data?.x) || 0,
+          y: Number(data?.y) || 0,
+          createdBy: socket.user._id,
+          createdAt: new Date(),
+        });
+      });
+      const room = await Room.findById(roomId);
+      io.to(roomId).emit('sticky-update', { notes: room.stickyNotes });
+    } catch {}
+  });
+
+  socket.on('sticky-update', async (data) => {
+    const roomId = socket.roomId;
+    if (!roomId || data?.noteIndex === undefined) return;
+    try {
+      await persistRoomField(roomId, (room) => {
+        const note = room.stickyNotes[data.noteIndex];
+        if (!note) return;
+        if (data.text !== undefined) note.text = String(data.text).slice(0, 500);
+        if (data.color !== undefined) note.color = String(data.color);
+        if (data.x !== undefined) note.x = Number(data.x);
+        if (data.y !== undefined) note.y = Number(data.y);
+      });
+      const room = await Room.findById(roomId);
+      io.to(roomId).emit('sticky-update', { notes: room.stickyNotes });
+    } catch {}
+  });
+
+  socket.on('sticky-delete', async (data) => {
+    const roomId = socket.roomId;
+    if (!roomId || data?.noteIndex === undefined) return;
+    try {
+      await persistRoomField(roomId, (room) => {
+        if (room.stickyNotes[data.noteIndex]) room.stickyNotes.splice(data.noteIndex, 1);
+      });
+      const room = await Room.findById(roomId);
+      io.to(roomId).emit('sticky-update', { notes: room.stickyNotes });
+    } catch {}
+  });
+
+  // --- Waiting room (host only) ---
+  socket.on('waiting-join', () => {
+    const roomId = socket.roomId;
+    if (!roomId) return;
+    socket.to(roomId).emit('waiting-join', { userId: socket.user._id, name: socket.user.name });
+  });
+
+  socket.on('waiting-admit', async (data) => {
+    const roomId = socket.roomId;
+    if (!roomId || socket.roomHost !== true) return;
+    const targetId = data?.userId;
+    if (!targetId) return;
+    try {
+      await persistRoomField(roomId, (room) => {
+        room.waitingRoom = (room.waitingRoom || []).filter((id) => String(id) !== String(targetId));
+        if (!room.members.some((m) => String(m) === String(targetId))) room.members.push(targetId);
+      });
+      io.to(roomId).emit('waiting-update', { waiting: (await Room.findById(roomId)).waitingRoom || [] });
+      io.to(roomId).emit('waiting-admitted', { userId: targetId });
+    } catch {}
+  });
+
+  socket.on('waiting-deny', (data) => {
+    const roomId = socket.roomId;
+    if (!roomId || socket.roomHost !== true) return;
+    io.to(roomId).emit('waiting-denied', { userId: data?.userId });
   });
 
   // --- Clean up viewer tracking on disconnect ---

@@ -73,6 +73,15 @@ const roomSchema = new mongoose.Schema({
   todos: [todoSchema],
   polls: [pollSchema],
   agenda: [agendaItemSchema],
+  stickyNotes: [{
+    text: { type: String, default: '' },
+    color: { type: String, default: '#fef08a' },
+    x: { type: Number, default: 0 },
+    y: { type: Number, default: 0 },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    createdAt: { type: Date, default: Date.now },
+  }],
+  waitingRoom: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 }, { timestamps: true });
 
 roomSchema.index({ host: 1 });

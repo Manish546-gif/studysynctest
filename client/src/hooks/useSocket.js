@@ -21,6 +21,9 @@ export function useSocket(roomId) {
   const [polls, setPolls] = useState([]);
   const [todos, setTodos] = useState([]);
   const [agenda, setAgenda] = useState([]);
+  const [youtubeState, setYoutubeState] = useState(null);
+  const [stickyNotes, setStickyNotes] = useState([]);
+  const [waitingRoom, setWaitingRoom] = useState([]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -49,6 +52,14 @@ export function useSocket(roomId) {
     socket.on('poll-update', (data) => setPolls(Array.isArray(data?.polls) ? data.polls : []));
     socket.on('todo-update', (data) => setTodos(Array.isArray(data?.todos) ? data.todos : []));
     socket.on('agenda-update', (data) => setAgenda(Array.isArray(data?.agenda) ? data.agenda : []));
+
+    socket.on('youtube-state', (data) => setYoutubeState(data || null));
+    socket.on('sticky-update', (data) => setStickyNotes(Array.isArray(data?.notes) ? data.notes : []));
+    socket.on('sticky-state', (data) => setStickyNotes(Array.isArray(data?.notes) ? data.notes : []));
+    socket.on('waiting-update', (data) => setWaitingRoom(Array.isArray(data?.waiting) ? data.waiting : []));
+    socket.on('waiting-admitted', (data) => {
+      if (data?.userId) setWaitingRoom((prev) => prev.filter((id) => String(id) !== String(data.userId)));
+    });
 
     socket.on('chat-message', (message) => {
       setMessages((prev) => [...prev, message]);
@@ -290,6 +301,46 @@ export function useSocket(roomId) {
     socketRef.current?.emit('agenda-delete', { agendaIndex });
   }, []);
 
+  const emitYoutubeSet = useCallback((url) => {
+    socketRef.current?.emit('youtube-set', { url });
+  }, []);
+
+  const emitYoutubePlay = useCallback((currentTime) => {
+    socketRef.current?.emit('youtube-play', { currentTime });
+  }, []);
+
+  const emitYoutubePause = useCallback((currentTime) => {
+    socketRef.current?.emit('youtube-pause', { currentTime });
+  }, []);
+
+  const emitYoutubeStop = useCallback(() => {
+    socketRef.current?.emit('youtube-stop');
+  }, []);
+
+  const emitStickyAdd = useCallback((note) => {
+    socketRef.current?.emit('sticky-add', note);
+  }, []);
+
+  const emitStickyUpdate = useCallback((noteIndex, data) => {
+    socketRef.current?.emit('sticky-update', { noteIndex, ...data });
+  }, []);
+
+  const emitStickyDelete = useCallback((noteIndex) => {
+    socketRef.current?.emit('sticky-delete', { noteIndex });
+  }, []);
+
+  const emitWaitingJoin = useCallback(() => {
+    socketRef.current?.emit('waiting-join');
+  }, []);
+
+  const emitWaitingAdmit = useCallback((userId) => {
+    socketRef.current?.emit('waiting-admit', { userId });
+  }, []);
+
+  const emitWaitingDeny = useCallback((userId) => {
+    socketRef.current?.emit('waiting-deny', { userId });
+  }, []);
+
   return {
     socket: socketRef,
     connected,
@@ -310,6 +361,9 @@ export function useSocket(roomId) {
     polls,
     todos,
     agenda,
+    youtubeState,
+    stickyNotes,
+    waitingRoom,
     emitDraw,
     emitMove,
     emitCursor,
@@ -335,5 +389,15 @@ export function useSocket(roomId) {
     emitAddAgenda,
     emitToggleAgenda,
     emitDeleteAgenda,
+    emitYoutubeSet,
+    emitYoutubePlay,
+    emitYoutubePause,
+    emitYoutubeStop,
+    emitStickyAdd,
+    emitStickyUpdate,
+    emitStickyDelete,
+    emitWaitingJoin,
+    emitWaitingAdmit,
+    emitWaitingDeny,
   };
 }

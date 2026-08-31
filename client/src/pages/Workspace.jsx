@@ -54,6 +54,9 @@ import BreakoutPanel from '../components/BreakoutPanel'
 import PollsPanel from '../components/PollsPanel'
 import TodosPanel from '../components/TodosPanel'
 import AgendaPanel from '../components/AgendaPanel'
+import YoutubePanel from '../components/YoutubePanel'
+import StickyNotesPanel from '../components/StickyNotesPanel'
+import WaitingRoomPanel from '../components/WaitingRoomPanel'
 import ShortcutOverlay from '../components/ShortcutOverlay'
 import useRoomReactions from '../hooks/useRoomReactions'
 
@@ -205,7 +208,7 @@ export default function Workspace() {
   const [breakoutOpen, setBreakoutOpen] = useState(false)
   const [breakoutRooms, setBreakoutRooms] = useState([])
   const [toolsOpen, setToolsOpen] = useState(false)
-  const [toolsTab, setToolsTab] = useState('poll') // 'poll' | 'todo' | 'agenda'
+  const [toolsTab, setToolsTab] = useState('poll') // 'poll' | 'todo' | 'agenda' | 'youtube' | 'notes' | 'waiting'
   const [handRaisedUsers, setHandRaisedUsers] = useState([])
   const [viewerCount, setViewerCount] = useState(0)
   const [shortcutOpen, setShortcutOpen] = useState(false)
@@ -268,6 +271,18 @@ export default function Workspace() {
     emitAddAgenda,
     emitToggleAgenda,
     emitDeleteAgenda,
+    youtubeState,
+    stickyNotes,
+    waitingRoom,
+    emitYoutubeSet,
+    emitYoutubePlay,
+    emitYoutubePause,
+    emitYoutubeStop,
+    emitStickyAdd,
+    emitStickyUpdate,
+    emitStickyDelete,
+    emitWaitingAdmit,
+    emitWaitingDeny,
   } = useSocket(roomId)
 
   const {
@@ -1371,25 +1386,23 @@ export default function Workspace() {
                 </div>
               )}
 
-              <div className="flex gap-1 px-3 pt-2.5 border-b border-white/10 mb-2">
-                <button
-                  onClick={() => setToolsTab('poll')}
-                  className={`flex-1 px-2 py-1.5 rounded-t text-[11px] font-medium transition ${toolsTab === 'poll' ? 'bg-white/10 text-white border-b-2 border-zoom-blue' : 'text-white/40 hover:text-white/70'}`}
-                >
-                  Polls
-                </button>
-                <button
-                  onClick={() => setToolsTab('todo')}
-                  className={`flex-1 px-2 py-1.5 rounded-t text-[11px] font-medium transition ${toolsTab === 'todo' ? 'bg-white/10 text-white border-b-2 border-zoom-blue' : 'text-white/40 hover:text-white/70'}`}
-                >
-                  To-dos
-                </button>
-                <button
-                  onClick={() => setToolsTab('agenda')}
-                  className={`flex-1 px-2 py-1.5 rounded-t text-[11px] font-medium transition ${toolsTab === 'agenda' ? 'bg-white/10 text-white border-b-2 border-zoom-blue' : 'text-white/40 hover:text-white/70'}`}
-                >
-                  Agenda
-                </button>
+              <div className="flex flex-wrap gap-0.5 px-3 pt-2.5 border-b border-white/10 mb-2">
+                {[
+                  ['poll', 'Polls'],
+                  ['todo', 'Tasks'],
+                  ['agenda', 'Agenda'],
+                  ['youtube', 'YouTube'],
+                  ['notes', 'Notes'],
+                  ['waiting', 'Waiting'],
+                ].map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setToolsTab(key)}
+                    className={`flex-1 min-w-0 px-1.5 py-1.5 rounded-t text-[10px] font-medium transition ${toolsTab === key ? 'bg-white/10 text-white border-b-2 border-zoom-blue' : 'text-white/40 hover:text-white/70'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
 
               <div className="flex-1 overflow-y-auto p-3">
@@ -1419,6 +1432,33 @@ export default function Workspace() {
                     emitAddAgenda={emitAddAgenda}
                     emitToggleAgenda={emitToggleAgenda}
                     emitDeleteAgenda={emitDeleteAgenda}
+                  />
+                )}
+                {toolsTab === 'youtube' && (
+                  <YoutubePanel
+                    youtubeState={youtubeState}
+                    isHost={room?.host?._id === user?.id}
+                    emitYoutubeSet={emitYoutubeSet}
+                    emitYoutubePlay={emitYoutubePlay}
+                    emitYoutubePause={emitYoutubePause}
+                    emitYoutubeStop={emitYoutubeStop}
+                  />
+                )}
+                {toolsTab === 'notes' && (
+                  <StickyNotesPanel
+                    stickyNotes={stickyNotes}
+                    emitStickyAdd={emitStickyAdd}
+                    emitStickyUpdate={emitStickyUpdate}
+                    emitStickyDelete={emitStickyDelete}
+                  />
+                )}
+                {toolsTab === 'waiting' && (
+                  <WaitingRoomPanel
+                    waitingRoom={waitingRoom}
+                    roomUsers={roomUsers}
+                    isHost={room?.host?._id === user?.id}
+                    emitWaitingAdmit={emitWaitingAdmit}
+                    emitWaitingDeny={emitWaitingDeny}
                   />
                 )}
               </div>
