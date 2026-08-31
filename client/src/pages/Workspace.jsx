@@ -800,10 +800,10 @@ export default function Workspace() {
       try { ytStagePlayerRef.current.destroy() } catch {}
       ytStagePlayerRef.current = null
       ytStageReadyRef.current = false
-      if (ytStageContainerRef.current) {
-        ytStageContainerRef.current.innerHTML = ''
-        ytStageContainerRef.current.style.display = 'none'
-      }
+    }
+    if (ytStageContainerRef.current) {
+      ytStageContainerRef.current.innerHTML = ''
+      ytStageContainerRef.current.style.display = 'none'
     }
   }, [stageIsYoutube, youtubeState?.videoId])
 
@@ -1131,27 +1131,30 @@ export default function Workspace() {
                   {stageIsYoutube && youtubeState?.videoId ? (
                     <div ref={ytStageContainerRef} className="w-full h-full bg-black" />
                   ) : (
-                    <video
-                      ref={(node) => {
-                        stageVideoRef.current = node
-                        if (node && stageStream && node.srcObject !== stageStream) {
-                          if (!stageIsLocal && !node.muted) {
-                            node.muted = true
-                            const onPlaying = () => {
-                              node.muted = false
-                              node.removeEventListener('playing', onPlaying)
+                    <>
+                      <div ref={ytStageContainerRef} className="w-full h-full bg-black" style={{ display: 'none' }} />
+                      <video
+                        ref={(node) => {
+                          stageVideoRef.current = node
+                          if (node && stageStream && node.srcObject !== stageStream) {
+                            if (!stageIsLocal && !node.muted) {
+                              node.muted = true
+                              const onPlaying = () => {
+                                node.muted = false
+                                node.removeEventListener('playing', onPlaying)
+                              }
+                              node.addEventListener('playing', onPlaying)
                             }
-                            node.addEventListener('playing', onPlaying)
+                            node.srcObject = stageStream
+                            node.play?.().catch(() => {})
                           }
-                          node.srcObject = stageStream
-                          node.play?.().catch(() => {})
-                        }
-                      }}
-                      autoPlay
-                      playsInline
-                      muted={stageIsLocal}
-                      className="w-full h-full object-contain"
-                    />
+                        }}
+                        autoPlay
+                        playsInline
+                        muted={stageIsLocal}
+                        className="w-full h-full object-contain"
+                      />
+                    </>
                   )}
                   <div className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 rounded px-1.5 py-0.5 pointer-events-none">
                     {stageIsYoutube ? <MonitorPlay size={11} className="text-red-400" /> : <Monitor size={11} className="text-white" />}

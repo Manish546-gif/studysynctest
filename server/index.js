@@ -124,8 +124,8 @@ io.on('connection', (socket) => {
       let admitted = false;
       if (isHost) {
         admitted = true;
-      } else if (room.approvedUsers.some((id) => id.toString() === socket.user._id.toString())) {
-        // Previously approved users always admitted
+      } else if (room.isPublic && room.approvedUsers.some((id) => id.toString() === socket.user._id.toString())) {
+        // Public rooms: previously approved users auto-admit. Private rooms: always require approval.
         admitted = true;
       }
 
