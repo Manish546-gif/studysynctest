@@ -73,6 +73,22 @@ async function ensureUsername(user) {
   return user;
 }
 
+async function generateUniqueUsername(email) {
+  const base = (email ? email.split('@')[0] : 'user')
+    .replace(/[^a-z0-9_.]/gi, '')
+    .replace(/_+/g, '_')
+    .slice(0, 24)
+    .toLowerCase() || 'user';
+  let candidate = base;
+  let i = 1;
+  for (;;) {
+    const exists = await User.findOne({ username: candidate });
+    if (!exists) return candidate;
+    candidate = `${base}_${i}`;
+    i += 1;
+  }
+}
+
 async function findOrCreateGoogleUser({ googleId, email, name, picture }) {
   let user = await User.findOne({ $or: [{ googleId }, { email }] });
 
@@ -88,9 +104,13 @@ async function findOrCreateGoogleUser({ googleId, email, name, picture }) {
   if (user) {
     user.googleId = googleId;
     user.avatar = avatarUrl || user.avatar || '';
+    if (!user.username || !user.username.trim()) {
+      user.username = await generateUniqueUsername(email);
+    }
     await user.save();
   } else {
-    user = await User.create({ name, email, googleId, avatar: avatarUrl || '' });
+    const username = await generateUniqueUsername(email);
+    user = await User.create({ name, email, googleId, username, avatar: avatarUrl || '' });
   }
   return await ensureUsername(user);
 }
