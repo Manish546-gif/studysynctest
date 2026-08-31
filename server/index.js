@@ -14,6 +14,7 @@ const User = require('./models/User');
 const Room = require('./models/Room');
 
 const authRoutes = require('./routes/auth');
+const userRoutes = require('./routes/users');
 const roomRoutes = require('./routes/rooms');
 const whiteboardRoutes = require('./routes/whiteboards');
 const notebookRoutes = require('./routes/notebooks');
@@ -23,6 +24,26 @@ const flashcardRoutes = require('./routes/flashcards');
 const statsRoutes = require('./routes/stats');
 const livekitRoutes = require('./routes/livekit');
 const { setSocketIO, notify } = require('./notify');
+
+async function ensureUserUsername(user) {
+  if (!user || (user.username && user.username.trim())) return user;
+  const base = (user.email ? user.email.split('@')[0] : 'user')
+    .replace(/[^a-z0-9_.]/gi, '')
+    .replace(/_+/g, '_')
+    .slice(0, 24)
+    .toLowerCase() || 'user';
+  let candidate = base;
+  let i = 1;
+  while (true) {
+    const exists = await User.findOne({ username: candidate, _id: { $ne: user._id } });
+    if (!exists) break;
+    candidate = `${base}_${i}`;
+    i += 1;
+  }
+  user.username = candidate;
+  await user.save();
+  return user;
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -48,6 +69,7 @@ setSocketIO(io);
 app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: '10mb' }));
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/whiteboards', whiteboardRoutes);
 app.use('/api/notebooks', notebookRoutes);
@@ -81,6 +103,9 @@ io.use(async (socket, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.id).select('-password');
     if (!user) return next(new Error('User not found'));
+    if (!user.username || !user.username.trim()) {
+      await ensureUserUsername(user);
+    }
     socket.user = user;
     next();
   } catch {
@@ -138,8 +163,8 @@ io.on('connection', (socket) => {
         });
 
         // Populate waiting room with user details for the host
-        const updatedRoom = await Room.findById(roomId).populate('waitingRoom', 'name avatar');
-        const waitingDetails = (updatedRoom.waitingRoom || []).map((u) => ({ _id: u._id, name: u.name, avatar: u.avatar }));
+        const updatedRoom = await Room.findById(roomId).populate('waitingRoom', 'name username avatar');
+        const waitingDetails = (updatedRoom.waitingRoom || []).map((u) => ({ _id: u._id, name: u.name, username: u.username, avatar: u.avatar }));
 
         // Broadcast to everyone in room (host sees waiting list, waiting user sees waiting screen)
         io.to(roomId).emit('waiting-update', { waiting: waitingDetails });
@@ -160,6 +185,7 @@ io.on('connection', (socket) => {
       activeRooms.get(roomId).set(socket.id, {
         _id: socket.user._id,
         name: socket.user.name,
+        username: socket.user.username,
         avatar: socket.user.avatar,
       });
 
@@ -184,8 +210,8 @@ io.on('connection', (socket) => {
       }
 
       // Send admission status and waiting room to the joining user
-      const latestRoom = await Room.findById(roomId).populate('waitingRoom', 'name avatar');
-      const waitingDetails = (latestRoom.waitingRoom || []).map((u) => ({ _id: u._id, name: u.name, avatar: u.avatar }));
+      const latestRoom = await Room.findById(roomId).populate('waitingRoom', 'name username avatar');
+      const waitingDetails = (latestRoom.waitingRoom || []).map((u) => ({ _id: u._id, name: u.name, username: u.username, avatar: u.avatar }));
       socket.emit('room-state', {
         isPublic: latestRoom.isPublic,
         waitingRoom: waitingDetails,
@@ -195,6 +221,40 @@ io.on('connection', (socket) => {
       console.log(`${socket.user.name} joined room ${room.name}${isHost ? ' (host)' : ''}`);
     } catch (err) {
       socket.emit('error', err.message);
+    }
+  });
+
+  socket.on('invite-user', async (roomId, username, cb) => {
+    try {
+      const room = await Room.findById(roomId);
+      if (!room) return cb && cb({ error: 'Room not found' });
+
+      if (room.host.toString() !== socket.user._id.toString()) {
+        return cb && cb({ error: 'Only the host can invite members' });
+      }
+
+      const target = await User.findOne({ username: String(username).toLowerCase().trim() });
+      if (!target) return cb && cb({ error: 'No user found with that username' });
+
+      if (target._id.toString() === socket.user._id.toString()) {
+        return cb && cb({ error: 'You cannot invite yourself' });
+      }
+      if (room.host.toString() === target._id.toString()) {
+        return cb && cb({ error: 'The host is already in this room' });
+      }
+      if (room.members.some((m) => m.toString() === target._id.toString())) {
+        return cb && cb({ error: 'This user is already a member' });
+      }
+
+      room.members.push(target._id);
+      await room.save();
+
+      const populated = await room.populate('members', 'name username avatar email');
+      io.to(roomId).emit('members-updated', { members: populated.members });
+
+      if (cb) cb({ ok: true, user: { _id: target._id, name: target.name, username: target.username } });
+    } catch (err) {
+      if (cb) cb({ error: err.message });
     }
   });
 
@@ -235,6 +295,7 @@ io.on('connection', (socket) => {
     const message = {
       userId: socket.user._id,
       name: socket.user.name,
+      username: socket.user.username || '',
       avatar: socket.user.avatar || '',
       text,
       createdAt: new Date(),

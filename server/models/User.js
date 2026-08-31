@@ -3,6 +3,14 @@ const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
+  username: {
+    type: String,
+    required: true,
+    unique: true,
+    lowercase: true,
+    trim: true,
+    match: [/^[a-z0-9_.]{3,24}$/, 'Username must be 3-24 characters (letters, numbers, _ and .)'],
+  },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   password: {
     type: String,

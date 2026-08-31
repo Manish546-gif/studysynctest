@@ -19,6 +19,7 @@ export default function Login() {
   const [isLogin, setIsLogin] = useState(true)
   const [showPw, setShowPw] = useState(false)
   const [name, setName] = useState('')
+  const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -55,7 +56,7 @@ export default function Login() {
       if (isLogin) {
         await login(email, password)
       } else {
-        await register(name, email, password)
+        await register(name, username, email, password)
       }
       navigate('/dashboard')
     } catch (err) {
@@ -220,6 +221,20 @@ export default function Login() {
                     placeholder="Jane Doe"
                     className="w-full rounded-2xl border border-outline-variant/50 bg-surface-container-lowest px-4 py-3 text-sm text-on-surface placeholder:text-on-surface/30 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
+                </motion.div>
+              )}
+
+              {!isLogin && (
+                <motion.div variants={fieldVariants}>
+                  <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Username</label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value.toLowerCase())}
+                    placeholder="janedoe"
+                    className="w-full rounded-2xl border border-outline-variant/50 bg-surface-container-lowest px-4 py-3 text-sm text-on-surface placeholder:text-on-surface/30 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  />
+                  <p className="mt-1 text-[10px] text-on-surface/30">3-24 characters: letters, numbers, _ or .</p>
                 </motion.div>
               )}
 

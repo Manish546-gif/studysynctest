@@ -107,7 +107,7 @@ export default function Dashboard() {
       .finally(() => setLoading(false))
   }, [])
 
-  const displayName = user?.name?.split(' ')[0] || 'there'
+  const displayName = user?.username || user?.name?.split(' ')[0] || 'there'
   const createdRooms = rooms.filter((r) => r.host?._id === user?.id)
   const recentRooms = [...rooms]
     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
@@ -166,20 +166,27 @@ export default function Dashboard() {
     }
   }
 
-  const handleJoinByCode = async (e) => {
+  const handleJoinByLink = (e) => {
     e.preventDefault()
     if (!joinCode.trim()) return
     setJoining(true)
     setJoinError('')
-    try {
-      const data = await api.verifyCode(joinCode.trim())
-      navigate(`/workspace/${data.room._id}`)
-    } catch (err) {
-      setJoinError(err.message || 'Invalid room code')
-      toast(err.message || 'Invalid room code', 'error')
-    } finally {
-      setJoining(false)
+    const clean = joinCode.trim()
+    const base = `${window.location.origin}/workspace/`
+    let id = clean
+    if (clean.startsWith(base)) {
+      id = clean.slice(base.length).split('?')[0]
+    } else if (clean.startsWith('/workspace/')) {
+      id = clean.split('/workspace/')[1].split('?')[0]
     }
+    id = id.trim()
+    setJoining(false)
+    if (!id) {
+      setJoinError('Paste a valid invite link')
+      toast('Paste a valid invite link', 'error')
+      return
+    }
+    navigate(`/workspace/${id}`)
   }
 
   const handleJoinRoom = async (roomId) => {
@@ -203,9 +210,9 @@ export default function Dashboard() {
     }
   }
 
-  const copyCode = () => {
-    if (createdRoom?.code) {
-      navigator.clipboard.writeText(createdRoom.code)
+  const copyInviteLink = () => {
+    if (createdRoom?._id) {
+      navigator.clipboard.writeText(`${window.location.origin}/workspace/${createdRoom._id}?invite=true`)
       setCodeCopied(true)
       setTimeout(() => setCodeCopied(false), 2000)
     }
@@ -338,7 +345,7 @@ export default function Dashboard() {
                 <Users size={28} className="text-on-primary-container/60" />
               </div>
               <p className="font-display text-base font-bold text-on-surface mb-1">No rooms yet</p>
-              <p className="text-sm text-on-surface/40 mb-6 max-w-[240px] mx-auto">Create your first study room or join one with a code to get started.</p>
+              <p className="text-sm text-on-surface/40 mb-6 max-w-[240px] mx-auto">Create your first study room or join one with an invite link to get started.</p>
               <div className="flex justify-center gap-3">
                 <button onClick={() => { setModal('create'); setCreateError(''); }} className="px-5 py-2.5 bg-primary text-on-primary rounded-xl text-sm font-semibold hover:shadow-md hover:shadow-primary/20 transition-shadow">
                   Create Room
@@ -370,8 +377,8 @@ export default function Dashboard() {
                       {room.tag || 'Study'}
                     </span>
                     <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-surface/80 backdrop-blur-sm rounded-lg px-2 py-1">
-                      <KeyRound size={11} className="text-on-surface/60" />
-                      <span className="text-[11px] font-bold text-on-surface/80 font-mono tracking-wider">{room.code}</span>
+                      <Users size={11} className="text-on-surface/60" />
+                      <span className="text-[11px] font-bold text-on-surface/80">{room.members?.length || 0}</span>
                     </div>
                     {room.host?._id === user?.id && (
                       <button
@@ -585,16 +592,18 @@ export default function Dashboard() {
                   <Check size={32} className="text-on-success-container" />
                 </div>
                 <h2 className="font-display text-lg font-bold text-on-surface mb-1">Room Created!</h2>
-                <p className="text-sm text-on-surface/50 mb-6">Share this code with others to join</p>
+                <p className="text-sm text-on-surface/50 mb-6">Share this link to invite others</p>
 
                 <div className="bg-surface-container-low rounded-2xl p-4 mb-6">
-                  <p className="text-[10px] font-semibold text-on-surface/40 uppercase tracking-widest mb-2">Room Code</p>
+                  <p className="text-[10px] font-semibold text-on-surface/40 uppercase tracking-widest mb-2">Invite Link</p>
                   <div className="flex items-center justify-center gap-3">
-                    <span className="font-mono text-4xl font-bold text-on-surface tracking-[0.3em]">{createdRoom.code}</span>
+                    <span className="text-xs font-mono text-on-surface/80 truncate max-w-[70%]">
+                      {window.location.origin}/workspace/{createdRoom._id}
+                    </span>
                     <button
-                      onClick={copyCode}
-                      aria-label={codeCopied ? 'Room code copied' : 'Copy room code'}
-                      className="w-10 h-10 rounded-xl flex items-center justify-center bg-surface-container-high text-on-surface/60 hover:text-on-surface transition-colors"
+                      onClick={copyInviteLink}
+                      aria-label={codeCopied ? 'Invite link copied' : 'Copy invite link'}
+                      className="w-10 h-10 rounded-xl flex items-center justify-center bg-surface-container-high text-on-surface/60 hover:text-on-surface transition-colors shrink-0"
                     >
                       {codeCopied ? <Check size={18} className="text-on-success-container" /> : <Copy size={18} />}
                     </button>
@@ -643,16 +652,15 @@ export default function Dashboard() {
                   </button>
                 </div>
 
-                <form onSubmit={handleJoinByCode} className="space-y-4">
+                <form onSubmit={handleJoinByLink} className="space-y-4">
                   <div>
-                    <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Room Code</label>
+                    <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Invite Link</label>
                     <input
                       autoFocus
                       value={joinCode}
-                      onChange={(e) => { setJoinCode(e.target.value.toUpperCase()); setJoinError(''); }}
-                      placeholder="Enter 6-digit code"
-                      maxLength={6}
-                      className="w-full rounded-2xl border border-outline-variant/50 bg-surface-container-lowest px-4 py-3 text-sm text-on-surface placeholder:text-on-surface/30 outline-none focus:border-primary-container transition-colors font-mono text-center text-lg tracking-[0.3em] uppercase"
+                      onChange={(e) => { setJoinCode(e.target.value.trim()); setJoinError(''); }}
+                      placeholder="Paste the invite link here"
+                      className="w-full rounded-2xl border border-outline-variant/50 bg-surface-container-lowest px-4 py-3 text-sm text-on-surface placeholder:text-on-surface/30 outline-none focus:border-primary-container transition-colors"
                     />
                     {joinError && (
                       <p className="text-xs text-error mt-2">{joinError}</p>
@@ -660,11 +668,11 @@ export default function Dashboard() {
                   </div>
                   <button
                     type="submit"
-                    disabled={joining || joinCode.length < 6}
+                    disabled={joining || !joinCode.trim()}
                     className="w-full py-3 rounded-2xl bg-primary text-on-primary text-sm font-semibold hover:shadow-md transition-shadow disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {joining ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
-                    {joining ? 'Verifying...' : 'Join Room'}
+                    {joining ? 'Joining...' : 'Join Room'}
                   </button>
                 </form>
               </div>

@@ -13,6 +13,7 @@ import {
   PhoneOff,
   Users,
   UserPlus,
+  Crown,
   Copy,
   Check,
   KeyRound,
@@ -45,7 +46,7 @@ import {
   Paperclip,
   FileText as FileIcon,
 } from 'lucide-react'
-import { api } from '../services/api'
+import { api, getAssetUrl } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useSocket } from '../hooks/useSocket'
@@ -72,7 +73,7 @@ import useRoomReactions from '../hooks/useRoomReactions'
 
 const ROOM_TAGS = ['Study', 'Project', 'Review', 'Homework', 'Exam Prep', 'Discussion']
 
-function VideoTile({ stream, name, isLocal, muted, mirror, presenting, onClick, active, contain, tabAway, speakerLevel, pinned, watchLabel }) {
+function VideoTile({ stream, name, avatar, isLocal, muted, mirror, presenting, onClick, active, contain, tabAway, speakerLevel, pinned, watchLabel }) {
   const videoRef = useRef(null)
   const hasVideo = stream && stream.getVideoTracks().length > 0
 
@@ -122,8 +123,12 @@ function VideoTile({ stream, name, isLocal, muted, mirror, presenting, onClick, 
         </>
       ) : (
         <div className="w-full h-full flex items-center justify-center">
-          <div className="w-12 h-12 rounded bg-zoom-blue/20 flex items-center justify-center">
-            <span className="text-sm font-semibold text-zoom-blue">{name?.charAt(0)?.toUpperCase()}</span>
+          <div className={`w-12 h-12 rounded-full overflow-hidden ${avatar ? '' : 'bg-zoom-blue/20'} flex items-center justify-center`}>
+            {avatar ? (
+              <img src={getAssetUrl(avatar)} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none' }} />
+            ) : (
+              <span className="text-sm font-semibold text-zoom-blue">{name?.replace(/^@/, '')?.charAt(0)?.toUpperCase()}</span>
+            )}
           </div>
         </div>
       )}
@@ -162,6 +167,7 @@ function VideoTile({ stream, name, isLocal, muted, mirror, presenting, onClick, 
 const MemoizedVideoTile = React.memo(VideoTile, (prev, next) => {
   return prev.stream === next.stream
     && prev.name === next.name
+    && prev.avatar === next.avatar
     && prev.muted === next.muted
     && prev.active === next.active
     && prev.pinned === next.pinned
@@ -183,6 +189,19 @@ function formatBytes(bytes) {
   let v = n
   while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
   return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`
+}
+
+function getChatFileUrl(roomId, file) {
+  if (!file) return '#'
+  let url = file.url
+  if (!url && file.storedName) {
+    const base = (import.meta.env.VITE_API_URL || '') + `/files/${roomId}/download/${encodeURIComponent(file.storedName)}`
+    return base + '?token=' + (localStorage.getItem('token') || '')
+  }
+  if (/^https?:\/\//.test(url)) return url
+  if (!url) return '#'
+  const token = localStorage.getItem('token') || ''
+  return url + (url.includes('?') ? '&' : '?') + `token=${token}`
 }
 
 function formatMessageTime(value) {
@@ -272,6 +291,8 @@ export default function Workspace() {
     pinnedMessageIds,
     emitMessage,
     emitPinMessage,
+    emitInviteUser,
+    members,
     roomFiles,
     setRoomFiles,
     typingUsers,
@@ -714,8 +735,10 @@ export default function Workspace() {
     'bg-orange-500', 'bg-pink-500', 'bg-teal-500', 'bg-red-500',
   ]
 
-  const allMembers = room?.members || []
-  const displayMembers = roomUsers.length > 0 ? roomUsers : allMembers
+  const allMembers = members.length ? members : (room?.members || [])
+  const activeIds = new Set(roomUsers.map((u) => String(u._id)))
+  const displayMembers = [...roomUsers, ...allMembers.filter((m) => m?._id && !activeIds.has(String(m._id)))]
+  const memberLabel = (m) => (m?.username ? `@${m.username}` : m?.name || 'Participant')
   const remoteUserIds = [...new Set([...Object.keys(remoteStreams), ...Object.keys(remoteScreenStreams)])]
 
   // Stage resolution: pinned tile wins, otherwise auto-follow the active
@@ -755,7 +778,7 @@ export default function Workspace() {
     ? `${user?.name || 'You'} (You)`
     : stageIsYoutube
       ? `YouTube — ${youtubeState?.setBy || 'Shared'}`
-      : screenSharers[stageTarget] || displayMembers.find((m) => m._id === stageTarget)?.name || 'Participant';
+      : screenSharers[stageTarget] || memberLabel(displayMembers.find((m) => m._id === stageTarget)) || 'Participant';
 
   // Drop stale pins (stream died / media stopped) and leave fullscreen.
   useEffect(() => {
@@ -903,8 +926,8 @@ export default function Workspace() {
     )
   }
 
-  // Waiting room: non-admitted users see this screen
-  if (room && !admitted) {
+  // Waiting room: non-admitted users see this screen (host is always allowed in)
+  if (room && !admitted && room.host?._id !== user?.id) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-zoom-darker gap-4">
         <div className="w-16 h-16 rounded-full bg-zoom-dark border border-white/10 flex items-center justify-center">
@@ -927,7 +950,15 @@ export default function Workspace() {
     <div className="flex flex-col h-screen bg-surface">
       <FloatingReactions reactions={floatingReactions} />
       {inviteLinkOpen && (
-        <InviteLinkModal roomId={roomId} roomCode={room?.code} onClose={() => setInviteLinkOpen(false)} />
+        <InviteLinkModal
+          roomId={roomId}
+          roomCode={room?.code}
+          onInvite={(username) => new Promise((resolve, reject) => emitInviteUser(username, (res) => {
+            if (res && res.error) reject(new Error(res.error))
+            else resolve()
+          }))}
+          onClose={() => setInviteLinkOpen(false)}
+        />
       )}
 
       {/* Top Header */}
@@ -946,21 +977,17 @@ export default function Workspace() {
           <Settings size={13} />
         </button>
 
-        <button
-          onClick={copyCode}
-          className="flex items-center gap-1 px-2 py-1 bg-white/10 hover:bg-white/15 rounded text-xs font-mono text-white/80 transition"
-        >
-          <KeyRound size={11} />
-          <span className="tracking-wider">{room.code}</span>
-          {codeCopied ? <Check size={11} className="text-green-400" /> : <Copy size={11} />}
-        </button>
+        <div className="flex items-center gap-1 px-2 py-1 bg-white/10 rounded text-xs text-white/60" title="Host">
+          <Crown size={11} className="text-yellow-400" />
+          <span className="max-w-[100px] truncate">@{room.host?.username || room.host?.name}</span>
+        </div>
 
         <button
           onClick={() => setInviteLinkOpen(true)}
           className="flex items-center gap-1 px-2 py-1 bg-white/5 hover:bg-white/10 text-white/50 rounded text-xs transition"
-          title="Copy invite link"
+          title="Invite people"
         >
-          <Link2 size={11} />
+          <UserPlus size={11} />
           <span className="hidden sm:inline">Invite</span>
         </button>
 
@@ -1177,7 +1204,7 @@ export default function Workspace() {
                         }`}
                       >
                         <Monitor size={11} />
-                        {pid === 'local' ? 'You' : pid === 'youtube' ? 'YouTube' : screenSharers[pid] || displayMembers.find((m) => m._id === pid)?.name || 'Participant'}
+                        {pid === 'local' ? 'You' : pid === 'youtube' ? 'YouTube' : screenSharers[pid] || memberLabel(displayMembers.find((m) => m._id === pid)) || 'Participant'}
                       </button>
                     ))}
                   </div>
@@ -1303,7 +1330,8 @@ export default function Workspace() {
                   <div className="w-44 shrink-0">
                     <MemoizedVideoTile
                       stream={localStream}
-                      name={user?.name || 'You'}
+                      name={user?.username ? `@${user.username}` : (user?.name || 'You')}
+                      avatar={user?.avatar}
                       isLocal={true}
                       muted={true}
                       mirror={!screenSharing}
@@ -1321,8 +1349,9 @@ export default function Workspace() {
                         <MemoizedVideoTile
                           stream={remoteScreenStreams[socketId] || remoteStreams[socketId]}
                           name={
-                            displayMembers.find((m) => m._id === socketId)?.name || 'Participant'
+                            memberLabel(displayMembers.find((m) => m._id === socketId)) || 'Participant'
                           }
+                          avatar={displayMembers.find((m) => m._id === socketId)?.avatar}
                           isLocal={false}
                           muted={true}
                           presenting={isScreenSharer}
@@ -1343,7 +1372,8 @@ export default function Workspace() {
                   {/* Local video */}
                   <MemoizedVideoTile
                     stream={localStream}
-                    name={user?.name || 'You'}
+                    name={user?.username ? `@${user.username} (You)` : (user?.name || 'You')}
+                    avatar={user?.avatar}
                     isLocal={true}
                     muted={true}
                     mirror={!screenSharing}
@@ -1389,8 +1419,9 @@ export default function Workspace() {
                         key={socketId}
                         stream={remoteScreenStreams[socketId] || remoteStreams[socketId]}
                         name={
-                          displayMembers.find((m) => m._id === socketId)?.name || 'Participant'
+                          memberLabel(displayMembers.find((m) => m._id === socketId)) || 'Participant'
                         }
+                        avatar={displayMembers.find((m) => m._id === socketId)?.avatar}
                         isLocal={false}
                         muted={true}
                         presenting={isScreenSharer}
@@ -1409,13 +1440,17 @@ export default function Workspace() {
                     .map((member, i) => (
                       <div key={member._id || i} className="relative rounded overflow-hidden bg-zoom-darker ring-1 ring-white/10 aspect-video flex items-center justify-center">
                         <div className="flex flex-col items-center gap-1.5">
-                          <div className={`w-11 h-11 rounded ${memberColors[i % memberColors.length]} flex items-center justify-center`}>
-                            <span className="text-sm font-semibold text-white">{member.name?.charAt(0)?.toUpperCase()}</span>
+                          <div className={`w-14 h-14 rounded-full overflow-hidden ${memberColors[i % memberColors.length]} flex items-center justify-center ring-2 ring-white/10`}>
+                            {member.avatar ? (
+                              <img src={getAssetUrl(member.avatar)} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none' }} />
+                            ) : (
+                              <span className="text-lg font-semibold text-white">{(member.username || member.name || '?').charAt(0)?.toUpperCase()}</span>
+                            )}
                           </div>
-                          <span className="text-[10px] font-medium text-white/60 truncate max-w-[180px]">{member.name}</span>
+                          <span className="text-[10px] font-medium text-white/60 truncate max-w-[180px]">@{member.username || member.name}</span>
                         </div>
                         <div className="absolute bottom-1 left-1 bg-black/60 rounded px-1.5 py-0.5">
-                          <span className="text-[10px] font-medium text-white">{member.name}</span>
+                          <span className="text-[10px] font-medium text-white">@{member.username || member.name}</span>
                         </div>
                       </div>
                     ))}
@@ -1504,12 +1539,16 @@ export default function Workspace() {
                               const pOwn = msg.userId === user?.id
                               return (
                                 <div key={msg._id} className="flex items-start gap-2">
-                                  <div className={`w-6 h-6 rounded flex items-center justify-center shrink-0 ${pOwn ? 'bg-zoom-blue text-white' : 'bg-white/10 text-white/60'}`}>
-                                    <span className="text-[9px] font-semibold">{(msg.name || '?').trim()[0]?.toUpperCase()}</span>
+                                  <div className={`w-6 h-6 rounded-full overflow-hidden flex items-center justify-center shrink-0 ${pOwn ? 'bg-zoom-blue text-white' : 'bg-white/10 text-white/60'}`}>
+                                    {msg.avatar ? (
+                                      <img src={getAssetUrl(msg.avatar)} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none' }} />
+                                    ) : (
+                                      <span className="text-[9px] font-semibold">{(msg.username || msg.name || '?').trim()[0]?.toUpperCase()}</span>
+                                    )}
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-baseline gap-1.5">
-                                      <span className="text-[11px] font-medium text-white/80">{msg.name}{pOwn ? ' (You)' : ''}</span>
+                                      <span className="text-[11px] font-medium text-white/80">@{msg.username || msg.name}{pOwn ? ' (You)' : ''}</span>
                                     </div>
                                     <p className="text-xs text-white/60 leading-relaxed break-words">{renderMentions(msg.text, roomUsers)}</p>
                                   </div>
@@ -1519,7 +1558,7 @@ export default function Workspace() {
                           </div>
                         )}
                         {messages.map((msg) => {
-                          const initials = (msg.name || '?')
+                          const initials = (msg.username || msg.name || '?')
                             .split(' ')
                             .map((n) => n[0])
                             .join('')
@@ -1530,22 +1569,26 @@ export default function Workspace() {
                           const isPinned = msg._id && pinnedMessageIds.includes(msg._id)
                           return (
                             <div key={msg._id || `${msg.createdAt}-${msg.userId}-${msg.text}`} className={`flex items-start gap-2 ${isPinned ? 'opacity-70' : ''}`}>
-                              <div className={`w-6 h-6 rounded flex items-center justify-center shrink-0 ${
+                              <div className={`w-6 h-6 rounded-full overflow-hidden flex items-center justify-center shrink-0 ${
                                 isOwn ? 'bg-zoom-blue text-white' : 'bg-white/10 text-white/60'
                               }`}>
-                                <span className="text-[9px] font-semibold">{initials}</span>
+                                {msg.avatar ? (
+                                  <img src={getAssetUrl(msg.avatar)} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none' }} />
+                                ) : (
+                                  <span className="text-[9px] font-semibold">{initials}</span>
+                                )}
                               </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-baseline gap-1.5 mb-0.5">
-                                    <span className="text-[11px] font-medium text-white/80">{msg.name}{isOwn ? ' (You)' : ''}</span>
+                                    <span className="text-[11px] font-medium text-white/80">@{msg.username || msg.name}{isOwn ? ' (You)' : ''}</span>
                                     <span className="text-[9px] text-white/25">{time}</span>
                                   </div>
                                   {msg.file && (
                                     <a
-                                      href={msg.file.url || api.getFileUrl?.(roomId, msg.file.storedName) || '#'}
+                                      href={getChatFileUrl(roomId, msg.file)}
                                       target="_blank"
                                       rel="noreferrer"
-                                      onClick={(e) => { if (!(msg.file.url || msg.file.storedName)) e.preventDefault() }}
+                                      onClick={(e) => { if (getChatFileUrl(roomId, msg.file) === '#') e.preventDefault() }}
                                       className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 mb-0.5 hover:border-zoom-blue/50 hover:bg-white/10 transition-colors max-w-full"
                                     >
                                       <span className="w-7 h-7 rounded bg-zoom-blue/20 text-zoom-blue flex items-center justify-center shrink-0">
@@ -1654,12 +1697,16 @@ export default function Workspace() {
               <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
                 {displayMembers.map((member, i) => (
                   <div key={member._id || i} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/5 transition-colors">
-                    <div className={`w-7 h-7 rounded ${memberColors[i % memberColors.length]} flex items-center justify-center text-white font-medium text-[10px]`}>
-                      {member.name?.charAt(0)?.toUpperCase() || '?'}
+                    <div className={`w-7 h-7 rounded-full overflow-hidden ${memberColors[i % memberColors.length]} flex items-center justify-center text-white font-medium text-[10px] shrink-0`}>
+                      {member.avatar ? (
+                        <img src={getAssetUrl(member.avatar)} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none' }} />
+                      ) : (
+                        <span>{(member.username || member.name || '?').charAt(0)?.toUpperCase()}</span>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-[11px] font-medium text-white/80 truncate">
-                        {member.name || 'Unknown'}
+                        @{member.username || member.name || 'Unknown'}
                         {member._id === user?.id && <span className="ml-1 text-[9px] text-zoom-blue">(You)</span>}
                       </p>
                       <p className="text-[9px] text-white/30">

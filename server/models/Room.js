@@ -4,6 +4,7 @@ const { drawActionSchema } = require('./schemas');
 const messageSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   name: { type: String, default: '' },
+  username: { type: String, default: '' },
   avatar: { type: String, default: '' },
   text: { type: String, default: '' },
   file: {
@@ -61,7 +62,7 @@ const agendaItemSchema = new mongoose.Schema({
 const roomSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   description: { type: String, default: '' },
-  code: { type: String, required: true, unique: true, uppercase: true, trim: true },
+  code: { type: String, default: '', index: true },
   host: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   tag: { type: String, default: 'Study' },
@@ -95,7 +96,6 @@ const roomSchema = new mongoose.Schema({
 
 roomSchema.index({ host: 1 });
 roomSchema.index({ members: 1 });
-roomSchema.index({ code: 1 }, { unique: true });
 
 roomSchema.statics.generateCode = async function () {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';

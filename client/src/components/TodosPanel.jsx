@@ -17,7 +17,7 @@ export default function TodosPanel({ todos, roomUsers, user, emitAddTodo, emitTo
       const rid = r._id || r.userId
       return String(rid) === String(id)
     })
-    return u?.name || null
+    return u?.username ? `@${u.username}` : (u?.name || null)
   }
 
   return (

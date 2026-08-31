@@ -27,6 +27,7 @@ export function useSocket(roomId) {
   const [waitingRoom, setWaitingRoom] = useState([]);
   const [roomVisibility, setRoomVisibility] = useState({ isPublic: false, waitingRoom: [] });
   const [admitted, setAdmitted] = useState(false);
+  const [members, setMembers] = useState([]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -46,7 +47,17 @@ export function useSocket(roomId) {
       setAdmitted(false);
     });
 
-    socket.on('room-users', (users) => setRoomUsers(users));
+    socket.on('room-users', (users) => {
+      const seen = new Set();
+      const deduped = Array.isArray(users) ? users.filter((u) => {
+        const key = u && u._id ? String(u._id) : null;
+        if (!key) return true;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }) : [];
+      setRoomUsers(deduped);
+    });
 
     socket.on('chat-history', (history) => setMessages(Array.isArray(history) ? history : []));
 
@@ -87,6 +98,10 @@ export function useSocket(roomId) {
         setRoomVisibility({ isPublic: !!data.isPublic, waitingRoom: data.waitingRoom || [] });
         if (data.admitted === true) setAdmitted(true);
       }
+    });
+
+    socket.on('members-updated', (data) => {
+      if (Array.isArray(data?.members)) setMembers(data.members);
     });
 
     socket.on('chat-message', (message) => {
@@ -272,6 +287,10 @@ export function useSocket(roomId) {
     socketRef.current?.emit('pin-message', { msgId, pinned });
   }, []);
 
+  const emitInviteUser = useCallback((username, cb) => {
+    socketRef.current?.emit('invite-user', roomId, username, cb);
+  }, [roomId]);
+
   const emitFileUploaded = useCallback((fileData) => {
     socketRef.current?.emit('file-uploaded', fileData);
   }, []);
@@ -421,6 +440,8 @@ export function useSocket(roomId) {
     emitLivePathEnd,
     emitMessage,
     emitPinMessage,
+    emitInviteUser,
+    members,
     emitFileUploaded,
     emitFileDeleted,
     emitTypingStart,

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Room = require('../models/Room');
+const User = require('../models/User');
 const auth = require('../middleware/auth');
 
 router.post('/', auth, async (req, res) => {
@@ -8,19 +9,16 @@ router.post('/', auth, async (req, res) => {
     const { name, description, tag, isPublic } = req.body;
     if (!name) return res.status(400).json({ error: 'Room name is required' });
 
-    const code = await Room.generateCode();
-
     const room = await Room.create({
       name,
       description: description || '',
       tag: tag || 'Study',
-      code,
       host: req.user._id,
       members: [req.user._id],
       isPublic: isPublic !== undefined ? !!isPublic : true,
     });
 
-    const populated = await room.populate('host', 'name email avatar');
+    const populated = await room.populate('host', 'name username email avatar');
     res.status(201).json({ room: populated });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -32,8 +30,8 @@ router.get('/', auth, async (req, res) => {
     const rooms = await Room.find({
       $or: [{ host: req.user._id }, { members: req.user._id }],
     })
-      .populate('host', 'name email avatar')
-      .populate('members', 'name email avatar')
+      .populate('host', 'name username email avatar')
+      .populate('members', 'name username email avatar')
       .sort({ updatedAt: -1 });
 
     res.json({ rooms });
@@ -45,8 +43,8 @@ router.get('/', auth, async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
   try {
     const room = await Room.findById(req.params.id)
-      .populate('host', 'name email avatar')
-      .populate('members', 'name email avatar');
+      .populate('host', 'name username email avatar')
+      .populate('members', 'name username email avatar');
 
     if (!room) return res.status(404).json({ error: 'Room not found' });
     res.json({ room });
@@ -55,19 +53,36 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-router.post('/verify', auth, async (req, res) => {
+router.post('/:id/invite', auth, async (req, res) => {
   try {
-    const { code } = req.body;
-    if (!code) return res.status(400).json({ error: 'Room code is required' });
+    const { username } = req.body;
+    if (!username) return res.status(400).json({ error: 'Username is required' });
 
-    const room = await Room.findOne({ code: code.toUpperCase().trim() })
-      .populate('host', 'name email avatar')
-      .populate('members', 'name email avatar');
+    const room = await Room.findById(req.params.id);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
 
-    if (!room) return res.status(404).json({ error: 'Invalid room code' });
+    if (room.host.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: 'Only the host can invite members' });
+    }
 
-    // Do NOT auto-add to members — the socket join-room handler manages admission via waiting room
-    res.json({ room });
+    const target = await User.findOne({ username: String(username).toLowerCase().trim() });
+    if (!target) return res.status(404).json({ error: 'No user found with that username' });
+
+    if (target._id.toString() === req.user._id.toString()) {
+      return res.status(400).json({ error: 'You cannot invite yourself' });
+    }
+    if (room.host.toString() === target._id.toString()) {
+      return res.status(400).json({ error: 'The host is already in this room' });
+    }
+    if (room.members.includes(target._id)) {
+      return res.status(400).json({ error: 'This user is already a member' });
+    }
+
+    room.members.push(target._id);
+    await room.save();
+
+    const populated = await room.populate('host members', 'name username email avatar');
+    res.json({ room: populated, invitedUser: target });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -83,7 +98,7 @@ router.post('/:id/join', auth, async (req, res) => {
       await room.save();
     }
 
-    const populated = await room.populate('host members', 'name email avatar');
+    const populated = await room.populate('host members', 'name username email avatar');
     res.json({ room: populated });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -108,7 +123,7 @@ router.put('/:id', auth, async (req, res) => {
 
     await room.save();
 
-    const populated = await room.populate('host members', 'name email avatar');
+    const populated = await room.populate('host members', 'name username email avatar');
     res.json({ room: populated });
   } catch (err) {
     res.status(500).json({ error: err.message });

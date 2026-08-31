@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { User, Bell, Palette, Shield, Check, Loader2, Camera } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
-import { api } from '../services/api'
+import { api, getAssetUrl } from '../services/api'
 import { applyTheme, applyFont, getStoredTheme, getStoredFont } from '../utils/appearance'
 
 const tabs = [
@@ -54,6 +54,8 @@ function AccountSection() {
   const [firstName, setFirstName] = useState(nameParts[0] || '')
   const [lastName, setLastName] = useState(nameParts.slice(1).join(' ') || '')
   const [email, setEmail] = useState(user?.email || '')
+  const [username, setUsername] = useState(user?.username || '')
+  const [usernameError, setUsernameError] = useState('')
   const initials = (user?.name || 'U')
     .split(' ')
     .map((n) => n[0])
@@ -84,10 +86,16 @@ function AccountSection() {
       setError('Name and email are required')
       return
     }
+    const uname = username.trim().toLowerCase()
+    if (!/^[a-z0-9_]{3,24}$/.test(uname)) {
+      setUsernameError('3-24 characters, lowercase letters, numbers and _ only (no spaces)')
+      return
+    }
+    setUsernameError('')
     setSaving(true)
     setError('')
     try {
-      await updateUser({ name, email: email.trim() })
+      await updateUser({ name, email: email.trim(), username: uname })
       setSaved(true)
       setTimeout(() => setSaved(false), 1500)
     } catch (err) {
@@ -103,7 +111,7 @@ function AccountSection() {
       <div className="flex items-center gap-5 p-5 bg-surface-container-low rounded-2xl">
         <div className="relative group">
           {user?.avatar ? (
-            <img src={user.avatar} alt={user.name} className="w-16 h-16 rounded-full object-cover" />
+            <img src={getAssetUrl(user.avatar)} alt={user.name} className="w-16 h-16 rounded-full object-cover" />
           ) : (
             <div className="w-16 h-16 rounded-full bg-primary-container flex items-center justify-center text-xl font-bold font-display text-on-primary-container">
               {initials}
@@ -154,6 +162,24 @@ function AccountSection() {
               className="w-full px-4 py-3 rounded-xl border border-outline-variant/40 bg-surface-container-lowest text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
             />
           </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Username</label>
+          <div className="flex items-center gap-2 w-full px-4 py-3 rounded-xl border border-outline-variant/40 bg-surface-container-lowest text-sm text-on-surface outline-none focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-colors">
+            <span className="text-on-surface/40 shrink-0">@</span>
+            <input
+              value={username}
+              onChange={(e) => { setUsername(e.target.value.toLowerCase().replace(/\s+/g, '')); setUsernameError('') }}
+              placeholder="username"
+              spellCheck={false}
+              autoCapitalize="none"
+              autoCorrect="off"
+              className="min-w-0 flex-1 bg-transparent outline-none text-on-surface placeholder:text-on-surface/25"
+            />
+          </div>
+          {usernameError && <p className="text-xs text-error mt-1.5">{usernameError}</p>}
+          <p className="text-[11px] text-on-surface/30 mt-1.5">No spaces. Lowercase letters, numbers and underscores only.</p>
         </div>
 
         <div>

@@ -1,5 +1,5 @@
 /* eslint-disable react/only-export-components */
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { api, isNetworkError } from '../services/api';
 
 const AuthContext = createContext(null);
@@ -19,16 +19,17 @@ function readCachedUser() {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const userRef = useRef(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) { setLoading(false); return; }
     api.getMe()
-      .then((data) => { cacheUser(data.user); setUser(data.user); })
+      .then((data) => { cacheUser(data.user); userRef.current = data.user; setUser(data.user); })
       .catch((err) => {
         if (isNetworkError(err)) {
           const cached = readCachedUser();
-          if (cached) setUser(cached);
+          if (cached) { userRef.current = cached; setUser(cached); }
           else localStorage.removeItem('token');
         } else {
           localStorage.removeItem('token');
@@ -42,14 +43,16 @@ export function AuthProvider({ children }) {
     const data = await api.login({ email, password });
     localStorage.setItem('token', data.token);
     cacheUser(data.user);
+    userRef.current = data.user;
     setUser(data.user);
     return data.user;
   }, []);
 
-  const register = useCallback(async (name, email, password) => {
-    const data = await api.register({ name, email, password });
+  const register = useCallback(async (name, username, email, password) => {
+    const data = await api.register({ name, username, email, password });
     localStorage.setItem('token', data.token);
     cacheUser(data.user);
+    userRef.current = data.user;
     setUser(data.user);
     return data.user;
   }, []);
@@ -58,6 +61,7 @@ export function AuthProvider({ children }) {
     const data = await api.googleLogin(credential);
     localStorage.setItem('token', data.token);
     cacheUser(data.user);
+    userRef.current = data.user;
     setUser(data.user);
     return data.user;
   }, []);
@@ -66,6 +70,7 @@ export function AuthProvider({ children }) {
     const data = await api.googleExchange(code, redirectUri);
     localStorage.setItem('token', data.token);
     cacheUser(data.user);
+    userRef.current = data.user;
     setUser(data.user);
     return data.user;
   }, []);
@@ -73,18 +78,25 @@ export function AuthProvider({ children }) {
   const updateUser = useCallback(async (body) => {
     if (body && body._id) {
       cacheUser(body);
+      userRef.current = body;
       setUser(body);
       return body;
     }
     const data = await api.updateMe(body);
-    cacheUser(data.user);
-    setUser(data.user);
-    return data.user;
+    const incoming = data.user || {};
+    const merged = incoming && incoming._id
+      ? incoming
+      : { ...(userRef.current || {}), ...incoming };
+    cacheUser(merged);
+    userRef.current = merged;
+    setUser(merged);
+    return merged;
   }, []);
 
   const logout = useCallback(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('cachedUser');
+    userRef.current = null;
     setUser(null);
   }, []);
 

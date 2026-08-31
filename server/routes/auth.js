@@ -53,6 +53,26 @@ const avatarUpload = multer({
 const generateToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
 // Shared Google sign-in: find existing user by googleId/email or create one.
+async function ensureUsername(user) {
+  if (!user || (user.username && user.username.trim())) return user;
+  const base = (user.email ? user.email.split('@')[0] : 'user')
+    .replace(/[^a-z0-9_.]/gi, '')
+    .replace(/_+/g, '_')
+    .slice(0, 24)
+    .toLowerCase() || 'user';
+  let candidate = base;
+  let i = 1;
+  while (true) {
+    const exists = await User.findOne({ username: candidate, _id: { $ne: user._id } });
+    if (!exists) break;
+    candidate = `${base}_${i}`;
+    i += 1;
+  }
+  user.username = candidate;
+  await user.save();
+  return user;
+}
+
 async function findOrCreateGoogleUser({ googleId, email, name, picture }) {
   let user = await User.findOne({ $or: [{ googleId }, { email }] });
 
@@ -72,7 +92,7 @@ async function findOrCreateGoogleUser({ googleId, email, name, picture }) {
   } else {
     user = await User.create({ name, email, googleId, avatar: avatarUrl || '' });
   }
-  return user;
+  return await ensureUsername(user);
 }
 
 function isAllowedRedirectUri(redirectUri) {
@@ -90,15 +110,22 @@ function isAllowedRedirectUri(redirectUri) {
 
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password } = req.body;
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: 'All fields are required' });
+    const { name, username, email, password } = req.body;
+    if (!name || !username || !email || !password) {
+      return res.status(400).json({ error: 'Name, username, email and password are required' });
+    }
+
+    if (!/^[a-z0-9_.]{3,24}$/i.test(username)) {
+      return res.status(400).json({ error: 'Username must be 3-24 characters (letters, numbers, _ and .)' });
     }
 
     const exists = await User.findOne({ email });
     if (exists) return res.status(400).json({ error: 'Email already registered' });
 
-    const user = await User.create({ name, email, password });
+    const userNameTaken = await User.findOne({ username: username.toLowerCase() });
+    if (userNameTaken) return res.status(400).json({ error: 'Username already taken' });
+
+    const user = await User.create({ name, username, email, password });
     const token = generateToken(user._id);
     res.status(201).json({ user, token });
   } catch (err) {
@@ -127,15 +154,24 @@ router.post('/login', async (req, res) => {
 });
 
 router.get('/me', auth, async (req, res) => {
-  res.json({ user: req.user });
+  const user = await ensureUsername(req.user);
+  res.json({ user });
 });
 
 router.put('/me', auth, async (req, res) => {
   try {
-    const { name, email } = req.body;
+    const { name, username, email } = req.body;
     const updates = {};
     if (name) updates.name = name;
     if (email) updates.email = email;
+    if (username) {
+      if (!/^[a-z0-9_.]{3,24}$/i.test(username)) {
+        return res.status(400).json({ error: 'Username must be 3-24 characters (letters, numbers, _ and .)' });
+      }
+      const taken = await User.findOne({ username: username.toLowerCase(), _id: { $ne: req.user._id } });
+      if (taken) return res.status(400).json({ error: 'Username already taken' });
+      updates.username = username.toLowerCase();
+    }
 
     const user = await User.findByIdAndUpdate(req.user._id, updates, { new: true, runValidators: true }).select('-password');
     res.json({ user });

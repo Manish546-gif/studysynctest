@@ -5,6 +5,15 @@ export { isNetworkError };
 
 const API_URL = (import.meta.env.VITE_API_URL || '') + '/api';
 
+const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+
+export const getAssetUrl = (url) => {
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url)) return url;
+  if (url.startsWith('/')) return `${API_ORIGIN}${url}`;
+  return url;
+};
+
 async function parseRes(res) {
   const text = await res.text();
   let data;
@@ -16,7 +25,7 @@ async function parseRes(res) {
   return data;
 }
 
-const NEVER_QUEUE = ['/auth/register', '/auth/login', '/auth/google', '/rooms/verify'];
+const NEVER_QUEUE = ['/auth/register', '/auth/login', '/auth/google'];
 const canQueue = (path) => !NEVER_QUEUE.some((p) => path.startsWith(p));
 
 const genId = () =>
@@ -24,15 +33,12 @@ const genId = () =>
     ? `q_${crypto.randomUUID()}`
     : `q_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
-const genCode = () => Math.random().toString(36).slice(2, 8).toUpperCase();
-
 function pendingResponse(path, method, body) {
   const now = new Date().toISOString();
   if (method === 'POST' && path === '/rooms') {
     return {
       room: {
         _id: genId(),
-        code: genCode(),
         name: body?.name,
         description: body?.description,
         members: [],
@@ -124,7 +130,8 @@ export const api = {
   getRooms: () => request('/rooms'),
   getRoom: (id) => request(`/rooms/${id}`),
   createRoom: (body) => request('/rooms', { method: 'POST', body: JSON.stringify(body) }),
-  verifyCode: (code) => request('/rooms/verify', { method: 'POST', body: JSON.stringify({ code }) }),
+  inviteUser: (roomId, username) => request(`/rooms/${roomId}/invite`, { method: 'POST', body: JSON.stringify({ username }) }),
+  searchUsers: (q) => request(`/users/search?q=${encodeURIComponent(q)}`),
   joinRoom: (id) => request(`/rooms/${id}/join`, { method: 'POST' }),
   updateRoom: (id, body) => request(`/rooms/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteRoom: (id) => request(`/rooms/${id}`, { method: 'DELETE' }),
