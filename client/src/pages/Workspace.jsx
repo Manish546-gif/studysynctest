@@ -37,6 +37,9 @@ import {
   ListChecks,
   Hand,
   MonitorPlay,
+  Play,
+  Pause,
+  Square,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -337,6 +340,9 @@ export default function Workspace() {
 
   const stageRef = useRef(null)
   const stageVideoRef = useRef(null)
+  const ytStageContainerRef = useRef(null)
+  const ytStagePlayerRef = useRef(null)
+  const ytStageReadyRef = useRef(false)
 
   // --- Breakout rooms listener ---
   useEffect(() => {
@@ -378,6 +384,79 @@ export default function Workspace() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [toggleMic, toggleCam, toggleScreenShare, screenSharing])
+
+  // --- YouTube IFrame API (loaded once) ---
+  useEffect(() => {
+    if (window.YT && window.YT.Player) return
+    if (document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) return
+    const tag = document.createElement('script')
+    tag.src = 'https://www.youtube.com/iframe_api'
+    document.head.appendChild(tag)
+  }, [])
+
+  // --- YouTube stage player: create / update when entering YouTube stage ---
+  useEffect(() => {
+    if (!stageIsYoutube || !ytStageContainerRef.current || !youtubeState?.videoId) return
+    const videoId = youtubeState.videoId
+
+    const buildPlayer = () => {
+      if (ytStagePlayerRef.current) {
+        try { ytStagePlayerRef.current.loadVideoById(videoId) } catch {}
+        return
+      }
+      const div = document.createElement('div')
+      div.id = 'yt-stage-player-' + Date.now()
+      ytStageContainerRef.current.innerHTML = ''
+      ytStageContainerRef.current.appendChild(div)
+      ytStagePlayerRef.current = new window.YT.Player(div, {
+        height: '100%',
+        width: '100%',
+        videoId,
+        playerVars: { autoplay: 0, controls: isHost ? 1 : 0, modestbranding: 1, rel: 0, fs: 0, disablekb: isHost ? 0 : 1 },
+        events: {
+          onReady: () => { ytStageReadyRef.current = true },
+        },
+      })
+    }
+
+    const wait = () => {
+      if (window.YT && window.YT.Player) buildPlayer()
+      else {
+        const iv = setInterval(() => {
+          if (window.YT && window.YT.Player) { clearInterval(iv); buildPlayer() }
+        }, 200)
+        setTimeout(() => clearInterval(iv), 10000)
+      }
+    }
+    wait()
+  }, [stageIsYoutube, youtubeState?.videoId])
+
+  // --- YouTube stage: sync play/pause from remote control ---
+  useEffect(() => {
+    if (!stageIsYoutube || !ytStagePlayerRef.current || !ytStageReadyRef.current) return
+    try {
+      if (youtubeState?.playing) ytStagePlayerRef.current.playVideo()
+      else ytStagePlayerRef.current.pauseVideo()
+    } catch {}
+  }, [youtubeState?.playing, stageIsYoutube])
+
+  // --- YouTube stage: cleanup player when leaving ---
+  useEffect(() => {
+    if (stageIsYoutube) return
+    if (ytStagePlayerRef.current) {
+      try { ytStagePlayerRef.current.destroy() } catch {}
+      ytStagePlayerRef.current = null
+      ytStageReadyRef.current = false
+      if (ytStageContainerRef.current) ytStageContainerRef.current.innerHTML = ''
+    }
+  }, [stageIsYoutube])
+
+  // --- Auto-pin to YouTube when a video is shared (all users) ---
+  useEffect(() => {
+    if (youtubeState?.videoId && pinnedId !== 'youtube') {
+      setPinnedId('youtube')
+    }
+  }, [youtubeState?.videoId])
 
   // --- Tab visibility tracking ---
   useEffect(() => {
@@ -604,24 +683,32 @@ export default function Workspace() {
     Object.keys(screenSharers).forEach((uid) => {
       if (!ids.includes(uid) && (remoteStreams[uid] || remoteScreenStreams[uid])) ids.push(uid);
     });
+    if (youtubeState?.videoId) ids.push('youtube');
     return ids;
-  }, [screenSharing, screenStream, localStream, screenSharers, remoteStreams, remoteScreenStreams]);
+  }, [screenSharing, screenStream, localStream, screenSharers, remoteStreams, remoteScreenStreams, youtubeState]);
 
   const pinnedValid =
     pinnedId === 'local'
       ? !!(localStream || screenSharing)
-      : !!(pinnedId && (remoteStreams[pinnedId] || remoteScreenStreams[pinnedId]));
+      : pinnedId === 'youtube'
+        ? !!youtubeState?.videoId
+        : !!(pinnedId && (remoteStreams[pinnedId] || remoteScreenStreams[pinnedId]));
   // Stage only shows when user explicitly clicked "Watch" on a screen share.
   // No auto-follow — user chooses what to watch.
   const stageTarget = pinnedValid ? pinnedId : null;
   const stageIsLocal = stageTarget === 'local';
+  const stageIsYoutube = stageTarget === 'youtube';
   const stageStream = stageIsLocal
     ? (screenSharing && screenStream ? screenStream : localStream)
-    : (stageTarget ? (remoteScreenStreams[stageTarget] || remoteStreams[stageTarget]) : null);
-  const stageActive = !!stageTarget && !!stageStream;
+    : stageIsYoutube
+      ? null
+      : (stageTarget ? (remoteScreenStreams[stageTarget] || remoteStreams[stageTarget]) : null);
+  const stageActive = stageIsYoutube ? !!youtubeState?.videoId : (!!stageTarget && !!stageStream);
   const stageName = stageIsLocal
     ? `${user?.name || 'You'} (You)`
-    : screenSharers[stageTarget] || displayMembers.find((m) => m._id === stageTarget)?.name || 'Participant';
+    : stageIsYoutube
+      ? `YouTube — ${youtubeState?.setBy || 'Shared'}`
+      : screenSharers[stageTarget] || displayMembers.find((m) => m._id === stageTarget)?.name || 'Participant';
 
   // Drop stale pins (stream died / media stopped) and leave fullscreen.
   useEffect(() => {
@@ -921,42 +1008,45 @@ export default function Workspace() {
                         }`}
                       >
                         <Monitor size={11} />
-                        {pid === 'local' ? 'You' : screenSharers[pid] || displayMembers.find((m) => m._id === pid)?.name || 'Participant'}
+                        {pid === 'local' ? 'You' : pid === 'youtube' ? 'YouTube' : screenSharers[pid] || displayMembers.find((m) => m._id === pid)?.name || 'Participant'}
                       </button>
                     ))}
                   </div>
                 )}
-                {/* Stage: spotlighted stream */}
+                {/* Stage: spotlighted stream or YouTube */}
                 <div
                   ref={stageRef}
                   onDoubleClick={toggleStageFullscreen}
                   data-screen-share="true"
                   className="relative flex-1 min-h-0 rounded-lg overflow-hidden bg-black ring-1 ring-black/10"
                 >
-                  <video
-                    ref={(node) => {
-                      stageVideoRef.current = node
-                      if (node && stageStream && node.srcObject !== stageStream) {
-                        // iOS blocks autoplay when unmuted — start muted, unmute after playback begins
-                        if (!stageIsLocal && !node.muted) {
-                          node.muted = true
-                          const onPlaying = () => {
-                            node.muted = false
-                            node.removeEventListener('playing', onPlaying)
+                  {stageIsYoutube ? (
+                    <div ref={ytStageContainerRef} className="w-full h-full" />
+                  ) : (
+                    <video
+                      ref={(node) => {
+                        stageVideoRef.current = node
+                        if (node && stageStream && node.srcObject !== stageStream) {
+                          if (!stageIsLocal && !node.muted) {
+                            node.muted = true
+                            const onPlaying = () => {
+                              node.muted = false
+                              node.removeEventListener('playing', onPlaying)
+                            }
+                            node.addEventListener('playing', onPlaying)
                           }
-                          node.addEventListener('playing', onPlaying)
+                          node.srcObject = stageStream
+                          node.play?.().catch(() => {})
                         }
-                        node.srcObject = stageStream
-                        node.play?.().catch(() => {})
-                      }
-                    }}
-                    autoPlay
-                    playsInline
-                    muted={stageIsLocal}
-                    className="w-full h-full object-contain"
-                  />
+                      }}
+                      autoPlay
+                      playsInline
+                      muted={stageIsLocal}
+                      className="w-full h-full object-contain"
+                    />
+                  )}
                   <div className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 rounded px-1.5 py-0.5 pointer-events-none">
-                    <Monitor size={11} className="text-white" />
+                    {stageIsYoutube ? <MonitorPlay size={11} className="text-red-400" /> : <Monitor size={11} className="text-white" />}
                     <span className="text-[11px] font-medium text-white">{stageName}</span>
                   </div>
                   <button
@@ -973,8 +1063,22 @@ export default function Workspace() {
                   >
                     <X size={13} /> Exit spotlight
                   </button>
+                  {/* YouTube host controls overlay */}
+                  {stageIsYoutube && isHost && (
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/70 rounded-lg px-2.5 py-1.5">
+                      <button onClick={emitYoutubePlay} className="w-7 h-7 rounded-md flex items-center justify-center bg-green-500/20 text-green-400 hover:bg-green-500/30 transition" title="Play">
+                        <Play size={13} />
+                      </button>
+                      <button onClick={emitYoutubePause} className="w-7 h-7 rounded-md flex items-center justify-center bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 transition" title="Pause">
+                        <Pause size={13} />
+                      </button>
+                      <button onClick={emitYoutubeStop} className="w-7 h-7 rounded-md flex items-center justify-center bg-red-500/20 text-red-400 hover:bg-red-500/30 transition" title="Stop & remove">
+                        <Square size={13} />
+                      </button>
+                    </div>
+                  )}
                   {/* Remote cursor overlay for screen sharing */}
-                  {Object.entries(screenCursors).map(([sid, pos]) => {
+                  {!stageIsYoutube && Object.entries(screenCursors).map(([sid, pos]) => {
                     if (pos.x < 0) return null
                     return (
                       <div
