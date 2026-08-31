@@ -248,7 +248,6 @@ io.on('connection', (socket) => {
     } catch (err) {
       console.error('Failed to persist chat message:', err.message);
     }
-
     // @mention notifications
     try {
       const mentionMatches = text.match(/@(\w[\w\s]*)/g);
@@ -289,6 +288,16 @@ io.on('connection', (socket) => {
     if (!roomId) return;
     socket.to(roomId).emit('user-stopped-typing', {
       userId: socket.user._id,
+    });
+  });
+
+  socket.on('pin-message', (data) => {
+    const roomId = socket.roomId;
+    if (!roomId) return;
+    io.to(roomId).emit('message-pinned', {
+      msgId: data?.msgId,
+      pinned: !!data?.pinned,
+      byName: socket.user.name,
     });
   });
 

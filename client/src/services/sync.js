@@ -45,10 +45,18 @@ export async function flushSync() {
   useSyncStore.getState().setSyncing(true)
   try {
     const ops = await getOps()
+    const now = Date.now()
     for (const op of ops) {
       if (!navigator.onLine) {
         useSyncStore.getState().setOnline(false)
         break
+      }
+      // Exponential backoff between retries
+      const attempts = op.attempts || 0
+      if (attempts > 0) {
+        const delay = Math.min(60000, Math.pow(2, attempts - 1) * 5000)
+        const lastAttempt = op.lastAttemptAt || 0
+        if (now - lastAttempt < delay) continue
       }
       try {
         const res = await replayOp(op)
@@ -56,14 +64,14 @@ export async function flushSync() {
         await removeOp(op.id)
       } catch (err) {
         if (isNetworkError(err) || err?.message?.startsWith('Replay failed: 5') || err?.message === 'Replay failed: 429') {
-          useSyncStore.getState().setLastError({ path: op.path, message: err.message, attempts: (op.attempts || 0) + 1 })
+          useSyncStore.getState().setLastError({ path: op.path, message: err.message, attempts: attempts + 1 })
           break
         }
-        const attempts = (op.attempts || 0) + 1
-        if (attempts >= 4) {
+        const nextAttempts = attempts + 1
+        if (nextAttempts >= 4) {
           await removeOp(op.id)
         } else {
-          await bumpAttempt(op.id, attempts)
+          await bumpAttempt(op.id, nextAttempts)
         }
       }
       const remaining = await countOps()

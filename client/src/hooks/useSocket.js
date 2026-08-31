@@ -11,6 +11,7 @@ export function useSocket(roomId) {
   const [remoteActions, setRemoteActions] = useState([]);
   const [livePaths, setLivePaths] = useState({});
   const [messages, setMessages] = useState([]);
+  const [pinnedMessageIds, setPinnedMessageIds] = useState([]);
   const [roomFiles, setRoomFiles] = useState([]);
   const [typingUsers, setTypingUsers] = useState([]);
   const [screenSharers, setScreenSharers] = useState({});
@@ -90,6 +91,13 @@ export function useSocket(roomId) {
 
     socket.on('chat-message', (message) => {
       setMessages((prev) => [...prev, message]);
+    });
+
+    socket.on('message-pinned', ({ msgId, pinned }) => {
+      setPinnedMessageIds((prev) => {
+        if (pinned) return prev.includes(msgId) ? prev : [...prev, msgId];
+        return prev.filter((id) => id !== msgId);
+      });
     });
 
     socket.on('user-typing', (data) => {
@@ -260,6 +268,10 @@ export function useSocket(roomId) {
     socketRef.current?.emit('send-message', { text });
   }, []);
 
+  const emitPinMessage = useCallback((msgId, pinned) => {
+    socketRef.current?.emit('pin-message', { msgId, pinned });
+  }, []);
+
   const emitFileUploaded = useCallback((fileData) => {
     socketRef.current?.emit('file-uploaded', fileData);
   }, []);
@@ -385,6 +397,7 @@ export function useSocket(roomId) {
     setRemoteActions,
     livePaths: Object.values(livePaths),
     messages,
+    pinnedMessageIds,
     roomFiles,
     setRoomFiles,
     typingUsers,
@@ -407,6 +420,7 @@ export function useSocket(roomId) {
     emitLivePath,
     emitLivePathEnd,
     emitMessage,
+    emitPinMessage,
     emitFileUploaded,
     emitFileDeleted,
     emitTypingStart,

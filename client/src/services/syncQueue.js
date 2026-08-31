@@ -84,6 +84,7 @@ export async function bumpAttempt(id, attempts) {
       const op = e.target.result
       if (op) {
         op.attempts = attempts
+        op.lastAttemptAt = Date.now()
         store.put(op)
       }
     }

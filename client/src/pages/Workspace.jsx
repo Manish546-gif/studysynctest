@@ -41,9 +41,11 @@ import {
   Pause,
   Square,
   Clapperboard,
+  Pin,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
 import { useSocket } from '../hooks/useSocket'
 import { useLiveKit } from '../hooks/useLiveKit'
 import Whiteboard from '../components/whiteboard/Whiteboard'
@@ -184,6 +186,7 @@ export default function Workspace() {
   const { roomId } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { toast } = useToast()
   const [room, setRoom] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -203,6 +206,7 @@ export default function Workspace() {
   const [settingsError, setSettingsError] = useState('')
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deletingRoom, setDeletingRoom] = useState(false)
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
   const [chatInput, setChatInput] = useState('')
   const [mentionQuery, setMentionQuery] = useState(null)
@@ -251,7 +255,9 @@ export default function Workspace() {
     emitLivePath,
     emitLivePathEnd,
     messages,
+    pinnedMessageIds,
     emitMessage,
+    emitPinMessage,
     roomFiles,
     setRoomFiles,
     typingUsers,
@@ -559,6 +565,14 @@ export default function Workspace() {
       alert(err.message)
       setDeletingRoom(false)
     }
+  }
+
+  const handleLeaveRoom = () => {
+    setLeaveConfirmOpen(false)
+    stopMedia()
+    try { disconnectLiveKit() } catch {}
+    toast(`Left room ${room?.name || ''}`.trim() || 'Left room', 'info')
+    navigate('/dashboard')
   }
 
   const openSettings = () => {
@@ -1422,32 +1436,89 @@ export default function Workspace() {
                     <p className="text-[10px] text-white/25 mt-1">Say hello to your study group</p>
                   </div>
                 ) : (
-                  messages.map((msg) => {
-                    const initials = (msg.name || '?')
-                      .split(' ')
-                      .map((n) => n[0])
-                      .join('')
-                      .toUpperCase()
-                      .slice(0, 2)
-                    const isOwn = msg.userId === user?.id
-                    const time = formatMessageTime(msg.createdAt)
+                  (() => {
+                    const pinnedMsgs = messages.filter((m) => m && m._id && pinnedMessageIds.includes(m._id))
+                    const togglePin = (msgId, pinned) => {
+                      emitPinMessage(msgId, pinned)
+                      if (!pinned) toast('Message pinned to chat', 'success')
+                    }
                     return (
-                      <div key={msg._id || `${msg.createdAt}-${msg.userId}-${msg.text}`} className="flex items-start gap-2">
-                        <div className={`w-6 h-6 rounded flex items-center justify-center shrink-0 ${
-                          isOwn ? 'bg-zoom-blue text-white' : 'bg-white/10 text-white/60'
-                        }`}>
-                          <span className="text-[9px] font-semibold">{initials}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-baseline gap-1.5 mb-0.5">
-                            <span className="text-[11px] font-medium text-white/80">{msg.name}{isOwn ? ' (You)' : ''}</span>
-                            <span className="text-[9px] text-white/25">{time}</span>
+                      <>
+                        {pinnedMsgs.length > 0 && (
+                          <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-2 space-y-2">
+                            <div className="flex items-center gap-1 text-yellow-400/90">
+                              <Pin size={11} />
+                              <span className="text-[10px] font-semibold uppercase tracking-wide">Pinned</span>
+                              {isHost && (
+                                <button
+                                  onClick={() => pinnedMsgs.forEach((m) => emitPinMessage(m._id, false))}
+                                  className="ml-auto text-[10px] text-yellow-400/70 hover:text-yellow-300 transition-colors"
+                                >
+                                  Unpin all
+                                </button>
+                              )}
+                            </div>
+                            {pinnedMsgs.map((msg) => {
+                              const pOwn = msg.userId === user?.id
+                              return (
+                                <div key={msg._id} className="flex items-start gap-2">
+                                  <div className={`w-6 h-6 rounded flex items-center justify-center shrink-0 ${pOwn ? 'bg-zoom-blue text-white' : 'bg-white/10 text-white/60'}`}>
+                                    <span className="text-[9px] font-semibold">{(msg.name || '?').trim()[0]?.toUpperCase()}</span>
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-baseline gap-1.5">
+                                      <span className="text-[11px] font-medium text-white/80">{msg.name}{pOwn ? ' (You)' : ''}</span>
+                                    </div>
+                                    <p className="text-xs text-white/60 leading-relaxed break-words">{renderMentions(msg.text, roomUsers)}</p>
+                                  </div>
+                                </div>
+                              )
+                            })}
                           </div>
-                          <p className="text-xs text-white/60 leading-relaxed break-words">{renderMentions(msg.text, roomUsers)}</p>
-                        </div>
-                      </div>
+                        )}
+                        {messages.map((msg) => {
+                          const initials = (msg.name || '?')
+                            .split(' ')
+                            .map((n) => n[0])
+                            .join('')
+                            .toUpperCase()
+                            .slice(0, 2)
+                          const isOwn = msg.userId === user?.id
+                          const time = formatMessageTime(msg.createdAt)
+                          const isPinned = msg._id && pinnedMessageIds.includes(msg._id)
+                          return (
+                            <div key={msg._id || `${msg.createdAt}-${msg.userId}-${msg.text}`} className={`flex items-start gap-2 ${isPinned ? 'opacity-70' : ''}`}>
+                              <div className={`w-6 h-6 rounded flex items-center justify-center shrink-0 ${
+                                isOwn ? 'bg-zoom-blue text-white' : 'bg-white/10 text-white/60'
+                              }`}>
+                                <span className="text-[9px] font-semibold">{initials}</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-baseline gap-1.5 mb-0.5">
+                                  <span className="text-[11px] font-medium text-white/80">{msg.name}{isOwn ? ' (You)' : ''}</span>
+                                  <span className="text-[9px] text-white/25">{time}</span>
+                                </div>
+                                <div className="flex items-start gap-2 group/message">
+                                  <p className="text-xs text-white/60 leading-relaxed break-words">{renderMentions(msg.text, roomUsers)}</p>
+                                  <div className="flex items-center opacity-0 group-hover/message:opacity-100 transition-opacity shrink-0">
+                                    {isHost && msg._id && (
+                                      <button
+                                        onClick={() => togglePin(msg._id, !isPinned)}
+                                        className={`p-1 rounded transition-colors ${isPinned ? 'text-yellow-400' : 'text-white/30 hover:text-white/70 hover:bg-white/5'}`}
+                                        title={isPinned ? 'Unpin message' : 'Pin message'}
+                                      >
+                                        <Pin size={11} />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </>
                     )
-                  })
+                  })()
                 )}
               </div>
               {chatTab === 'chat' && (
@@ -1810,6 +1881,16 @@ export default function Workspace() {
         loading={deletingRoom}
       />
 
+      <ConfirmationModal
+        open={leaveConfirmOpen}
+        onClose={() => setLeaveConfirmOpen(false)}
+        onConfirm={handleLeaveRoom}
+        title="Leave Room"
+        message={`Are you sure you want to leave ${room?.name || 'this room'}?`}
+        confirmText="Leave Room"
+        confirmVariant="danger"
+      />
+
       <ShortcutOverlay open={shortcutOpen} onClose={() => setShortcutOpen(false)} />
 
       {/* Reaction toast notifications */}
@@ -2110,12 +2191,7 @@ export default function Workspace() {
         )}
 
         <button
-          onClick={() => {
-            if (confirm('Leave this room?')) {
-              stopMedia()
-              navigate('/dashboard')
-            }
-          }}
+          onClick={() => setLeaveConfirmOpen(true)}
           className="w-9 h-9 rounded-lg flex items-center justify-center bg-red-500 text-white hover:bg-red-600 transition-all duration-150"
           title="Leave room"
         >
