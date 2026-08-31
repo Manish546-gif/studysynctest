@@ -1,16 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Pause, Square, X, Link2, Loader2, Trash2, MonitorPlay, Users, Volume2, VolumeOff } from 'lucide-react'
+import { useState, useCallback } from 'react'
+import { motion } from 'framer-motion'
+import { Play, Pause, Square, X, Link2, MonitorPlay, Trash2 } from 'lucide-react'
 
 export default function YoutubeWatchPanel({ youtubeState, isHost, emitYoutubeSet, emitYoutubePlay, emitYoutubePause, emitYoutubeStop, onClose }) {
   const [url, setUrl] = useState('')
   const [error, setError] = useState('')
-  const [muted, setMuted] = useState(false)
-  const [loadingApi, setLoadingApi] = useState(false)
-  const playerRef = useRef(null)
-  const containerRef = useRef(null)
-  const readyRef = useRef(false)
-  const pollRef = useRef(null)
 
   const videoId = youtubeState?.videoId || null
 
@@ -28,101 +22,17 @@ export default function YoutubeWatchPanel({ youtubeState, isHost, emitYoutubeSet
     setUrl('')
   }
 
-  // Load YouTube IFrame API
-  useEffect(() => {
-    if (window.YT && window.YT.Player) return
-    if (document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) return
-    setLoadingApi(true)
-    const tag = document.createElement('script')
-    tag.src = 'https://www.youtube.com/iframe_api'
-    tag.onload = () => setLoadingApi(false)
-    tag.onerror = () => setLoadingApi(false)
-    document.head.appendChild(tag)
-  }, [])
-
-  // Create player when videoId changes
-  useEffect(() => {
-    if (!videoId || !containerRef.current) return
-    setError('')
-
-    const createPlayer = () => {
-      if (playerRef.current) {
-        try { playerRef.current.loadVideoById(videoId) } catch {}
-        return
-      }
-
-      const playerDiv = document.createElement('div')
-      playerDiv.id = 'yt-player-' + Date.now()
-      containerRef.current.innerHTML = ''
-      containerRef.current.appendChild(playerDiv)
-
-      playerRef.current = new window.YT.Player(playerDiv, {
-        height: '100%',
-        width: '100%',
-        videoId,
-        playerVars: { autoplay: 0, controls: 1, modestbranding: 1, rel: 0, fs: 0 },
-        events: {
-          onReady: () => { readyRef.current = true },
-          onError: () => { setError('Failed to load video') },
-        },
-      })
-    }
-
-    const waitForAPI = () => {
-      if (window.YT && window.YT.Player) { createPlayer() }
-      else {
-        const iv = setInterval(() => {
-          if (window.YT && window.YT.Player) { clearInterval(iv); createPlayer() }
-        }, 200)
-        setTimeout(() => clearInterval(iv), 10000)
-      }
-    }
-    waitForAPI()
-  }, [videoId])
-
-  // Respond to remote play/pause/stop
-  useEffect(() => {
-    if (!youtubeState || !playerRef.current || !readyRef.current) return
-    try {
-      if (youtubeState.playing) playerRef.current.playVideo()
-      else playerRef.current.pauseVideo()
-    } catch {}
-  }, [youtubeState?.playing])
-
-  // Cleanup player on unmount
-  useEffect(() => {
-    return () => {
-      if (playerRef.current) {
-        try { playerRef.current.destroy() } catch {}
-        playerRef.current = null
-      }
-    }
-  }, [])
-
   const handlePlay = useCallback(() => {
-    if (playerRef.current && readyRef.current) { try { playerRef.current.playVideo() } catch {} }
     emitYoutubePlay(0)
   }, [emitYoutubePlay])
 
   const handlePause = useCallback(() => {
-    if (playerRef.current && readyRef.current) { try { playerRef.current.pauseVideo() } catch {} }
     emitYoutubePause(0)
   }, [emitYoutubePause])
 
   const handleStop = useCallback(() => {
-    if (playerRef.current && readyRef.current) { try { playerRef.current.stopVideo() } catch {} }
     emitYoutubeStop()
   }, [emitYoutubeStop])
-
-  const handleMuteToggle = useCallback(() => {
-    if (playerRef.current && readyRef.current) {
-      try {
-        if (muted) playerRef.current.unMute()
-        else playerRef.current.mute()
-      } catch {}
-    }
-    setMuted((m) => !m)
-  }, [muted])
 
   return (
     <motion.div
@@ -159,67 +69,75 @@ export default function YoutubeWatchPanel({ youtubeState, isHost, emitYoutubeSet
           {!videoId ? (
             isHost ? (
               <div className="space-y-2">
-                {loadingApi ? (
-                  <div className="flex items-center justify-center gap-2 py-6 text-white/40">
-                    <Loader2 size={14} className="animate-spin" />
-                    <span className="text-xs">Loading YouTube API...</span>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex gap-1.5">
-                      <input
-                        value={url}
-                        onChange={(e) => { setUrl(e.target.value); setError('') }}
-                        onKeyDown={(e) => e.key === 'Enter' && loadVideo()}
-                        placeholder="Paste YouTube link or video ID..."
-                        className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-zoom-blue"
-                      />
-                      <button
-                        onClick={loadVideo}
-                        disabled={!url.trim()}
-                        className="shrink-0 px-3 py-2 bg-zoom-blue text-white rounded-lg text-[11px] font-semibold hover:bg-[#0b5fc7] disabled:opacity-40 flex items-center gap-1.5 transition"
-                      >
-                        <Link2 size={12} /> Load
-                      </button>
-                    </div>
-                    {error && <p className="text-[11px] text-red-400">{error}</p>}
-                    <p className="text-[10px] text-white/25 text-center">Supports youtube.com/watch?v=, youtu.be/, and video IDs</p>
-                  </>
-                )}
+                <div className="flex gap-1.5">
+                  <input
+                    value={url}
+                    onChange={(e) => { setUrl(e.target.value); setError('') }}
+                    onKeyDown={(e) => e.key === 'Enter' && loadVideo()}
+                    placeholder="Paste YouTube link or video ID..."
+                    className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-zoom-blue"
+                  />
+                  <button
+                    onClick={loadVideo}
+                    disabled={!url.trim()}
+                    className="shrink-0 px-3 py-2 bg-zoom-blue text-white rounded-lg text-[11px] font-semibold hover:bg-[#0b5fc7] disabled:opacity-40 flex items-center gap-1.5 transition"
+                  >
+                    <Link2 size={12} /> Load
+                  </button>
+                </div>
+                {error && <p className="text-[11px] text-red-400">{error}</p>}
+                <p className="text-[10px] text-white/25 text-center">Supports youtube.com/watch?v=, youtu.be/, and video IDs</p>
               </div>
             ) : (
-              <div className="text-center py-8 space-y-2">
+              <div className="text-center py-6 space-y-2">
                 <MonitorPlay size={24} className="mx-auto text-white/15" />
                 <p className="text-[11px] text-white/30">Waiting for host to share a video</p>
               </div>
             )
           ) : (
             <div className="space-y-2">
-              {/* Video player */}
-              <div ref={containerRef} className="relative w-full aspect-video rounded-lg overflow-hidden bg-black" />
+              {/* Status: playing in stage */}
+              <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-white/5 border border-white/10">
+                <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                <span className="text-[11px] text-white/70">Playing in main stage</span>
+                <span className="text-[10px] text-white/30 ml-auto truncate max-w-[140px]">{videoId}</span>
+              </div>
 
-              {error && <p className="text-[11px] text-red-400 text-center">{error}</p>}
-
-              {/* Controls */}
-              <div className="flex items-center gap-2">
-                <button onClick={handleMuteToggle} className="w-7 h-7 rounded-md flex items-center justify-center bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/80 transition" title={muted ? 'Unmute' : 'Mute'}>
-                  {muted ? <VolumeOff size={13} /> : <Volume2 size={13} />}
-                </button>
-
-                <div className="flex-1 flex items-center justify-center gap-1.5">
-                  <button onClick={handlePlay} className="w-8 h-8 rounded-lg flex items-center justify-center bg-green-500/20 text-green-400 hover:bg-green-500/30 transition" title="Play">
-                    <Play size={14} />
+              {/* Host controls */}
+              {isHost && (
+                <div className="flex items-center gap-2">
+                  <button onClick={handlePlay} className="flex-1 h-8 rounded-lg flex items-center justify-center gap-1.5 bg-green-500/20 text-green-400 hover:bg-green-500/30 text-[11px] font-medium transition">
+                    <Play size={13} /> Play
                   </button>
-                  <button onClick={handlePause} className="w-8 h-8 rounded-lg flex items-center justify-center bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 transition" title="Pause">
-                    <Pause size={14} />
+                  <button onClick={handlePause} className="flex-1 h-8 rounded-lg flex items-center justify-center gap-1.5 bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 text-[11px] font-medium transition">
+                    <Pause size={13} /> Pause
                   </button>
-                  <button onClick={handleStop} className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-500/20 text-red-400 hover:bg-red-500/30 transition" title="Stop">
-                    <Square size={14} />
+                  <button onClick={handleStop} className="flex-1 h-8 rounded-lg flex items-center justify-center gap-1.5 bg-red-500/20 text-red-400 hover:bg-red-500/30 text-[11px] font-medium transition">
+                    <Square size={13} /> Stop
                   </button>
                 </div>
+              )}
 
-                <span className="text-[10px] text-white/30 shrink-0">{videoId}</span>
-              </div>
+              {/* Replace video (host only) */}
+              {isHost && (
+                <div className="flex gap-1.5">
+                  <input
+                    value={url}
+                    onChange={(e) => { setUrl(e.target.value); setError('') }}
+                    onKeyDown={(e) => e.key === 'Enter' && loadVideo()}
+                    placeholder="Replace with another video..."
+                    className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-zoom-blue"
+                  />
+                  <button
+                    onClick={loadVideo}
+                    disabled={!url.trim()}
+                    className="shrink-0 px-3 py-2 bg-zoom-blue text-white rounded-lg text-[11px] font-semibold hover:bg-[#0b5fc7] disabled:opacity-40 flex items-center gap-1.5 transition"
+                  >
+                    <Link2 size={12} />
+                  </button>
+                </div>
+              )}
+              {error && <p className="text-[11px] text-red-400">{error}</p>}
             </div>
           )}
         </div>

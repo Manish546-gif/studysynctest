@@ -394,70 +394,6 @@ export default function Workspace() {
     document.head.appendChild(tag)
   }, [])
 
-  // --- YouTube stage player: create / update when entering YouTube stage ---
-  useEffect(() => {
-    if (!stageIsYoutube || !ytStageContainerRef.current || !youtubeState?.videoId) return
-    const videoId = youtubeState.videoId
-
-    const buildPlayer = () => {
-      if (ytStagePlayerRef.current) {
-        try { ytStagePlayerRef.current.loadVideoById(videoId) } catch {}
-        return
-      }
-      const div = document.createElement('div')
-      div.id = 'yt-stage-player-' + Date.now()
-      ytStageContainerRef.current.innerHTML = ''
-      ytStageContainerRef.current.appendChild(div)
-      ytStagePlayerRef.current = new window.YT.Player(div, {
-        height: '100%',
-        width: '100%',
-        videoId,
-        playerVars: { autoplay: 0, controls: isHost ? 1 : 0, modestbranding: 1, rel: 0, fs: 0, disablekb: isHost ? 0 : 1 },
-        events: {
-          onReady: () => { ytStageReadyRef.current = true },
-        },
-      })
-    }
-
-    const wait = () => {
-      if (window.YT && window.YT.Player) buildPlayer()
-      else {
-        const iv = setInterval(() => {
-          if (window.YT && window.YT.Player) { clearInterval(iv); buildPlayer() }
-        }, 200)
-        setTimeout(() => clearInterval(iv), 10000)
-      }
-    }
-    wait()
-  }, [stageIsYoutube, youtubeState?.videoId])
-
-  // --- YouTube stage: sync play/pause from remote control ---
-  useEffect(() => {
-    if (!stageIsYoutube || !ytStagePlayerRef.current || !ytStageReadyRef.current) return
-    try {
-      if (youtubeState?.playing) ytStagePlayerRef.current.playVideo()
-      else ytStagePlayerRef.current.pauseVideo()
-    } catch {}
-  }, [youtubeState?.playing, stageIsYoutube])
-
-  // --- YouTube stage: cleanup player when leaving ---
-  useEffect(() => {
-    if (stageIsYoutube) return
-    if (ytStagePlayerRef.current) {
-      try { ytStagePlayerRef.current.destroy() } catch {}
-      ytStagePlayerRef.current = null
-      ytStageReadyRef.current = false
-      if (ytStageContainerRef.current) ytStageContainerRef.current.innerHTML = ''
-    }
-  }, [stageIsYoutube])
-
-  // --- Auto-pin to YouTube when a video is shared (all users) ---
-  useEffect(() => {
-    if (youtubeState?.videoId && pinnedId !== 'youtube') {
-      setPinnedId('youtube')
-    }
-  }, [youtubeState?.videoId])
-
   // --- Tab visibility tracking ---
   useEffect(() => {
     const handler = () => {
@@ -732,6 +668,70 @@ export default function Workspace() {
       el.requestFullscreen().catch(() => {})
     }
   }
+
+  // --- YouTube stage player: create / update when entering YouTube stage ---
+  useEffect(() => {
+    if (!stageIsYoutube || !ytStageContainerRef.current || !youtubeState?.videoId) return
+    const videoId = youtubeState.videoId
+
+    const buildPlayer = () => {
+      if (ytStagePlayerRef.current) {
+        try { ytStagePlayerRef.current.loadVideoById(videoId) } catch {}
+        return
+      }
+      const div = document.createElement('div')
+      div.id = 'yt-stage-player-' + Date.now()
+      ytStageContainerRef.current.innerHTML = ''
+      ytStageContainerRef.current.appendChild(div)
+      ytStagePlayerRef.current = new window.YT.Player(div, {
+        height: '100%',
+        width: '100%',
+        videoId,
+        playerVars: { autoplay: 0, controls: isHost ? 1 : 0, modestbranding: 1, rel: 0, fs: 0, disablekb: isHost ? 0 : 1 },
+        events: {
+          onReady: () => { ytStageReadyRef.current = true },
+        },
+      })
+    }
+
+    if (window.YT && window.YT.Player) {
+      buildPlayer()
+    } else if (window.YT && window.YT.ready) {
+      window.YT.ready(buildPlayer)
+    } else {
+      const iv = setInterval(() => {
+        if (window.YT && window.YT.Player) { clearInterval(iv); buildPlayer() }
+      }, 200)
+      setTimeout(() => clearInterval(iv), 10000)
+    }
+  }, [stageIsYoutube, youtubeState?.videoId])
+
+  // --- YouTube stage: sync play/pause from remote control ---
+  useEffect(() => {
+    if (!stageIsYoutube || !ytStagePlayerRef.current || !ytStageReadyRef.current) return
+    try {
+      if (youtubeState?.playing) ytStagePlayerRef.current.playVideo()
+      else ytStagePlayerRef.current.pauseVideo()
+    } catch {}
+  }, [youtubeState?.playing, stageIsYoutube])
+
+  // --- YouTube stage: cleanup player when leaving ---
+  useEffect(() => {
+    if (stageIsYoutube) return
+    if (ytStagePlayerRef.current) {
+      try { ytStagePlayerRef.current.destroy() } catch {}
+      ytStagePlayerRef.current = null
+      ytStageReadyRef.current = false
+      if (ytStageContainerRef.current) ytStageContainerRef.current.innerHTML = ''
+    }
+  }, [stageIsYoutube])
+
+  // --- Auto-pin to YouTube when a video is shared (all users) ---
+  useEffect(() => {
+    if (youtubeState?.videoId && pinnedId !== 'youtube') {
+      setPinnedId('youtube')
+    }
+  }, [youtubeState?.videoId])
 
   if (loading) {
     return (
