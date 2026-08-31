@@ -725,7 +725,7 @@ export default function Workspace() {
 
   // --- YouTube stage player: create / update when entering YouTube stage ---
   useEffect(() => {
-    if (!stageIsYoutube || !ytStageContainerRef.current || !youtubeState?.videoId) return
+    if (!stageIsYoutube || !youtubeState?.videoId) return
     const videoId = youtubeState.videoId
 
     const buildPlayer = () => {
@@ -733,6 +733,7 @@ export default function Workspace() {
         try { ytStagePlayerRef.current.loadVideoById(videoId) } catch {}
         return
       }
+      if (!ytStageContainerRef.current) return
       const div = document.createElement('div')
       div.id = 'yt-stage-player-' + Date.now()
       ytStageContainerRef.current.innerHTML = ''
@@ -757,6 +758,17 @@ export default function Workspace() {
         if (window.YT && window.YT.Player) { clearInterval(iv); buildPlayer() }
       }, 200)
       setTimeout(() => clearInterval(iv), 10000)
+    }
+
+    return () => {
+      if (ytStagePlayerRef.current) {
+        try { ytStagePlayerRef.current.destroy() } catch {}
+        ytStagePlayerRef.current = null
+        ytStageReadyRef.current = false
+      }
+      if (ytStageContainerRef.current) {
+        ytStageContainerRef.current.innerHTML = ''
+      }
     }
   }, [stageIsYoutube, youtubeState?.videoId])
 
@@ -793,26 +805,7 @@ export default function Workspace() {
     return () => clearInterval(iv)
   }, [stageIsYoutube, youtubeState?.videoId])
 
-  // --- YouTube stage: cleanup player when leaving ---
-  useEffect(() => {
-    if (stageIsYoutube && youtubeState?.videoId) return
-    if (ytStagePlayerRef.current) {
-      try { ytStagePlayerRef.current.destroy() } catch {}
-      ytStagePlayerRef.current = null
-      ytStageReadyRef.current = false
-    }
-    if (ytStageContainerRef.current) {
-      ytStageContainerRef.current.innerHTML = ''
-      ytStageContainerRef.current.style.display = 'none'
-    }
-  }, [stageIsYoutube, youtubeState?.videoId])
-
-  // Re-show container when entering YouTube stage
-  useEffect(() => {
-    if (stageIsYoutube && youtubeState?.videoId && ytStageContainerRef.current) {
-      ytStageContainerRef.current.style.display = ''
-    }
-  }, [stageIsYoutube, youtubeState?.videoId])
+  // --- YouTube stage: cleanup handled by buildPlayer effect return ---
 
   // --- Auto-pin to YouTube when a video is shared (all users) ---
   useEffect(() => {
@@ -1097,7 +1090,13 @@ export default function Workspace() {
       </AnimatePresence>
 
         {/* Center */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden relative">
+          {/* YouTube player container — always in DOM so ref is never null */}
+          <div
+            ref={ytStageContainerRef}
+            className="absolute inset-0 z-10 bg-black"
+            style={{ display: stageIsYoutube && youtubeState?.videoId ? '' : 'none' }}
+          />
           <div className="flex-1 p-3 flex flex-col gap-2 min-h-0 w-full">
             {stageActive ? (
               <>
@@ -1128,33 +1127,28 @@ export default function Workspace() {
                   data-screen-share="true"
                   className="relative flex-1 min-h-0 rounded-lg overflow-hidden bg-black ring-1 ring-black/10"
                 >
-                  {stageIsYoutube && youtubeState?.videoId ? (
-                    <div ref={ytStageContainerRef} className="w-full h-full bg-black" />
-                  ) : (
-                    <>
-                      <div ref={ytStageContainerRef} className="w-full h-full bg-black" style={{ display: 'none' }} />
-                      <video
-                        ref={(node) => {
-                          stageVideoRef.current = node
-                          if (node && stageStream && node.srcObject !== stageStream) {
-                            if (!stageIsLocal && !node.muted) {
-                              node.muted = true
-                              const onPlaying = () => {
-                                node.muted = false
-                                node.removeEventListener('playing', onPlaying)
-                              }
-                              node.addEventListener('playing', onPlaying)
+                  {!stageIsYoutube && (
+                    <video
+                      ref={(node) => {
+                        stageVideoRef.current = node
+                        if (node && stageStream && node.srcObject !== stageStream) {
+                          if (!stageIsLocal && !node.muted) {
+                            node.muted = true
+                            const onPlaying = () => {
+                              node.muted = false
+                              node.removeEventListener('playing', onPlaying)
                             }
-                            node.srcObject = stageStream
-                            node.play?.().catch(() => {})
+                            node.addEventListener('playing', onPlaying)
                           }
-                        }}
-                        autoPlay
-                        playsInline
-                        muted={stageIsLocal}
-                        className="w-full h-full object-contain"
-                      />
-                    </>
+                          node.srcObject = stageStream
+                          node.play?.().catch(() => {})
+                        }
+                      }}
+                      autoPlay
+                      playsInline
+                      muted={stageIsLocal}
+                      className="w-full h-full object-contain"
+                    />
                   )}
                   <div className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 rounded px-1.5 py-0.5 pointer-events-none">
                     {stageIsYoutube ? <MonitorPlay size={11} className="text-red-400" /> : <Monitor size={11} className="text-white" />}

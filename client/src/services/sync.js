@@ -84,8 +84,23 @@ export async function refreshQueueCount() {
   }
 }
 
+async function purgeStaleOps() {
+  try {
+    const ops = await getOps()
+    const now = Date.now()
+    for (const op of ops) {
+      if ((op.attempts || 0) >= 4 || (op.createdAt && now - op.createdAt > 24 * 60 * 60 * 1000)) {
+        await removeOp(op.id)
+      }
+    }
+    await refreshQueueCount()
+  } catch {}
+}
+
 export function initSyncWatchers() {
   if (typeof window === 'undefined') return
+
+  purgeStaleOps()
   const handleOnline = () => {
     useSyncStore.getState().setOnline(true)
     refreshQueueCount().then(flushSync)
