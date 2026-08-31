@@ -40,6 +40,7 @@ import {
   Play,
   Pause,
   Square,
+  Clapperboard,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -378,6 +379,7 @@ export default function Workspace() {
   const ytStageContainerRef = useRef(null)
   const ytStagePlayerRef = useRef(null)
   const ytStageReadyRef = useRef(false)
+  const ytLastPlayingRef = useRef(null)
 
   // --- Breakout rooms listener ---
   useEffect(() => {
@@ -766,6 +768,7 @@ export default function Workspace() {
         ytStagePlayerRef.current = null
         ytStageReadyRef.current = false
       }
+      ytLastPlayingRef.current = null
       if (ytStageContainerRef.current) {
         ytStageContainerRef.current.innerHTML = ''
       }
@@ -777,15 +780,22 @@ export default function Workspace() {
     if (!stageIsYoutube || !ytStagePlayerRef.current || !ytStageReadyRef.current) return
     const player = ytStagePlayerRef.current
     try {
-      // Seek to host's time if more than 2s drift
+      // Only steer play/pause on a genuine transition, never on periodic time-sync,
+      // otherwise the video keeps pausing on viewer side while host plays.
+      const wantsPlaying = !!youtubeState?.playing
+      if (ytLastPlayingRef.current !== wantsPlaying) {
+        ytLastPlayingRef.current = wantsPlaying
+        if (wantsPlaying) player.playVideo()
+        else player.pauseVideo()
+      }
+      // Seek to host's time if more than 2s drift (harmless on every sync)
       const hostTime = youtubeState?.currentTime || 0
       const localTime = player.getCurrentTime?.() || 0
       if (hostTime > 0 && Math.abs(hostTime - localTime) > 2) {
         player.seekTo(hostTime, true)
       }
-      if (youtubeState?.playing) player.playVideo()
-      else player.pauseVideo()
     } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [youtubeState?.playing, youtubeState?.currentTime, stageIsYoutube])
 
   // --- YouTube host: periodic time sync every 3s ---
@@ -807,14 +817,16 @@ export default function Workspace() {
 
   // --- YouTube stage: cleanup handled by buildPlayer effect return ---
 
-  // --- Auto-pin to YouTube when a video is shared (all users) ---
+  // --- Auto-pin to YouTube when a video is shared (host only; others see a tile and choose) ---
+  const isRoomHost = room?.host?._id === user?.id
   useEffect(() => {
-    if (youtubeState?.videoId && pinnedId !== 'youtube') {
+    if (youtubeState?.videoId && isRoomHost && pinnedId !== 'youtube') {
       setPinnedId('youtube')
     } else if (!youtubeState?.videoId && pinnedId === 'youtube') {
       setPinnedId(null)
     }
-  }, [youtubeState?.videoId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [youtubeState?.videoId, isRoomHost])
 
   if (loading) {
     return (
@@ -1201,6 +1213,36 @@ export default function Workspace() {
 
                 {/* Filmstrip of cameras */}
                 <div className="shrink-0 flex gap-2 overflow-x-auto pb-1">
+                  {youtubeState?.videoId && (
+                    <div className="w-44 shrink-0">
+                      <div
+                        onClick={() => setPinnedId(pinnedId === 'youtube' ? null : 'youtube')}
+                        className={`relative rounded overflow-hidden bg-zoom-darker aspect-video w-full transition-all cursor-pointer hover:ring-zoom-blue/50 ${pinnedId === 'youtube' ? 'ring-2 ring-zoom-blue' : 'ring-1 ring-white/10'}`}
+                      >
+                        <img
+                          src={`https://img.youtube.com/vi/${youtubeState.videoId}/hqdefault.jpg`}
+                          alt="YouTube"
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                          <div className="w-9 h-9 rounded-full bg-red-600 flex items-center justify-center">
+                            <Play size={14} className="text-white ml-0.5" />
+                          </div>
+                        </div>
+                        <div className="absolute bottom-1 left-1 flex items-center gap-1 bg-black/60 rounded px-1.5 py-0.5 max-w-[calc(100%-0.5rem)]">
+                          <Clapperboard size={9} className="text-red-500 shrink-0" />
+                          <span className="text-[10px] font-medium text-white truncate">YouTube · {youtubeState.setBy || 'Shared'}</span>
+                        </div>
+                        {pinnedId === 'youtube' && (
+                          <div className="absolute top-1 right-1">
+                            <div className="w-4 h-4 rounded bg-zoom-blue flex items-center justify-center">
+                              <svg width="8" height="8" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   <div className="w-44 shrink-0">
                     <MemoizedVideoTile
                       stream={localStream}
@@ -1255,6 +1297,32 @@ export default function Workspace() {
                     tabAway={false}
                     speakerLevel={0}
                   />
+
+                  {/* YouTube shared card */}
+                  {youtubeState?.videoId && (
+                    <div
+                      onClick={() => setPinnedId(pinnedId === 'youtube' ? null : 'youtube')}
+                      className="relative rounded overflow-hidden bg-zoom-darker ring-1 ring-white/10 aspect-video cursor-pointer hover:ring-red-500/60 transition-all"
+                    >
+                      <img
+                        src={`https://img.youtube.com/vi/${youtubeState.videoId}/hqdefault.jpg`}
+                        alt="YouTube"
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center group-hover:bg-black/30 transition-colors">
+                        <div className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center shadow-lg">
+                          <Play size={20} className="text-white ml-1" />
+                        </div>
+                      </div>
+                      <div className="absolute top-1 left-1 flex items-center gap-1 bg-red-600 text-white rounded px-1.5 py-0.5">
+                        <Clapperboard size={10} />
+                        <span className="text-[9px] font-semibold">YouTube</span>
+                      </div>
+                      <div className="absolute bottom-1 left-1 flex items-center gap-1 bg-black/60 rounded px-1.5 py-0.5 max-w-[calc(100%-0.5rem)]">
+                        <span className="text-[10px] font-medium text-white truncate">Shared by {youtubeState.setBy || 'host'}</span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Remote videos — all muted, only the screen shares get Watch button */}
                   {remoteUserIds.map((socketId) => {
