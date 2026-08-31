@@ -234,30 +234,6 @@ export default function Workspace() {
   const fullScreenCanvasRef = useRef(null)
   const screenSharePickerRef = useRef(null)
 
-  // Render text with @mentions highlighted
-  const renderMentions = useCallback((text, members) => {
-    if (!text) return text
-    const parts = text.split(/(@\w[\w\s]*?\s?(?=\s@|$))/g)
-    return parts.map((part, i) => {
-      const match = part.match(/^@(\w[\w\s]*)$/)
-      if (match) {
-        const name = match[1].trim().toLowerCase()
-        const found = members?.find((m) => m.name?.toLowerCase().startsWith(name))
-        if (found) {
-          return <span key={i} className="text-zoom-blue font-semibold bg-zoom-blue/10 rounded px-0.5">@{found.name}</span>
-        }
-      }
-      return <span key={i}>{part}</span>
-    })
-  }, [])
-
-  // Filter users for @mention autocomplete
-  const mentionUsers = useMemo(() => {
-    if (mentionQuery === null) return []
-    const q = mentionQuery.toLowerCase()
-    return (roomUsers || []).filter((u) => u.name?.toLowerCase().startsWith(q)).slice(0, 5)
-  }, [mentionQuery, roomUsers])
-
   const {
     socket: socketRef,
     connected,
@@ -320,6 +296,30 @@ export default function Workspace() {
     admitted,
     roomVisibility,
   } = useSocket(roomId)
+
+  // Render text with @mentions highlighted
+  const renderMentions = useCallback((text, members) => {
+    if (!text) return text
+    const parts = text.split(/(@\w[\w\s]*?\s?(?=\s@|$))/g)
+    return parts.map((part, i) => {
+      const match = part.match(/^@(\w[\w\s]*)$/)
+      if (match) {
+        const name = match[1].trim().toLowerCase()
+        const found = members?.find((m) => m.name?.toLowerCase().startsWith(name))
+        if (found) {
+          return <span key={i} className="text-zoom-blue font-semibold bg-zoom-blue/10 rounded px-0.5">@{found.name}</span>
+        }
+      }
+      return <span key={i}>{part}</span>
+    })
+  }, [])
+
+  // Filter users for @mention autocomplete
+  const mentionUsers = useMemo(() => {
+    if (mentionQuery === null) return []
+    const q = mentionQuery.toLowerCase()
+    return (roomUsers || []).filter((u) => u.name?.toLowerCase().startsWith(q)).slice(0, 5)
+  }, [mentionQuery, roomUsers])
 
   const {
     localStream,

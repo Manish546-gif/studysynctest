@@ -253,6 +253,7 @@ export default function Whiteboard({
   const penPointerRef = useRef(null)
   const activePointerTypeRef = useRef('mouse')
   const lastPanPointerRef = useRef(null)
+  const imageCacheRef = useRef({})
 
   const effectiveCanvasRef = externalCanvasRef || canvasRef
 
@@ -292,7 +293,34 @@ export default function Whiteboard({
   }, [zoom])
 
   const renderMain = useCallback(() => {
-    renderCanvas(effectiveCanvasRef.current, [...actions, ...livePaths], selectedActionId)
+    const allActions = [...actions, ...livePaths]
+    const imageActions = allActions.filter(a => a.tool === 'image' && a.src)
+    const uncached = imageActions.filter(a => !imageCacheRef.current[a.src])
+    if (uncached.length === 0) {
+      allActions.forEach(a => {
+        if (a.tool === 'image' && a.src) a._img = imageCacheRef.current[a.src]
+      })
+      renderCanvas(effectiveCanvasRef.current, allActions, selectedActionId)
+      return
+    }
+    let loaded = 0
+    const total = uncached.length
+    const checkDone = () => {
+      loaded++
+      if (loaded >= total) {
+        allActions.forEach(a => {
+          if (a.tool === 'image' && a.src) a._img = imageCacheRef.current[a.src]
+        })
+        renderCanvas(effectiveCanvasRef.current, allActions, selectedActionId)
+      }
+    }
+    uncached.forEach(a => {
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      img.onload = () => { imageCacheRef.current[a.src] = img; checkDone() }
+      img.onerror = () => { checkDone() }
+      img.src = a.src
+    })
   }, [renderCanvas, actions, livePaths, selectedActionId, effectiveCanvasRef])
 
   const renderOverlay = useCallback((action) => {
@@ -687,18 +715,44 @@ export default function Whiteboard({
     link.click()
   }, [actions, boardName, renderCanvas, effectiveCanvasRef])
 
-  const handleImageInsert = useCallback((e) => {
+  const handleImageInsert = useCallback(async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const img = new Image()
-      img.onload = () => {
-        onDraw?.({ tool: 'image', x: 100 + Math.random() * 100, y: 100 + Math.random() * 100, w: img.width / 2, h: img.height / 2, src: ev.target.result, color, strokeWidth })
+
+    if (file.type === 'application/pdf') {
+      try {
+        const pdfjsLib = await import('pdfjs-dist')
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
+        const arrayBuffer = await file.arrayBuffer()
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i)
+          const scale = 2
+          const vp = page.getViewport({ scale })
+          const canvas = document.createElement('canvas')
+          canvas.width = vp.width
+          canvas.height = vp.height
+          const ctx = canvas.getContext('2d')
+          await page.render({ canvasContext: ctx, viewport: vp }).promise
+          const src = canvas.toDataURL('image/png')
+          const pageW = vp.width / 2
+          const pageH = vp.height / 2
+          onDraw?.({ tool: 'image', x: 50 + (i - 1) * (pageW + 40), y: 100, w: pageW, h: pageH, src, color, strokeWidth })
+        }
+      } catch (err) {
+        console.error('PDF import failed:', err)
       }
-      img.src = ev.target.result
+    } else {
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        const img = new Image()
+        img.onload = () => {
+          onDraw?.({ tool: 'image', x: 100 + Math.random() * 100, y: 100 + Math.random() * 100, w: img.width / 2, h: img.height / 2, src: ev.target.result, color, strokeWidth })
+        }
+        img.src = ev.target.result
+      }
+      reader.readAsDataURL(file)
     }
-    reader.readAsDataURL(file)
     e.target.value = ''
   }, [onDraw, color, strokeWidth])
 
@@ -880,8 +934,8 @@ export default function Whiteboard({
           <Download size={13} />
         </button>
 
-        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageInsert} />
-        <button onClick={() => fileInputRef.current?.click()} title="Insert Image"
+        <input ref={fileInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleImageInsert} />
+        <button onClick={() => fileInputRef.current?.click()} title="Insert Image or PDF"
           className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
         </button>
