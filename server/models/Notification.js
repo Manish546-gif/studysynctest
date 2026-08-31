@@ -5,7 +5,7 @@ const notificationSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
-    enum: ['room_joined', 'room_created', 'whiteboard_shared', 'file_uploaded', 'chat_message'],
+    enum: ['room_joined', 'room_created', 'whiteboard_shared', 'file_uploaded', 'chat_message', 'waiting_join'],
   },
   title: { type: String, required: true },
   body: { type: String, default: '' },

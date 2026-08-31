@@ -24,6 +24,8 @@ export function useSocket(roomId) {
   const [youtubeState, setYoutubeState] = useState(null);
   const [stickyNotes, setStickyNotes] = useState([]);
   const [waitingRoom, setWaitingRoom] = useState([]);
+  const [roomVisibility, setRoomVisibility] = useState({ isPublic: false, waitingRoom: [] });
+  const [admitted, setAdmitted] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -40,6 +42,7 @@ export function useSocket(roomId) {
     socket.on('disconnect', () => {
       setConnected(false);
       setTypingUsers([]);
+      setAdmitted(false);
     });
 
     socket.on('room-users', (users) => setRoomUsers(users));
@@ -59,6 +62,19 @@ export function useSocket(roomId) {
     socket.on('waiting-update', (data) => setWaitingRoom(Array.isArray(data?.waiting) ? data.waiting : []));
     socket.on('waiting-admitted', (data) => {
       if (data?.userId) setWaitingRoom((prev) => prev.filter((id) => String(id) !== String(data.userId)));
+      // If this user was admitted, mark as admitted
+      if (data?.userId && socket.auth?.token) {
+        try {
+          const payload = JSON.parse(atob(socket.auth.token.split('.')[1]));
+          if (data.userId === payload.id || data.userId === payload._id) setAdmitted(true);
+        } catch {}
+      }
+    });
+    socket.on('room-state', (data) => {
+      if (data) {
+        setRoomVisibility({ isPublic: !!data.isPublic, waitingRoom: data.waitingRoom || [] });
+        if (data.admitted === true) setAdmitted(true);
+      }
     });
 
     socket.on('chat-message', (message) => {
@@ -345,6 +361,10 @@ export function useSocket(roomId) {
     socketRef.current?.emit('waiting-deny', { userId });
   }, []);
 
+  const emitRoomSetVisibility = useCallback((isPublic) => {
+    socketRef.current?.emit('room-set-visibility', { isPublic });
+  }, []);
+
   return {
     socket: socketRef,
     connected,
@@ -404,5 +424,9 @@ export function useSocket(roomId) {
     emitWaitingJoin,
     emitWaitingAdmit,
     emitWaitingDeny,
+    emitRoomSetVisibility,
+    admitted,
+    roomVisibility,
+    setAdmitted,
   };
 }

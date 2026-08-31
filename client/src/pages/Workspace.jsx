@@ -204,6 +204,8 @@ export default function Workspace() {
   const [deletingRoom, setDeletingRoom] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
   const [chatInput, setChatInput] = useState('')
+  const [mentionQuery, setMentionQuery] = useState(null)
+  const [mentionIndex, setMentionIndex] = useState(0)
   const [chatTab, setChatTab] = useState('chat') // 'chat' | 'activity'
   const [pomodoroOpen, setPomodoroOpen] = useState(false)
   const [recorderOpen, setRecorderOpen] = useState(false)
@@ -231,6 +233,30 @@ export default function Workspace() {
   const halfScreenCanvasRef = useRef(null)
   const fullScreenCanvasRef = useRef(null)
   const screenSharePickerRef = useRef(null)
+
+  // Render text with @mentions highlighted
+  const renderMentions = useCallback((text, members) => {
+    if (!text) return text
+    const parts = text.split(/(@\w[\w\s]*?\s?(?=\s@|$))/g)
+    return parts.map((part, i) => {
+      const match = part.match(/^@(\w[\w\s]*)$/)
+      if (match) {
+        const name = match[1].trim().toLowerCase()
+        const found = members?.find((m) => m.name?.toLowerCase().startsWith(name))
+        if (found) {
+          return <span key={i} className="text-zoom-blue font-semibold bg-zoom-blue/10 rounded px-0.5">@{found.name}</span>
+        }
+      }
+      return <span key={i}>{part}</span>
+    })
+  }, [])
+
+  // Filter users for @mention autocomplete
+  const mentionUsers = useMemo(() => {
+    if (mentionQuery === null) return []
+    const q = mentionQuery.toLowerCase()
+    return (roomUsers || []).filter((u) => u.name?.toLowerCase().startsWith(q)).slice(0, 5)
+  }, [mentionQuery, roomUsers])
 
   const {
     socket: socketRef,
@@ -290,6 +316,9 @@ export default function Workspace() {
     emitStickyDelete,
     emitWaitingAdmit,
     emitWaitingDeny,
+    emitRoomSetVisibility,
+    admitted,
+    roomVisibility,
   } = useSocket(roomId)
 
   const {
@@ -568,6 +597,24 @@ export default function Workspace() {
     }
     emitMessage(chatInput.trim())
     setChatInput('')
+    setMentionQuery(null)
+  }
+
+  const handleChatInputChange = (e) => {
+    const val = e.target.value
+    setChatInput(val)
+    const atMatch = val.match(/@(\w*)$/)
+    if (atMatch) {
+      setMentionQuery(atMatch[1])
+      setMentionIndex(0)
+    } else {
+      setMentionQuery(null)
+    }
+  }
+
+  const handleMentionSelect = (name) => {
+    setChatInput((prev) => prev.replace(/@\w*$/, `@${name} `))
+    setMentionQuery(null)
   }
 
   const handleChatKeyDown = useCallback(() => {
@@ -694,7 +741,7 @@ export default function Workspace() {
         height: '100%',
         width: '100%',
         videoId,
-        playerVars: { autoplay: 0, controls: isHost ? 1 : 0, modestbranding: 1, rel: 0, fs: 0, disablekb: isHost ? 0 : 1 },
+        playerVars: { autoplay: 0, controls: 1, modestbranding: 1, rel: 0, fs: 0 },
         events: {
           onReady: () => { ytStageReadyRef.current = true },
         },
@@ -731,17 +778,20 @@ export default function Workspace() {
 
   // --- YouTube host: periodic time sync every 3s ---
   useEffect(() => {
-    if (!isHost || !stageIsYoutube || !youtubeState?.videoId) return
+    if (!stageIsYoutube || !youtubeState?.videoId) return
     const iv = setInterval(() => {
       const player = ytStagePlayerRef.current
       if (!player || !ytStageReadyRef.current) return
+      // Only host sends sync — check inline to avoid isHost dependency
+      const isHostNow = room?.host?._id === user?.id
+      if (!isHostNow) return
       try {
         const ct = player.getCurrentTime?.()
         if (ct != null) emitYoutubeSync(ct)
       } catch {}
     }, 3000)
     return () => clearInterval(iv)
-  }, [isHost, stageIsYoutube, youtubeState?.videoId])
+  }, [stageIsYoutube, youtubeState?.videoId])
 
   // --- YouTube stage: cleanup player when leaving ---
   useEffect(() => {
@@ -787,6 +837,24 @@ export default function Workspace() {
         <p className="text-on-surface/50 mb-3 text-sm">{error || 'Room not found'}</p>
         <button onClick={() => navigate('/dashboard')} className="flex items-center gap-1.5 px-3 py-1.5 bg-zoom-blue text-white rounded-lg text-xs font-semibold hover:bg-[#0b5fc7] transition-colors">
           <ArrowLeft size={14} /> Back to Dashboard
+        </button>
+      </div>
+    )
+  }
+
+  // Waiting room: non-admitted users see this screen
+  if (room && !admitted) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-zoom-darker gap-4">
+        <div className="w-16 h-16 rounded-full bg-zoom-dark border border-white/10 flex items-center justify-center">
+          <Loader2 size={24} className="animate-spin text-zoom-blue" />
+        </div>
+        <div className="text-center space-y-1">
+          <h2 className="text-white font-semibold text-lg">Waiting for approval</h2>
+          <p className="text-white/40 text-sm">The host will let you in shortly</p>
+        </div>
+        <button onClick={() => navigate('/dashboard')} className="mt-2 px-4 py-2 text-xs text-white/50 hover:text-white border border-white/10 rounded-lg transition">
+          Leave Room
         </button>
       </div>
     )
@@ -1309,7 +1377,7 @@ export default function Workspace() {
                             <span className="text-[11px] font-medium text-white/80">{msg.name}{isOwn ? ' (You)' : ''}</span>
                             <span className="text-[9px] text-white/25">{time}</span>
                           </div>
-                          <p className="text-xs text-white/60 leading-relaxed break-words">{msg.text}</p>
+                          <p className="text-xs text-white/60 leading-relaxed break-words">{renderMentions(msg.text, roomUsers)}</p>
                         </div>
                       </div>
                     )
@@ -1317,23 +1385,40 @@ export default function Workspace() {
                 )}
               </div>
               {chatTab === 'chat' && (
-              <form onSubmit={handleSendChat} className="p-2 border-t border-white/10">
-                <div className="flex items-center gap-1.5 bg-white/5 rounded px-2.5 py-1.5 border border-white/10">
-                  <input
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={handleChatKeyDown}
-                    placeholder="Type a message..."
-                    className="flex-1 bg-transparent text-xs text-white placeholder:text-white/30 outline-none"
-                  />
-                  <button type="submit" className="text-zoom-blue p-1 hover:bg-zoom-blue/10 rounded transition-colors">
-                    <Send size={13} />
-                  </button>
-                </div>
-                {typingLabel && (
-                  <p className="text-white/30 text-[10px] italic mt-1 px-1">{typingLabel}</p>
-                )}
-              </form>
+                <form onSubmit={handleSendChat} className="p-2 border-t border-white/10 relative">
+                  <div className="flex items-center gap-1.5 bg-white/5 rounded px-2.5 py-1.5 border border-white/10">
+                    <input
+                      value={chatInput}
+                      onChange={handleChatInputChange}
+                      onKeyDown={handleChatKeyDown}
+                      placeholder="Type a message... (@ to mention)"
+                      className="flex-1 bg-transparent text-xs text-white placeholder:text-white/30 outline-none"
+                    />
+                    <button type="submit" className="text-zoom-blue p-1 hover:bg-zoom-blue/10 rounded transition-colors">
+                      <Send size={13} />
+                    </button>
+                  </div>
+                  {typingLabel && (
+                    <p className="text-white/30 text-[10px] italic mt-1 px-1">{typingLabel}</p>
+                  )}
+                  {mentionQuery !== null && mentionUsers.length > 0 && (
+                    <div className="absolute bottom-full left-0 right-0 mb-1 bg-zoom-dark border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+                      {mentionUsers.map((u, i) => (
+                        <button
+                          key={u._id || u.socketId}
+                          type="button"
+                          onClick={() => handleMentionSelect(u.name)}
+                          className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-white/10 transition ${i === mentionIndex ? 'bg-white/10 text-white' : 'text-white/70'}`}
+                        >
+                          <span className="w-5 h-5 rounded bg-white/10 flex items-center justify-center text-[9px] font-semibold text-white/50 shrink-0">
+                            {(u.name || '?')[0]?.toUpperCase()}
+                          </span>
+                          {u.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </form>
               )}
             </motion.div>
           )}

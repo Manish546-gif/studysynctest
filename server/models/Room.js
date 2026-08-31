@@ -82,6 +82,7 @@ const roomSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now },
   }],
   waitingRoom: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  approvedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 }, { timestamps: true });
 
 roomSchema.index({ host: 1 });
