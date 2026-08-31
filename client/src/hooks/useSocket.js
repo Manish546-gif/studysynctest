@@ -18,6 +18,9 @@ export function useSocket(roomId) {
   const [speakerLevels, setSpeakerLevels] = useState({});
   const [activityLog, setActivityLog] = useState([]);
   const [screenCursors, setScreenCursors] = useState({});
+  const [polls, setPolls] = useState([]);
+  const [todos, setTodos] = useState([]);
+  const [agenda, setAgenda] = useState([]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -39,6 +42,13 @@ export function useSocket(roomId) {
     socket.on('room-users', (users) => setRoomUsers(users));
 
     socket.on('chat-history', (history) => setMessages(Array.isArray(history) ? history : []));
+
+    socket.on('poll-state', (p) => setPolls(Array.isArray(p) ? p : []));
+    socket.on('todo-state', (t) => setTodos(Array.isArray(t) ? t : []));
+    socket.on('agenda-state', (a) => setAgenda(Array.isArray(a) ? a : []));
+    socket.on('poll-update', (data) => setPolls(Array.isArray(data?.polls) ? data.polls : []));
+    socket.on('todo-update', (data) => setTodos(Array.isArray(data?.todos) ? data.todos : []));
+    socket.on('agenda-update', (data) => setAgenda(Array.isArray(data?.agenda) ? data.agenda : []));
 
     socket.on('chat-message', (message) => {
       setMessages((prev) => [...prev, message]);
@@ -244,6 +254,42 @@ export function useSocket(roomId) {
     socketRef.current?.emit('activity-log', { message });
   }, []);
 
+  const emitCreatePoll = useCallback((poll) => {
+    socketRef.current?.emit('poll-create', poll);
+  }, []);
+
+  const emitPollVote = useCallback((pollIndex, optionIndex) => {
+    socketRef.current?.emit('poll-vote', { pollIndex, optionIndex });
+  }, []);
+
+  const emitPollClose = useCallback((pollIndex) => {
+    socketRef.current?.emit('poll-close', { pollIndex });
+  }, []);
+
+  const emitAddTodo = useCallback((text, assignee) => {
+    socketRef.current?.emit('todo-add', { text, assignee });
+  }, []);
+
+  const emitToggleTodo = useCallback((todoIndex) => {
+    socketRef.current?.emit('todo-toggle', { todoIndex });
+  }, []);
+
+  const emitDeleteTodo = useCallback((todoIndex) => {
+    socketRef.current?.emit('todo-delete', { todoIndex });
+  }, []);
+
+  const emitAddAgenda = useCallback((text) => {
+    socketRef.current?.emit('agenda-add', { text });
+  }, []);
+
+  const emitToggleAgenda = useCallback((agendaIndex) => {
+    socketRef.current?.emit('agenda-toggle', { agendaIndex });
+  }, []);
+
+  const emitDeleteAgenda = useCallback((agendaIndex) => {
+    socketRef.current?.emit('agenda-delete', { agendaIndex });
+  }, []);
+
   return {
     socket: socketRef,
     connected,
@@ -261,6 +307,9 @@ export function useSocket(roomId) {
     speakerLevels,
     activityLog,
     screenCursors,
+    polls,
+    todos,
+    agenda,
     emitDraw,
     emitMove,
     emitCursor,
@@ -277,5 +326,14 @@ export function useSocket(roomId) {
     emitCursorPosition,
     emitSpeakerLevel,
     emitActivityLog,
+    emitCreatePoll,
+    emitPollVote,
+    emitPollClose,
+    emitAddTodo,
+    emitToggleTodo,
+    emitDeleteTodo,
+    emitAddAgenda,
+    emitToggleAgenda,
+    emitDeleteAgenda,
   };
 }

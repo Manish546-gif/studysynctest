@@ -34,6 +34,8 @@ import {
   TriangleAlert,
   Wifi,
   WifiOff,
+  ListChecks,
+  Hand,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -49,6 +51,9 @@ import FloatingReactions from '../components/FloatingReactions'
 import ReactionPicker from '../components/ReactionPicker'
 import InviteLinkModal from '../components/InviteLinkModal'
 import BreakoutPanel from '../components/BreakoutPanel'
+import PollsPanel from '../components/PollsPanel'
+import TodosPanel from '../components/TodosPanel'
+import AgendaPanel from '../components/AgendaPanel'
 import ShortcutOverlay from '../components/ShortcutOverlay'
 import useRoomReactions from '../hooks/useRoomReactions'
 
@@ -199,6 +204,9 @@ export default function Workspace() {
   const [inviteLinkOpen, setInviteLinkOpen] = useState(false)
   const [breakoutOpen, setBreakoutOpen] = useState(false)
   const [breakoutRooms, setBreakoutRooms] = useState([])
+  const [toolsOpen, setToolsOpen] = useState(false)
+  const [toolsTab, setToolsTab] = useState('poll') // 'poll' | 'todo' | 'agenda'
+  const [handRaisedUsers, setHandRaisedUsers] = useState([])
   const [viewerCount, setViewerCount] = useState(0)
   const [shortcutOpen, setShortcutOpen] = useState(false)
   const [pinnedId, setPinnedId] = useState(null)
@@ -244,10 +252,22 @@ export default function Workspace() {
     speakerLevels,
     activityLog,
     screenCursors,
+    polls,
+    todos,
+    agenda,
     emitTabVisibility,
     emitCursorPosition,
     emitSpeakerLevel,
     emitActivityLog,
+    emitCreatePoll,
+    emitPollVote,
+    emitPollClose,
+    emitAddTodo,
+    emitToggleTodo,
+    emitDeleteTodo,
+    emitAddAgenda,
+    emitToggleAgenda,
+    emitDeleteAgenda,
   } = useSocket(roomId)
 
   const {
@@ -294,7 +314,7 @@ export default function Workspace() {
     return () => document.removeEventListener('mousedown', handler);
   }, [screenSharePickerOpen]);
 
-  const { floatingReactions, raisedHands: _raisedHands, sendReaction, toggleHand } = useRoomReactions(socketRef)
+  const { floatingReactions, raisedHands, sendReaction, toggleHand } = useRoomReactions(socketRef)
 
 
   const stageRef = useRef(null)
@@ -838,8 +858,99 @@ export default function Workspace() {
                     onCopyCode={copyCode}
                   />
                 )}
-              </AnimatePresence>
-            </div>
+        </AnimatePresence>
+
+        {/* Tools sidebar (Polls / To-dos / Agenda / Hand raises) */}
+        <AnimatePresence>
+          {toolsOpen && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 300, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="bg-zoom-dark border-l border-white/10 flex flex-col overflow-hidden shrink-0"
+            >
+              <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                <span className="text-xs font-medium text-white/80">Study Tools</span>
+                <button onClick={() => setToolsOpen(false)} className="w-5 h-5 rounded flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors">
+                  <X size={13} />
+                </button>
+              </div>
+
+              {Object.keys(raisedHands).length > 0 && (
+                <div className="px-3 py-2 border-b border-white/10">
+                  <p className="text-[11px] font-medium text-amber-400 mb-1.5 flex items-center gap-1.5">
+                    <Hand size={12} />
+                    Hand Raised ({Object.keys(raisedHands).length})
+                  </p>
+                  <div className="space-y-1">
+                    {Object.entries(raisedHands).map(([sid, name]) => (
+                      <div key={sid} className="flex items-center gap-2 bg-amber-400/10 border border-amber-400/20 rounded px-2 py-1">
+                        <span className="w-5 h-5 rounded-full bg-amber-400/20 flex items-center justify-center text-amber-300">
+                          <Hand size={11} />
+                        </span>
+                        <span className="text-[11px] text-white/80">{name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-1 px-3 pt-2.5 border-b border-white/10 mb-2">
+                <button
+                  onClick={() => setToolsTab('poll')}
+                  className={`flex-1 px-2 py-1.5 rounded-t text-[11px] font-medium transition ${toolsTab === 'poll' ? 'bg-white/10 text-white border-b-2 border-zoom-blue' : 'text-white/40 hover:text-white/70'}`}
+                >
+                  Polls
+                </button>
+                <button
+                  onClick={() => setToolsTab('todo')}
+                  className={`flex-1 px-2 py-1.5 rounded-t text-[11px] font-medium transition ${toolsTab === 'todo' ? 'bg-white/10 text-white border-b-2 border-zoom-blue' : 'text-white/40 hover:text-white/70'}`}
+                >
+                  To-dos
+                </button>
+                <button
+                  onClick={() => setToolsTab('agenda')}
+                  className={`flex-1 px-2 py-1.5 rounded-t text-[11px] font-medium transition ${toolsTab === 'agenda' ? 'bg-white/10 text-white border-b-2 border-zoom-blue' : 'text-white/40 hover:text-white/70'}`}
+                >
+                  Agenda
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-3">
+                {toolsTab === 'poll' && (
+                  <PollsPanel
+                    polls={polls}
+                    user={user}
+                    isHost={room?.host?._id === user?.id}
+                    emitCreatePoll={emitCreatePoll}
+                    emitPollVote={emitPollVote}
+                    emitPollClose={emitPollClose}
+                  />
+                )}
+                {toolsTab === 'todo' && (
+                  <TodosPanel
+                    todos={todos}
+                    roomUsers={roomUsers}
+                    user={user}
+                    emitAddTodo={emitAddTodo}
+                    emitToggleTodo={emitToggleTodo}
+                    emitDeleteTodo={emitDeleteTodo}
+                  />
+                )}
+                {toolsTab === 'agenda' && (
+                  <AgendaPanel
+                    agenda={agenda}
+                    emitAddAgenda={emitAddAgenda}
+                    emitToggleAgenda={emitToggleAgenda}
+                    emitDeleteAgenda={emitDeleteAgenda}
+                  />
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
             <div
               className="absolute top-0 right-0 bottom-0 w-1.5 cursor-col-resize group hover:bg-zoom-blue/40 active:bg-zoom-blue/60 transition-colors"
               onPointerDown={(e) => {
@@ -1609,6 +1720,23 @@ export default function Workspace() {
         >
           <SplitSquareHorizontal size={16} />
         </button>
+
+        <div className="relative">
+          <button
+            onClick={() => { setToolsOpen((v) => !v); setPomodoroOpen(false); setRecorderOpen(false); setFilePreviewOpen(false); setSettingsOpen(false); }}
+            className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
+              toolsOpen ? 'bg-zoom-blue text-white' : 'bg-white/10 text-white hover:bg-white/15'
+            }`}
+            title="Polls, To-dos & Agenda"
+          >
+            <ListChecks size={16} />
+          </button>
+          {Object.keys(raisedHands).length > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-0.5 rounded-full bg-amber-400 text-black text-[9px] font-bold flex items-center justify-center">
+              {Object.keys(raisedHands).length}
+            </span>
+          )}
+        </div>
 
         <div className="w-px h-5 bg-white/10 mx-1" />
 

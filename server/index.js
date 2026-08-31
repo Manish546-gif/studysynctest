@@ -127,6 +127,9 @@ io.on('connection', (socket) => {
 
       socket.emit('whiteboard-state', room.whiteboardActions || []);
       socket.emit('chat-history', room.messages || []);
+      socket.emit('poll-state', room.polls || []);
+      socket.emit('todo-state', room.todos || []);
+      socket.emit('agenda-state', room.agenda || []);
 
       const users = Array.from(activeRooms.get(roomId).values());
       io.to(roomId).emit('room-users', users);
@@ -528,6 +531,152 @@ io.on('connection', (socket) => {
         await room.save();
         io.to(roomId).emit('breakout-update', { breakoutRooms: room.breakoutRooms });
       }
+    } catch {}
+  });
+
+  // --- Polls / Quizzes ---
+  const persistRoomField = async (roomId, fn) => {
+    const room = await Room.findById(roomId);
+    if (room) { fn(room); await room.save(); }
+  };
+
+  socket.on('poll-create', async (data) => {
+    const roomId = socket.roomId;
+    if (!roomId) return;
+    try {
+      const room = await Room.findById(roomId);
+      if (!room) return;
+      const poll = {
+        question: String(data?.question || '').slice(0, 200),
+        options: (data?.options || []).filter((o) => o && o.trim()).map((o) => ({ text: o.trim().slice(0, 80), votes: [] })),
+        createdBy: socket.user._id,
+        isQuiz: !!data?.isQuiz,
+        correctIndex: data?.isQuiz ? Number(data.correctIndex) : -1,
+        active: true,
+        createdAt: new Date(),
+      };
+      if (!poll.question || poll.options.length < 2) return;
+      room.polls.push(poll);
+      await room.save();
+      io.to(roomId).emit('poll-update', { polls: room.polls });
+    } catch {}
+  });
+
+  socket.on('poll-vote', async (data) => {
+    const roomId = socket.roomId;
+    if (!roomId || !data?.pollIndex === undefined) return;
+    try {
+      const room = await Room.findById(roomId);
+      if (!room || room.polls[data.pollIndex]?.active === false) return;
+      const poll = room.polls[data.pollIndex];
+      if (!poll) return;
+      const uid = socket.user._id;
+      poll.options.forEach((o) => {
+        o.votes = o.votes.filter((v) => String(v) !== String(uid));
+      });
+      if (data.optionIndex !== undefined && data.optionIndex >= 0 && data.optionIndex < poll.options.length) {
+        const opt = poll.options[data.optionIndex];
+        if (!opt.votes.some((v) => String(v) === String(uid))) opt.votes.push(uid);
+      }
+      await room.save();
+      io.to(roomId).emit('poll-update', { polls: room.polls });
+    } catch {}
+  });
+
+  socket.on('poll-close', async (data) => {
+    const roomId = socket.roomId;
+    if (!roomId || data?.pollIndex === undefined) return;
+    try {
+      await persistRoomField(roomId, (room) => {
+        if (room.polls[data.pollIndex]) room.polls[data.pollIndex].active = false;
+      });
+      const room = await Room.findById(roomId);
+      io.to(roomId).emit('poll-update', { polls: room.polls });
+    } catch {}
+  });
+
+  // --- To-do list ---
+  socket.on('todo-add', async (data) => {
+    const roomId = socket.roomId;
+    if (!roomId) return;
+    try {
+      await persistRoomField(roomId, (room) => {
+        room.todos.push({
+          text: String(data?.text || '').slice(0, 200),
+          done: false,
+          assignee: data?.assignee || null,
+          createdBy: socket.user._id,
+          createdAt: new Date(),
+        });
+      });
+      const room = await Room.findById(roomId);
+      io.to(roomId).emit('todo-update', { todos: room.todos });
+    } catch {}
+  });
+
+  socket.on('todo-toggle', async (data) => {
+    const roomId = socket.roomId;
+    if (!roomId || data?.todoIndex === undefined) return;
+    try {
+      await persistRoomField(roomId, (room) => {
+        if (room.todos[data.todoIndex]) room.todos[data.todoIndex].done = !room.todos[data.todoIndex].done;
+      });
+      const room = await Room.findById(roomId);
+      io.to(roomId).emit('todo-update', { todos: room.todos });
+    } catch {}
+  });
+
+  socket.on('todo-delete', async (data) => {
+    const roomId = socket.roomId;
+    if (!roomId || data?.todoIndex === undefined) return;
+    try {
+      await persistRoomField(roomId, (room) => {
+        if (room.todos[data.todoIndex]) room.todos.splice(data.todoIndex, 1);
+      });
+      const room = await Room.findById(roomId);
+      io.to(roomId).emit('todo-update', { todos: room.todos });
+    } catch {}
+  });
+
+  // --- Agenda ---
+  socket.on('agenda-add', async (data) => {
+    const roomId = socket.roomId;
+    if (!roomId) return;
+    try {
+      await persistRoomField(roomId, (room) => {
+        room.agenda.push({
+          text: String(data?.text || '').slice(0, 200),
+          done: false,
+          createdBy: socket.user._id,
+          createdAt: new Date(),
+        });
+      });
+      const room = await Room.findById(roomId);
+      io.to(roomId).emit('agenda-update', { agenda: room.agenda });
+    } catch {}
+  });
+
+  socket.on('agenda-toggle', async (data) => {
+    const roomId = socket.roomId;
+    if (!roomId || data?.agendaIndex === undefined) return;
+    try {
+      await persistRoomField(roomId, (room) => {
+        if (room.agenda[data.agendaIndex]) room.agenda[data.agendaIndex].done = !room.agenda[data.agendaIndex].done;
+      });
+      const room = await Room.findById(roomId);
+      io.to(roomId).emit('agenda-update', { agenda: room.agenda });
+    } catch {}
+  });
+
+  socket.on('agenda-delete', async (data) => {
+    const roomId = socket.roomId;
+    if (!roomId || data?.agendaIndex === undefined) return;
+    try {
+      await persistRoomField(roomId, (room) => {
+        if (room.agenda[data.agendaIndex]) room.agenda.splice(data.agendaIndex, 1);
+      });
+      const room = await Room.findById(roomId);
+      io.to(roomId).emit('agenda-update', { agenda: room.agenda });
     } catch {}
   });
 

@@ -20,6 +20,36 @@ const fileSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 }, { _id: true });
 
+const todoSchema = new mongoose.Schema({
+  text: { type: String, required: true, trim: true },
+  done: { type: Boolean, default: false },
+  assignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now },
+}, { _id: true });
+
+const pollOptionSchema = new mongoose.Schema({
+  text: { type: String, required: true, trim: true },
+  votes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+}, { _id: true });
+
+const pollSchema = new mongoose.Schema({
+  question: { type: String, required: true, trim: true },
+  options: [pollOptionSchema],
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  isQuiz: { type: Boolean, default: false },
+  correctIndex: { type: Number, default: -1 },
+  active: { type: Boolean, default: true },
+  createdAt: { type: Date, default: Date.now },
+}, { _id: true });
+
+const agendaItemSchema = new mongoose.Schema({
+  text: { type: String, required: true, trim: true },
+  done: { type: Boolean, default: false },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now },
+}, { _id: true });
+
 const roomSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   description: { type: String, default: '' },
@@ -40,6 +70,9 @@ const roomSchema = new mongoose.Schema({
     members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     isActive: { type: Boolean, default: true },
   }],
+  todos: [todoSchema],
+  polls: [pollSchema],
+  agenda: [agendaItemSchema],
 }, { timestamps: true });
 
 roomSchema.index({ host: 1 });
