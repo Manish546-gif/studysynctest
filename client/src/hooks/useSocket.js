@@ -104,6 +104,7 @@ export function useSocket(roomId) {
     socket.on('room-state', (data) => {
       if (data) {
         setRoomVisibility({ isPublic: !!data.isPublic, waitingRoom: data.waitingRoom || [] });
+        if (Array.isArray(data.waitingRoom)) setWaitingRoom(data.waitingRoom);
         setRoomLocked(!!data.locked);
         if (data.hostId) setHostId(String(data.hostId));
         if (data.originalHost) setOriginalHostId(String(data.originalHost));

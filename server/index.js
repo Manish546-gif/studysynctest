@@ -162,14 +162,18 @@ io.on('connection', (socket) => {
       if (isHost || isOriginalHost) {
         // Host and the room's original creator always get in.
         admitted = true;
-      } else if (isMember || isApproved) {
-        // Invited members and previously approved users always admitted.
+      } else if (isMember) {
+        // Invited members always admitted, even when the room is locked.
         admitted = true;
-      } else if (!room.locked && room.isPublic) {
-        // Open public (unlocked) room: anyone can join directly.
+      } else if (room.locked && !isApproved) {
+        // Locked room: only previously approved users may enter.
+        admitted = false;
+      } else if (room.isPublic && isApproved) {
+        // Public unlocked room: previously approved users auto-admit.
         admitted = true;
       }
-      // else → waiting room: locked or private room requires host approval.
+      // else → waiting room: every other user (public or private) waits
+      // for the host to approve them.
 
       if (!admitted) {
         // Add to waiting room — do NOT add to activeRooms
