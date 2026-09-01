@@ -71,6 +71,7 @@ const roomSchema = new mongoose.Schema({
   description: { type: String, default: '' },
   code: { type: String, default: '', index: true },
   host: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  originalHost: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   tag: { type: String, default: 'Study' },
   cover: { type: String, default: '' },

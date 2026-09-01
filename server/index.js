@@ -147,17 +147,20 @@ io.on('connection', (socket) => {
         return socket.emit('room-action', { type: 'banned', roomId });
       }
 
-      const isHost = room.host.toString() === socket.user._id.toString();
-      socket.roomHost = isHost;
+      socket.roomHost = isHost || isOriginalHost;
       socket.roomId = roomId;
       socket.join(roomId);
 
       // --- Waiting room enforcement ---
       let admitted = false;
-      const isMember = room.members.some((m) => m.toString() === socket.user._id.toString());
-      const isApproved = room.approvedUsers.some((id) => id.toString() === socket.user._id.toString());
+      const uid = socket.user._id.toString();
+      const isHost = room.host.toString() === uid;
+      const isOriginalHost = room.originalHost && room.originalHost.toString() === uid;
+      const isMember = room.members.some((m) => m.toString() === uid);
+      const isApproved = room.approvedUsers.some((id) => id.toString() === uid);
 
-      if (isHost) {
+      if (isHost || isOriginalHost) {
+        // Host and the room's original creator always get in.
         admitted = true;
       } else if (isMember || isApproved) {
         // Invited members and previously approved users always admitted.
@@ -187,6 +190,8 @@ io.on('connection', (socket) => {
         socket.emit('room-state', {
           isPublic: updatedRoom.isPublic,
           locked: !!updatedRoom.locked,
+          hostId: updatedRoom.host ? String(updatedRoom.host) : undefined,
+          originalHost: updatedRoom.originalHost ? String(updatedRoom.originalHost) : undefined,
           waitingRoom: waitingDetails,
           admitted: false,
         });
@@ -292,6 +297,31 @@ io.on('connection', (socket) => {
         userName: socket.user.name,
       });
     }
+    // If the current host leaves, hand the crown back to the original host
+    // so the room never ends up host-less.
+    (async () => {
+      try {
+        const room = await Room.findById(roomId);
+        if (room && room.host && room.host.toString() === socket.user._id.toString()) {
+          const originalHostId = room.originalHost ? room.originalHost.toString() : null;
+          const originalActive = originalHostId &&
+            Array.from((activeRooms.get(roomId) || new Map()).values()).some(
+              (u) => String(u._id) === String(originalHostId)
+            );
+          if (originalActive) {
+            room.host = room.originalHost;
+            await room.save();
+            io.to(roomId).emit('host-transferred', {
+              newHost: String(room.originalHost),
+              oldHost: socket.user._id.toString(),
+              originalHost: String(room.originalHost),
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Host reversion on leave failed:', e.message);
+      }
+    })();
     if (activeRooms.has(roomId)) {
       activeRooms.get(roomId).delete(socket.id);
       if (activeRooms.get(roomId).size === 0) {
@@ -322,6 +352,8 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('room-state', {
       isPublic: updatedRoom.isPublic,
       locked: !!updatedRoom.locked,
+      hostId: updatedRoom.host ? String(updatedRoom.host) : undefined,
+      originalHost: updatedRoom.originalHost ? String(updatedRoom.originalHost) : undefined,
       waitingRoom: waitingDetails,
       admitted: includeAdmitted !== undefined ? !!includeAdmitted : undefined,
     });
@@ -329,7 +361,19 @@ io.on('connection', (socket) => {
   };
 
   const enforceMod = (socket, room) => {
-    return room && room.host && room.host.toString() === socket.user._id.toString();
+    if (!room) return false;
+    const uid = socket.user._id.toString();
+    if (room.host && room.host.toString() === uid) return true;
+    if (room.originalHost && room.originalHost.toString() === uid) return true;
+    return false;
+  };
+
+  // Users who can NEVER be acted on by anyone in this room (zone of protection).
+  const isProtected = (room, targetId) => {
+    const tid = String(targetId);
+    if (room.originalHost && room.originalHost.toString() === tid) return true;
+    if (room.host && room.host.toString() === tid) return true;
+    return false;
   };
 
   socket.on('kick-user', async (data) => {
@@ -339,7 +383,7 @@ io.on('connection', (socket) => {
     try {
       const room = await Room.findById(roomId);
       if (!room || !enforceMod(socket, room)) return;
-      if (room.host.toString() === String(targetId)) return;
+      if (isProtected(room, targetId)) return;
 
       socket.emit('room-action', { type: 'mod-action', roomId });
       const target = getRoomUserSocket(roomId, targetId);
@@ -366,7 +410,7 @@ io.on('connection', (socket) => {
     try {
       const room = await Room.findById(roomId);
       if (!room || !enforceMod(socket, room)) return;
-      if (room.host.toString() === String(targetId)) return;
+      if (isProtected(room, targetId)) return;
 
       if (!room.bannedUsers.some((id) => id.toString() === String(targetId))) {
         room.bannedUsers.push(targetId);
@@ -396,7 +440,7 @@ io.on('connection', (socket) => {
     try {
       const room = await Room.findById(roomId);
       if (!room || !enforceMod(socket, room)) return;
-      if (room.host.toString() === String(targetId)) return;
+      if (isProtected(room, targetId)) return;
 
       const inList = room.mutedUsers.some((id) => id.toString() === String(targetId));
       if (muted && !inList) room.mutedUsers.push(targetId);
@@ -435,9 +479,14 @@ io.on('connection', (socket) => {
       if (!room || !enforceMod(socket, room)) return;
       if (room.host.toString() === String(targetId)) return;
 
+      const oldHost = room.host.toString();
       room.host = targetId;
       await room.save();
-      io.to(roomId).emit('host-transferred', { newHost: String(targetId), oldHost: socket.user._id.toString() });
+      io.to(roomId).emit('host-transferred', {
+        newHost: String(targetId),
+        oldHost,
+        originalHost: room.originalHost ? String(room.originalHost) : oldHost,
+      });
     } catch (err) {
       socket.emit('error', err.message);
     }
@@ -1180,7 +1229,7 @@ io.on('connection', (socket) => {
     const roomId = socket.roomId;
     if (!roomId) return;
     const room = await Room.findById(roomId);
-    const isHost = socket.roomHost === true || (room && room.host.toString() === socket.user._id.toString());
+    const isHost = socket.roomHost === true || (room && (room.host.toString() === socket.user._id.toString() || (room.originalHost && room.originalHost.toString() === socket.user._id.toString())));
     if (!isHost) return;
     const targetId = data?.userId;
     if (!targetId) return;
@@ -1239,7 +1288,7 @@ io.on('connection', (socket) => {
     const roomId = socket.roomId;
     if (!roomId) return;
     const room = await Room.findById(roomId);
-    const isHost = socket.roomHost === true || (room && room.host.toString() === socket.user._id.toString());
+    const isHost = socket.roomHost === true || (room && (room.host.toString() === socket.user._id.toString() || (room.originalHost && room.originalHost.toString() === socket.user._id.toString())));
     if (!isHost) return;
     const targetId = data?.userId;
     if (!targetId) return;
@@ -1264,7 +1313,7 @@ io.on('connection', (socket) => {
     const roomId = socket.roomId;
     if (!roomId) return;
     const room = await Room.findById(roomId);
-    const isHost = socket.roomHost === true || (room && room.host.toString() === socket.user._id.toString());
+    const isHost = socket.roomHost === true || (room && (room.host.toString() === socket.user._id.toString() || (room.originalHost && room.originalHost.toString() === socket.user._id.toString())));
     if (!isHost) return;
     const isPublic = !!data?.isPublic;
     await persistRoomField(roomId, (r) => { r.isPublic = isPublic; });
@@ -1319,6 +1368,30 @@ io.on('connection', (socket) => {
         visible: false,
       });
       io.to(roomId).emit('speaker-level', { userId: socket.user._id, level: 0 });
+      // If the current host disconnects abruptly, revert the crown to the original host.
+      (async () => {
+        try {
+          const room = await Room.findById(roomId);
+          if (room && room.host && room.host.toString() === socket.user._id.toString()) {
+            const originalHostId = room.originalHost ? room.originalHost.toString() : null;
+            const originalActive = originalHostId &&
+              Array.from((activeRooms.get(roomId) || new Map()).values()).some(
+                (u) => String(u._id) === String(originalHostId)
+              );
+            if (originalActive) {
+              room.host = room.originalHost;
+              await room.save();
+              io.to(roomId).emit('host-transferred', {
+                newHost: String(room.originalHost),
+                oldHost: socket.user._id.toString(),
+                originalHost: String(room.originalHost),
+              });
+            }
+          }
+        } catch (e) {
+          console.error('Host reversion on disconnect failed:', e.message);
+        }
+      })();
       if (activeRooms.has(roomId)) {
         activeRooms.get(roomId).delete(socket.id);
         if (activeRooms.get(roomId).size === 0) {

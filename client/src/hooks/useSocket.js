@@ -34,6 +34,7 @@ export function useSocket(roomId) {
   const [spotlightedUserId, setSpotlightedUserId] = useState(null);
   const [roomLocked, setRoomLocked] = useState(false);
   const [hostId, setHostId] = useState(null);
+  const [originalHostId, setOriginalHostId] = useState(null);
   const [modMutedUsers, setModMutedUsers] = useState([]);
 
   useEffect(() => {
@@ -104,6 +105,8 @@ export function useSocket(roomId) {
       if (data) {
         setRoomVisibility({ isPublic: !!data.isPublic, waitingRoom: data.waitingRoom || [] });
         setRoomLocked(!!data.locked);
+        if (data.hostId) setHostId(String(data.hostId));
+        if (data.originalHost) setOriginalHostId(String(data.originalHost));
         if (data.admitted === true) setAdmitted(true);
       }
     });
@@ -144,6 +147,7 @@ export function useSocket(roomId) {
 
     socket.on('host-transferred', (data) => {
       if (data?.newHost) setHostId(String(data.newHost));
+      if (data?.originalHost) setOriginalHostId(String(data.originalHost));
       if (data?.oldHost && socket.auth?.token) {
         try {
           const payload = JSON.parse(atob(socket.auth.token.split('.')[1]));

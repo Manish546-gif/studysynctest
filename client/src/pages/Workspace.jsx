@@ -200,14 +200,18 @@ function formatBytes(bytes) {
 
 function getChatFileUrl(roomId, file) {
   if (!file) return '#'
+  const token = localStorage.getItem('token') || ''
   let url = file.url
   if (!url && file.storedName) {
     const base = (import.meta.env.VITE_API_URL || '') + `/files/${roomId}/download/${encodeURIComponent(file.storedName)}`
-    return base + '?token=' + (localStorage.getItem('token') || '')
+    return base + '?token=' + token
   }
-  if (/^https?:\/\//.test(url)) return url
+  if (/^https?:\/\//.test(url)) return url + (url.includes('?') ? '&' : '?') + `token=${token}`
+  if (url.startsWith('/')) {
+    const origin = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+    return origin + url + (url.includes('?') ? '&' : '?') + `token=${token}`
+  }
   if (!url) return '#'
-  const token = localStorage.getItem('token') || ''
   return url + (url.includes('?') ? '&' : '?') + `token=${token}`
 }
 
@@ -431,9 +435,11 @@ export default function Workspace() {
     prevSelfMutedRef.current = !!selfMuted;
   }, [selfMuted, micOn, toggleMic]);
 
-  // Host identity may change via ownership transfer.
+  // Host identity may change via ownership transfer. The original host retains
+  // moderation powers even after handing off the crown.
   const effectiveHostId = hostId || room?.host?._id;
-  const isHost = effectiveHostId === user?.id;
+  const isHost = effectiveHostId === user?.id || originalHostId === user?.id;
+  const isCurrentHost = effectiveHostId === user?.id;
 
   // Close screen share picker when sharing starts
   useEffect(() => {
@@ -1049,7 +1055,7 @@ export default function Workspace() {
   }
 
   // Waiting room: non-admitted users see this screen (host is always allowed in)
-  if (room && !admitted && effectiveHostId !== user?.id) {
+  if (room && !admitted && effectiveHostId !== user?.id && originalHostId !== user?.id) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-zoom-darker gap-4">
         <div className="w-16 h-16 rounded-full bg-zoom-dark border border-white/10 flex items-center justify-center">
@@ -1555,7 +1561,7 @@ export default function Workspace() {
                   })}
 
                   {/* Audio-only participants (no video stream) */}
-                  {displayMembers
+                  {roomUsers
                     .filter((m) => m._id !== user?.id && !remoteUserIds.includes(m._id))
                     .map((member, i) => (
                       <div key={member._id || i} className="relative rounded overflow-hidden bg-zoom-darker ring-1 ring-white/10 aspect-video flex items-center justify-center">

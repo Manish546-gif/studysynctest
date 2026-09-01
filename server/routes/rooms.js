@@ -14,6 +14,7 @@ router.post('/', auth, async (req, res) => {
       description: description || '',
       tag: tag || 'Study',
       host: req.user._id,
+      originalHost: req.user._id,
       members: [req.user._id],
       isPublic: isPublic !== undefined ? !!isPublic : true,
     });
