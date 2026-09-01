@@ -2269,8 +2269,8 @@ export default function Workspace() {
         }}
         title={actionConfirm?.type === 'ban' ? 'Ban Member' : 'Kick Member'}
         message={actionConfirm?.type === 'ban'
-          ? `Ban ${actionConfirm.member.username || actionConfirm.member.name}? They won't be able to rejoin this room.`
-          : `Remove ${actionConfirm.member.username || actionConfirm.member.name} from this room?`}
+          ? `Ban ${actionConfirm?.member?.username || actionConfirm?.member?.name}? They won't be able to rejoin this room.`
+          : `Remove ${actionConfirm?.member?.username || actionConfirm?.member?.name} from this room?`}
         confirmText={actionConfirm?.type === 'ban' ? 'Ban' : 'Kick'}
         confirmVariant="danger"
       />
