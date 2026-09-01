@@ -147,17 +147,18 @@ io.on('connection', (socket) => {
         return socket.emit('room-action', { type: 'banned', roomId });
       }
 
-      socket.roomHost = isHost || isOriginalHost;
-      socket.roomId = roomId;
-      socket.join(roomId);
-
       // --- Waiting room enforcement ---
-      let admitted = false;
       const uid = socket.user._id.toString();
       const isHost = room.host.toString() === uid;
       const isOriginalHost = room.originalHost && room.originalHost.toString() === uid;
       const isMember = room.members.some((m) => m.toString() === uid);
       const isApproved = room.approvedUsers.some((id) => id.toString() === uid);
+
+      socket.roomHost = isHost || isOriginalHost;
+      socket.roomId = roomId;
+      socket.join(roomId);
+
+      let admitted = false;
 
       if (isHost || isOriginalHost) {
         // Host and the room's original creator always get in.
