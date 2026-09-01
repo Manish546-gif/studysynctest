@@ -132,6 +132,7 @@ export const api = {
   createRoom: (body) => request('/rooms', { method: 'POST', body: JSON.stringify(body) }),
   inviteUser: (roomId, username) => request(`/rooms/${roomId}/invite`, { method: 'POST', body: JSON.stringify({ username }) }),
   searchUsers: (q) => request(`/users/search?q=${encodeURIComponent(q)}`),
+  searchGifs: (q, limit = 24) => request(`/giphy/search?q=${encodeURIComponent(q)}&limit=${limit}`),
   joinRoom: (id) => request(`/rooms/${id}/join`, { method: 'POST' }),
   updateRoom: (id, body) => request(`/rooms/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteRoom: (id) => request(`/rooms/${id}`, { method: 'DELETE' }),

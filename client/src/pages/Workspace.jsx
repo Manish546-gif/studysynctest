@@ -45,6 +45,12 @@ import {
   Pin,
   Paperclip,
   FileText as FileIcon,
+  MoreVertical,
+  UserX,
+  VolumeX,
+  Star,
+  Ban,
+  Lock,
 } from 'lucide-react'
 import { api, getAssetUrl } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -60,6 +66,7 @@ import ConfirmationModal from '../components/common/ConfirmationModal'
 import FloatingReactions from '../components/FloatingReactions'
 import ReactionPicker from '../components/ReactionPicker'
 import InviteLinkModal from '../components/InviteLinkModal'
+import GifPicker from '../components/GifPicker'
 import BreakoutPanel from '../components/BreakoutPanel'
 import PollsPanel from '../components/PollsPanel'
 import TodosPanel from '../components/TodosPanel'
@@ -230,6 +237,8 @@ export default function Workspace() {
   const whiteboardResizing = useRef(false)
   const [chatOpen, setChatOpen] = useState(false)
   const [membersOpen, setMembersOpen] = useState(false)
+  const [actionMenuFor, setActionMenuFor] = useState(null)
+  const [actionConfirm, setActionConfirm] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsName, setSettingsName] = useState('')
   const [settingsTag, setSettingsTag] = useState('Study')
@@ -242,6 +251,12 @@ export default function Workspace() {
   const [codeCopied, setCodeCopied] = useState(false)
   const [chatInput, setChatInput] = useState('')
   const [chatAttaching, setChatAttaching] = useState(false)
+  const [gifPickerOpen, setGifPickerOpen] = useState(false)
+  const [gifQuery, setGifQuery] = useState('')
+  const [gifResults, setGifResults] = useState([])
+  const [gifSearching, setGifSearching] = useState(false)
+  const [gifError, setGifError] = useState('')
+  const chatGifInputRef = useRef(null)
   const [mentionQuery, setMentionQuery] = useState(null)
   const [mentionIndex, setMentionIndex] = useState(0)
   const [chatTab, setChatTab] = useState('chat') // 'chat' | 'activity'
@@ -293,6 +308,19 @@ export default function Workspace() {
     emitPinMessage,
     emitInviteUser,
     members,
+    kicked,
+    banned,
+    selfMuted,
+    spotlightedUserId,
+    roomLocked,
+    hostId,
+    modMutedUsers,
+    emitKickUser,
+    emitBanUser,
+    emitMuteUser,
+    emitSpotlightUser,
+    emitTransferHost,
+    emitRoomSetLock,
     roomFiles,
     setRoomFiles,
     typingUsers,
@@ -393,6 +421,19 @@ export default function Workspace() {
       setPinnedIdentity(null);
     }
   }, [pinnedId, setPinnedIdentity]);
+
+  // When the host force-mutes this user, turn the local mic off.
+  const prevSelfMutedRef = useRef(false);
+  useEffect(() => {
+    if (selfMuted && !prevSelfMutedRef.current && micOn) {
+      toggleMic();
+    }
+    prevSelfMutedRef.current = !!selfMuted;
+  }, [selfMuted, micOn, toggleMic]);
+
+  // Host identity may change via ownership transfer.
+  const effectiveHostId = hostId || room?.host?._id;
+  const isHost = effectiveHostId === user?.id;
 
   // Close screen share picker when sharing starts
   useEffect(() => {
@@ -696,6 +737,52 @@ export default function Workspace() {
     setMentionQuery(null)
   }
 
+  const gifSearchTimeoutRef = useRef(null)
+  const handleGifQueryChange = (val) => {
+    setGifQuery(val)
+    clearTimeout(gifSearchTimeoutRef.current)
+    const q = val.trim()
+    if (!q) { setGifResults([]); return }
+    setGifSearching(true)
+    gifSearchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const { gifs } = await api.searchGifs(q)
+        setGifResults(Array.isArray(gifs) ? gifs : [])
+        setGifError('')
+      } catch (err) {
+        setGifError(err?.message || 'Failed to load GIFs')
+      } finally {
+        setGifSearching(false)
+      }
+    }, 400)
+  }
+
+  const loadTrendingGifs = async () => {
+    setGifSearching(true)
+    try {
+      const { gifs } = await api.searchGifs('')
+      setGifResults(Array.isArray(gifs) ? gifs : [])
+      setGifError('')
+    } catch (err) {
+      setGifError(err?.message || 'Failed to load GIFs')
+    } finally {
+      setGifSearching(false)
+    }
+  }
+
+  const handleSendGif = (gif) => {
+    emitMessage('', null, {
+      url: gif.url,
+      preview: gif.preview,
+      title: gif.title || '',
+      width: gif.width || 0,
+      height: gif.height || 0,
+    })
+    setGifPickerOpen(false)
+    setGifQuery('')
+    setGifResults([])
+  }
+
   const handleChatKeyDown = useCallback(() => {
     if (!isTypingRef.current) {
       isTypingRef.current = true
@@ -786,6 +873,19 @@ export default function Workspace() {
     else if (pinnedId === 'youtube') { /* YouTube pin managed by youtubeState */ }
     else if (pinnedId && pinnedId !== 'local' && !remoteStreams[pinnedId] && !remoteScreenStreams[pinnedId]) setPinnedId(null);
   }, [pinnedId, remoteStreams, remoteScreenStreams, localStream, screenSharing]);
+
+  // Spotlight: when the host spotlights someone, everyone auto-pins them to the stage.
+  useEffect(() => {
+    if (spotlightedUserId) {
+      const sid = String(spotlightedUserId);
+      if (remoteStreams[sid] || remoteScreenStreams[sid] || sid === String(user?.id)) {
+        if (sid === String(user?.id)) setPinnedId('local');
+        else setPinnedId(sid);
+      }
+    } else if (!pinnedId || pinnedId === 'local' || pinnedId === 'youtube') {
+      // Keep explicit user pins, but if nothing is pinned return to gallery.
+    }
+  }, [spotlightedUserId, remoteStreams, remoteScreenStreams, user?.id]);
 
   // Exit fullscreen when leaving watch mode
   useEffect(() => {
@@ -926,8 +1026,30 @@ export default function Workspace() {
     )
   }
 
+  // Banned / kicked users see a notice and are returned to the dashboard
+  if (kicked || banned) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-zoom-darker gap-4">
+        <div className="w-16 h-16 rounded-full bg-zoom-dark border border-white/10 flex items-center justify-center">
+          <TriangleAlert size={24} className="text-red-400" />
+        </div>
+        <div className="text-center space-y-1">
+          <h2 className="text-white font-semibold text-lg">
+            {banned ? 'You have been removed from this room' : 'You have been removed from this room'}
+          </h2>
+          <p className="text-white/40 text-sm">
+            {banned ? 'You are no longer allowed to join.' : 'Ask the host to re-admit you.'}
+          </p>
+        </div>
+        <button onClick={() => navigate('/dashboard')} className="mt-2 px-4 py-2 text-xs text-white/50 hover:text-white border border-white/10 rounded-lg transition">
+          Back to Dashboard
+        </button>
+      </div>
+    )
+  }
+
   // Waiting room: non-admitted users see this screen (host is always allowed in)
-  if (room && !admitted && room.host?._id !== user?.id) {
+  if (room && !admitted && effectiveHostId !== user?.id) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-zoom-darker gap-4">
         <div className="w-16 h-16 rounded-full bg-zoom-dark border border-white/10 flex items-center justify-center">
@@ -943,8 +1065,6 @@ export default function Workspace() {
       </div>
     )
   }
-
-  const isHost = room.host?._id === user?.id
 
   return (
     <div className="flex flex-col h-screen bg-surface">
@@ -1583,6 +1703,16 @@ export default function Workspace() {
                                     <span className="text-[11px] font-medium text-white/80">@{msg.username || msg.name}{isOwn ? ' (You)' : ''}</span>
                                     <span className="text-[9px] text-white/25">{time}</span>
                                   </div>
+                                  {msg.gif && msg.gif.url && (
+                                    <img
+                                      src={msg.gif.preview || msg.gif.url}
+                                      alt={msg.gif.title || 'GIF'}
+                                      loading="lazy"
+                                      className="rounded-lg max-w-[220px] mb-0.5 border border-white/10"
+                                      style={msg.gif.width ? { aspectRatio: `${msg.gif.width} / ${Math.max(msg.gif.height, 1)}` } : undefined}
+                                      onClick={() => window.open(msg.gif.url, '_blank')}
+                                    />
+                                  )}
                                   {msg.file && (
                                     <a
                                       href={getChatFileUrl(roomId, msg.file)}
@@ -1648,10 +1778,29 @@ export default function Workspace() {
                       placeholder="Type a message... (@ to mention)"
                       className="flex-1 bg-transparent text-xs text-white placeholder:text-white/30 outline-none"
                     />
+                    <button
+                      type="button"
+                      onClick={() => { setGifPickerOpen((v) => !v); if (!gifQuery) setGifQuery(''); }}
+                      className={`text-white/40 hover:text-white/80 p-1 rounded transition-colors ${gifPickerOpen ? 'text-zoom-blue bg-zoom-blue/10' : ''}`}
+                      title="Send a GIF"
+                    >
+                      <span className="text-[11px] font-bold">GIF</span>
+                    </button>
                     <button type="submit" className="text-zoom-blue p-1 hover:bg-zoom-blue/10 rounded transition-colors">
                       <Send size={13} />
                     </button>
                   </div>
+                  <GifPicker
+                    open={gifPickerOpen}
+                    onClose={() => setGifPickerOpen(false)}
+                    onSelect={handleSendGif}
+                    query={gifQuery}
+                    onQueryChange={handleGifQueryChange}
+                    results={gifResults}
+                    searching={gifSearching}
+                    error={gifError}
+                    onTrending={loadTrendingGifs}
+                  />
                   {typingLabel && (
                     <p className="text-white/30 text-[10px] italic mt-1 px-1">{typingLabel}</p>
                   )}
@@ -1695,26 +1844,87 @@ export default function Workspace() {
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-                {displayMembers.map((member, i) => (
-                  <div key={member._id || i} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/5 transition-colors">
-                    <div className={`w-7 h-7 rounded-full overflow-hidden ${memberColors[i % memberColors.length]} flex items-center justify-center text-white font-medium text-[10px] shrink-0`}>
-                      {member.avatar ? (
-                        <img src={getAssetUrl(member.avatar)} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none' }} />
-                      ) : (
-                        <span>{(member.username || member.name || '?').charAt(0)?.toUpperCase()}</span>
+                {displayMembers.map((member, i) => {
+                  const isSelf = member._id === user?.id
+                  const isRoomHost = member._id === effectiveHostId
+                  const isMuted = modMutedUsers.some((id) => String(id) === String(member._id))
+                  const isSpotlit = spotlightedUserId && String(spotlightedUserId) === String(member._id)
+                  return (
+                    <div key={member._id || i} className="group relative flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/5 transition-colors">
+                      <div className={`w-7 h-7 rounded-full overflow-hidden ${memberColors[i % memberColors.length]} flex items-center justify-center text-white font-medium text-[10px] shrink-0 ${isMuted ? 'opacity-60' : ''}`}>
+                        {member.avatar ? (
+                          <img src={getAssetUrl(member.avatar)} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none' }} />
+                        ) : (
+                          <span>{(member.username || member.name || '?').charAt(0)?.toUpperCase()}</span>
+                        )}
+                        {isMuted && <span className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full"><VolumeX size={10} className="text-red-400" /></span>}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-medium text-white/80 truncate">
+                          @{member.username || member.name || 'Unknown'}
+                          {isSelf && <span className="ml-1 text-[9px] text-zoom-blue">(You)</span>}
+                          {isRoomHost && <span className="ml-1 text-[9px] text-yellow-400"><Crown size={9} className="inline" /></span>}
+                          {isSpotlit && <span className="ml-1 text-[9px] text-zoom-blue"><Star size={9} className="inline" /></span>}
+                          {isMuted && <span className="ml-1 text-[9px] text-red-400">Muted</span>}
+                        </p>
+                        <p className="text-[9px] text-white/30">
+                          {isRoomHost ? 'Host' : 'Member'}
+                        </p>
+                      </div>
+                      {isHost && !isSelf && !isRoomHost && (
+                        <div className="relative shrink-0">
+                          <button
+                            onClick={() => setActionMenuFor(actionMenuFor === member._id ? null : member._id)}
+                            className="w-6 h-6 rounded flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                            title={`Actions for ${member.username || member.name}`}
+                          >
+                            <MoreVertical size={13} />
+                          </button>
+                          {actionMenuFor === member._id && (
+                            <div className="absolute right-0 top-full mt-1 w-40 bg-zoom-darker border border-white/10 rounded-lg shadow-xl z-50 py-1">
+                              <button
+                                onClick={() => { emitSpotlightUser(isSpotlit ? null : member._id); setActionMenuFor(null); }}
+                                className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+                              >
+                                <Star size={12} className={isSpotlit ? 'text-zoom-blue' : 'text-white/40'} />
+                                {isSpotlit ? 'Unspotlight' : 'Spotlight'}
+                              </button>
+                              <button
+                                onClick={() => { emitMuteUser(member._id, !isMuted); setActionMenuFor(null); }}
+                                className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+                              >
+                                <VolumeX size={12} className="text-white/40" />
+                                {isMuted ? 'Unmute' : 'Mute'}
+                              </button>
+                              <button
+                                onClick={() => { emitTransferHost(member._id); setActionMenuFor(null); }}
+                                className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+                              >
+                                <Crown size={12} className="text-yellow-400/60" />
+                                Make Host
+                              </button>
+                              <div className="my-1 border-t border-white/10" />
+                              <button
+                                onClick={() => { setActionConfirm({ type: 'kick', member }); setActionMenuFor(null); }}
+                                className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-red-400/80 hover:bg-red-400/10 hover:text-red-400 transition-colors"
+                              >
+                                <UserX size={12} />
+                                Kick
+                              </button>
+                              <button
+                                onClick={() => { setActionConfirm({ type: 'ban', member }); setActionMenuFor(null); }}
+                                className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-red-400/80 hover:bg-red-400/10 hover:text-red-400 transition-colors"
+                              >
+                                <Ban size={12} />
+                                Ban
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[11px] font-medium text-white/80 truncate">
-                        @{member.username || member.name || 'Unknown'}
-                        {member._id === user?.id && <span className="ml-1 text-[9px] text-zoom-blue">(You)</span>}
-                      </p>
-                      <p className="text-[9px] text-white/30">
-                        {member._id === room.host?._id ? 'Host' : 'Member'}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </motion.div>
           )}
@@ -1806,6 +2016,42 @@ export default function Workspace() {
                 {isHost && (
                   <>
                     {settingsError && <p className="text-xs text-red-400">{settingsError}</p>}
+                    <div className="space-y-2">
+                      <label className="block text-[11px] font-medium text-white/40">Room Access</label>
+                      <div className="flex items-center justify-between gap-2 rounded border border-white/10 bg-white/5 px-2.5 py-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-5 h-5 rounded bg-white/10 flex items-center justify-center text-white/50 shrink-0"><Lock size={12} /></span>
+                          <span className="text-[11px] text-white/70 truncate">Lock room (require approval)</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => emitRoomSetLock(!roomLocked)}
+                          className={`w-8 h-4.5 rounded-full transition-colors shrink-0 ${roomLocked ? 'bg-zoom-blue' : 'bg-white/15'}`}
+                          title="Toggle room lock"
+                        >
+                          <span className={`block w-3.5 h-3.5 rounded-full bg-white transition-transform ${roomLocked ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 rounded border border-white/10 bg-white/5 px-2.5 py-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-5 h-5 rounded bg-white/10 flex items-center justify-center text-white/50 shrink-0"><Eye size={12} /></span>
+                          <span className="text-[11px] text-white/70 truncate">Public room (visible on dashboard)</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => emitRoomSetVisibility(!roomVisibility.isPublic)}
+                          className={`w-8 h-4.5 rounded-full transition-colors shrink-0 ${roomVisibility.isPublic ? 'bg-zoom-blue' : 'bg-white/15'}`}
+                          title="Toggle room visibility"
+                        >
+                          <span className={`block w-3.5 h-3.5 rounded-full bg-white transition-transform ${roomVisibility.isPublic ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                        </button>
+                      </div>
+                      {roomLocked && (
+                        <p className="text-[10px] text-white/30 leading-relaxed">
+                          Locked rooms require everyone to be approved by the host before joining.
+                        </p>
+                      )}
+                    </div>
                     <button
                       onClick={handleSaveSettings}
                       disabled={savingSettings || !settingsName.trim()}
@@ -2009,6 +2255,23 @@ export default function Workspace() {
         title="Leave Room"
         message={`Are you sure you want to leave ${room?.name || 'this room'}?`}
         confirmText="Leave Room"
+        confirmVariant="danger"
+      />
+
+      <ConfirmationModal
+        open={!!actionConfirm}
+        onClose={() => setActionConfirm(null)}
+        onConfirm={() => {
+          const a = actionConfirm
+          if (a?.type === 'kick') emitKickUser(a.member._id)
+          else if (a?.type === 'ban') emitBanUser(a.member._id)
+          setActionConfirm(null)
+        }}
+        title={actionConfirm?.type === 'ban' ? 'Ban Member' : 'Kick Member'}
+        message={actionConfirm?.type === 'ban'
+          ? `Ban ${actionConfirm.member.username || actionConfirm.member.name}? They won't be able to rejoin this room.`
+          : `Remove ${actionConfirm.member.username || actionConfirm.member.name} from this room?`}
+        confirmText={actionConfirm?.type === 'ban' ? 'Ban' : 'Kick'}
         confirmVariant="danger"
       />
 

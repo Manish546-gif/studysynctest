@@ -28,6 +28,13 @@ export function useSocket(roomId) {
   const [roomVisibility, setRoomVisibility] = useState({ isPublic: false, waitingRoom: [] });
   const [admitted, setAdmitted] = useState(false);
   const [members, setMembers] = useState([]);
+  const [kicked, setKicked] = useState(false);
+  const [banned, setBanned] = useState(false);
+  const [selfMuted, setSelfMuted] = useState(false);
+  const [spotlightedUserId, setSpotlightedUserId] = useState(null);
+  const [roomLocked, setRoomLocked] = useState(false);
+  const [hostId, setHostId] = useState(null);
+  const [modMutedUsers, setModMutedUsers] = useState([]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -96,12 +103,57 @@ export function useSocket(roomId) {
     socket.on('room-state', (data) => {
       if (data) {
         setRoomVisibility({ isPublic: !!data.isPublic, waitingRoom: data.waitingRoom || [] });
+        setRoomLocked(!!data.locked);
         if (data.admitted === true) setAdmitted(true);
       }
     });
 
     socket.on('members-updated', (data) => {
       if (Array.isArray(data?.members)) setMembers(data.members);
+    });
+
+    // --- Moderation / room management events ---
+    socket.on('room-action', (data) => {
+      if (!data) return;
+      if (data.type === 'kicked') setKicked(true);
+      if (data.type === 'banned') { setBanned(true); setKicked(true); }
+      if (data.type === 'muted') setSelfMuted(!!data.muted);
+      if (data.type === 'mod-action') setKicked(false);
+    });
+
+    socket.on('spotlight-user', (data) => {
+      setSpotlightedUserId(data?.userId ? String(data.userId) : null);
+    });
+
+    socket.on('room-locked', (data) => {
+      setRoomLocked(!!data?.locked);
+    });
+
+    socket.on('mod-update', (data) => {
+      if (!data) return;
+      if (data.type === 'muted') {
+        const uid = String(data.userId);
+        setModMutedUsers((prev) => {
+          const set = new Set(prev.map(String));
+          if (data.muted) set.add(uid);
+          else set.delete(uid);
+          return Array.from(set);
+        });
+      }
+    });
+
+    socket.on('host-transferred', (data) => {
+      if (data?.newHost) setHostId(String(data.newHost));
+      if (data?.oldHost && socket.auth?.token) {
+        try {
+          const payload = JSON.parse(atob(socket.auth.token.split('.')[1]));
+          const me = payload.id || payload._id;
+          if (String(data.newHost) === String(me)) {
+            setAdmitted(true);
+            setKicked(false);
+          }
+        } catch {}
+      }
     });
 
     socket.on('chat-message', (message) => {
@@ -279,8 +331,8 @@ export function useSocket(roomId) {
     socketRef.current?.emit('live-path-end');
   }, []);
 
-  const emitMessage = useCallback((text, file) => {
-    socketRef.current?.emit('send-message', file ? { text, file } : { text });
+  const emitMessage = useCallback((text, file, gif) => {
+    socketRef.current?.emit('send-message', file ? { text, file } : gif ? { text, gif } : { text });
   }, []);
 
   const emitPinMessage = useCallback((msgId, pinned) => {
@@ -407,6 +459,30 @@ export function useSocket(roomId) {
     socketRef.current?.emit('room-set-visibility', { isPublic });
   }, []);
 
+  const emitKickUser = useCallback((userId) => {
+    socketRef.current?.emit('kick-user', { userId });
+  }, []);
+
+  const emitBanUser = useCallback((userId) => {
+    socketRef.current?.emit('ban-user', { userId });
+  }, []);
+
+  const emitMuteUser = useCallback((userId, muted) => {
+    socketRef.current?.emit('mute-user', { userId, muted });
+  }, []);
+
+  const emitSpotlightUser = useCallback((userId) => {
+    socketRef.current?.emit('spotlight-user', { userId });
+  }, []);
+
+  const emitTransferHost = useCallback((userId) => {
+    socketRef.current?.emit('transfer-host', { userId });
+  }, []);
+
+  const emitRoomSetLock = useCallback((locked) => {
+    socketRef.current?.emit('room-set-lock', { locked });
+  }, []);
+
   return {
     socket: socketRef,
     connected,
@@ -431,6 +507,13 @@ export function useSocket(roomId) {
     youtubeState,
     stickyNotes,
     waitingRoom,
+    kicked,
+    banned,
+    selfMuted,
+    spotlightedUserId,
+    roomLocked,
+    hostId,
+    modMutedUsers,
     emitDraw,
     emitMove,
     emitCursor,
@@ -471,6 +554,12 @@ export function useSocket(roomId) {
     emitWaitingAdmit,
     emitWaitingDeny,
     emitRoomSetVisibility,
+    emitKickUser,
+    emitBanUser,
+    emitMuteUser,
+    emitSpotlightUser,
+    emitTransferHost,
+    emitRoomSetLock,
     admitted,
     roomVisibility,
     setAdmitted,

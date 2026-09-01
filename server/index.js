@@ -15,6 +15,7 @@ const Room = require('./models/Room');
 
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
+const giphyRoutes = require('./routes/giphy');
 const roomRoutes = require('./routes/rooms');
 const whiteboardRoutes = require('./routes/whiteboards');
 const notebookRoutes = require('./routes/notebooks');
@@ -70,6 +71,7 @@ app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: '10mb' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/giphy', giphyRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/whiteboards', whiteboardRoutes);
 app.use('/api/notebooks', notebookRoutes);
@@ -140,6 +142,11 @@ io.on('connection', (socket) => {
       const room = await Room.findById(roomId);
       if (!room) return socket.emit('error', 'Room not found');
 
+      // Banned users cannot re-join.
+      if (room.bannedUsers && room.bannedUsers.some((id) => id.toString() === socket.user._id.toString())) {
+        return socket.emit('room-action', { type: 'banned', roomId });
+      }
+
       const isHost = room.host.toString() === socket.user._id.toString();
       socket.roomHost = isHost;
       socket.roomId = roomId;
@@ -147,12 +154,19 @@ io.on('connection', (socket) => {
 
       // --- Waiting room enforcement ---
       let admitted = false;
+      const isMember = room.members.some((m) => m.toString() === socket.user._id.toString());
+      const isApproved = room.approvedUsers.some((id) => id.toString() === socket.user._id.toString());
+
       if (isHost) {
         admitted = true;
-      } else if (room.isPublic && room.approvedUsers.some((id) => id.toString() === socket.user._id.toString())) {
-        // Public rooms: previously approved users auto-admit. Private rooms: always require approval.
+      } else if (isMember || isApproved) {
+        // Invited members and previously approved users always admitted.
+        admitted = true;
+      } else if (!room.locked && room.isPublic) {
+        // Open public (unlocked) room: anyone can join directly.
         admitted = true;
       }
+      // else → waiting room: locked or private room requires host approval.
 
       if (!admitted) {
         // Add to waiting room — do NOT add to activeRooms
@@ -172,6 +186,7 @@ io.on('connection', (socket) => {
         // Send admission status to the joining user
         socket.emit('room-state', {
           isPublic: updatedRoom.isPublic,
+          locked: !!updatedRoom.locked,
           waitingRoom: waitingDetails,
           admitted: false,
         });
@@ -214,9 +229,14 @@ io.on('connection', (socket) => {
       const waitingDetails = (latestRoom.waitingRoom || []).map((u) => ({ _id: u._id, name: u.name, username: u.username, avatar: u.avatar }));
       socket.emit('room-state', {
         isPublic: latestRoom.isPublic,
+        locked: !!latestRoom.locked,
         waitingRoom: waitingDetails,
         admitted: true,
       });
+
+      if (latestRoom.spotlightedUser) {
+        socket.emit('spotlight-user', { userId: latestRoom.spotlightedUser.toString() });
+      }
 
       console.log(`${socket.user.name} joined room ${room.name}${isHost ? ' (host)' : ''}`);
     } catch (err) {
@@ -276,6 +296,7 @@ io.on('connection', (socket) => {
       activeRooms.get(roomId).delete(socket.id);
       if (activeRooms.get(roomId).size === 0) {
         activeRooms.delete(roomId);
+        cleanupEmptyRoom(roomId);
       } else {
         const users = Array.from(activeRooms.get(roomId).values());
         io.to(roomId).emit('room-users', users);
@@ -284,13 +305,167 @@ io.on('connection', (socket) => {
     socket.roomId = null;
   });
 
+  // --- Moderation: kick / ban / mute / spotlight / transfer host ---
+  const getRoomUserSocket = (roomId, userId) => {
+    const sockets = io.sockets.adapter.rooms.get(roomId);
+    if (!sockets) return null;
+    for (const sid of sockets) {
+      const s = io.sockets.sockets.get(sid);
+      if (s && s.user && s.user._id.toString() === String(userId)) return s;
+    }
+    return null;
+  };
+
+  const broadcastRoomState = async (roomId, includeAdmitted) => {
+    const updatedRoom = await Room.findById(roomId).populate('waitingRoom', 'name username avatar');
+    const waitingDetails = (updatedRoom.waitingRoom || []).map((u) => ({ _id: u._id, name: u.name, username: u.username, avatar: u.avatar }));
+    io.to(roomId).emit('room-state', {
+      isPublic: updatedRoom.isPublic,
+      locked: !!updatedRoom.locked,
+      waitingRoom: waitingDetails,
+      admitted: includeAdmitted !== undefined ? !!includeAdmitted : undefined,
+    });
+    return updatedRoom;
+  };
+
+  const enforceMod = (socket, room) => {
+    return room && room.host && room.host.toString() === socket.user._id.toString();
+  };
+
+  socket.on('kick-user', async (data) => {
+    const roomId = socket.roomId;
+    const targetId = data?.userId;
+    if (!roomId || !targetId) return;
+    try {
+      const room = await Room.findById(roomId);
+      if (!room || !enforceMod(socket, room)) return;
+      if (room.host.toString() === String(targetId)) return;
+
+      socket.emit('room-action', { type: 'mod-action', roomId });
+      const target = getRoomUserSocket(roomId, targetId);
+      if (target) {
+        target.emit('room-action', { type: 'kicked', roomId });
+        target.leave(roomId);
+        target.roomId = null;
+      }
+
+      room.members = room.members.filter((m) => m.toString() !== String(targetId));
+      await room.save();
+      const populated = await room.populate('members', 'name username avatar email');
+      io.to(roomId).emit('members-updated', { members: populated.members });
+      io.to(roomId).emit('mod-update', { type: 'kicked', userId: targetId, actor: socket.user._id });
+    } catch (err) {
+      socket.emit('error', err.message);
+    }
+  });
+
+  socket.on('ban-user', async (data) => {
+    const roomId = socket.roomId;
+    const targetId = data?.userId;
+    if (!roomId || !targetId) return;
+    try {
+      const room = await Room.findById(roomId);
+      if (!room || !enforceMod(socket, room)) return;
+      if (room.host.toString() === String(targetId)) return;
+
+      if (!room.bannedUsers.some((id) => id.toString() === String(targetId))) {
+        room.bannedUsers.push(targetId);
+      }
+      room.members = room.members.filter((m) => m.toString() !== String(targetId));
+      await room.save();
+
+      const target = getRoomUserSocket(roomId, targetId);
+      if (target) {
+        target.emit('room-action', { type: 'banned', roomId });
+        target.leave(roomId);
+        target.roomId = null;
+      }
+      const populated = await room.populate('members', 'name username avatar email');
+      io.to(roomId).emit('members-updated', { members: populated.members });
+      io.to(roomId).emit('mod-update', { type: 'banned', userId: targetId, actor: socket.user._id });
+    } catch (err) {
+      socket.emit('error', err.message);
+    }
+  });
+
+  socket.on('mute-user', async (data) => {
+    const roomId = socket.roomId;
+    const targetId = data?.userId;
+    const muted = !!data?.muted;
+    if (!roomId || !targetId) return;
+    try {
+      const room = await Room.findById(roomId);
+      if (!room || !enforceMod(socket, room)) return;
+      if (room.host.toString() === String(targetId)) return;
+
+      const inList = room.mutedUsers.some((id) => id.toString() === String(targetId));
+      if (muted && !inList) room.mutedUsers.push(targetId);
+      if (!muted && inList) room.mutedUsers = room.mutedUsers.filter((id) => id.toString() !== String(targetId));
+      await room.save();
+
+      const target = getRoomUserSocket(roomId, targetId);
+      if (target) target.emit('room-action', { type: 'muted', roomId, muted });
+      io.to(roomId).emit('mod-update', { type: 'muted', userId: targetId, muted, actor: socket.user._id });
+    } catch (err) {
+      socket.emit('error', err.message);
+    }
+  });
+
+  socket.on('spotlight-user', async (data) => {
+    const roomId = socket.roomId;
+    const targetId = data?.userId || null;
+    if (!roomId) return;
+    try {
+      const room = await Room.findById(roomId);
+      if (!room || !enforceMod(socket, room)) return;
+      room.spotlightedUser = targetId ? String(targetId) : null;
+      await room.save();
+      io.to(roomId).emit('spotlight-user', { userId: targetId ? String(targetId) : null });
+    } catch (err) {
+      socket.emit('error', err.message);
+    }
+  });
+
+  socket.on('transfer-host', async (data) => {
+    const roomId = socket.roomId;
+    const targetId = data?.userId;
+    if (!roomId || !targetId) return;
+    try {
+      const room = await Room.findById(roomId);
+      if (!room || !enforceMod(socket, room)) return;
+      if (room.host.toString() === String(targetId)) return;
+
+      room.host = targetId;
+      await room.save();
+      io.to(roomId).emit('host-transferred', { newHost: String(targetId), oldHost: socket.user._id.toString() });
+    } catch (err) {
+      socket.emit('error', err.message);
+    }
+  });
+
+  socket.on('room-set-lock', async (data) => {
+    const roomId = socket.roomId;
+    if (!roomId) return;
+    try {
+      const room = await Room.findById(roomId);
+      if (!room || !enforceMod(socket, room)) return;
+      room.locked = !!data?.locked;
+      await room.save();
+      io.to(roomId).emit('room-locked', { locked: room.locked });
+    } catch (err) {
+      socket.emit('error', err.message);
+    }
+  });
+
+
   socket.on('send-message', async (data) => {
     const roomId = socket.roomId;
     if (!roomId) return;
 
     const text = typeof data?.text === 'string' ? data.text.trim() : '';
     const file = data?.file && typeof data.file === 'object' ? data.file : null;
-    if (!text && !file) return;
+    const gif = data?.gif && typeof data.gif === 'object' ? data.gif : null;
+    if (!text && !file && !gif) return;
 
     const message = {
       userId: socket.user._id,
@@ -299,6 +474,13 @@ io.on('connection', (socket) => {
       avatar: socket.user.avatar || '',
       text,
       createdAt: new Date(),
+    };
+    if (gif) message.gif = {
+      url: String(gif.url || ''),
+      preview: String(gif.preview || ''),
+      title: String(gif.title || ''),
+      width: Number(gif.width || 0),
+      height: Number(gif.height || 0),
     };
     if (file) message.file = {
       fileName: String(file.fileName || 'file'),
@@ -681,6 +863,21 @@ io.on('connection', (socket) => {
   const persistRoomField = async (roomId, fn) => {
     const room = await Room.findById(roomId);
     if (room) { fn(room); await room.save(); }
+  };
+
+  // When a room empties of connected users, clean up transient state.
+  const cleanupEmptyRoom = async (roomId) => {
+    try {
+      const room = await Room.findById(roomId);
+      if (!room) return;
+      room.isActive = false;
+      room.waitingRoom = [];
+      room.spotlightedUser = null;
+      room.mutedUsers = [];
+      await room.save();
+    } catch (err) {
+      console.error('cleanupEmptyRoom error:', err.message);
+    }
   };
 
   socket.on('poll-create', async (data) => {
@@ -1126,6 +1323,7 @@ io.on('connection', (socket) => {
         activeRooms.get(roomId).delete(socket.id);
         if (activeRooms.get(roomId).size === 0) {
           activeRooms.delete(roomId);
+          cleanupEmptyRoom(roomId);
         } else {
           const users = Array.from(activeRooms.get(roomId).values());
           io.to(roomId).emit('room-users', users);

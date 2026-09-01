@@ -7,6 +7,13 @@ const messageSchema = new mongoose.Schema({
   username: { type: String, default: '' },
   avatar: { type: String, default: '' },
   text: { type: String, default: '' },
+  gif: {
+    url: { type: String, default: '' },
+    preview: { type: String, default: '' },
+    title: { type: String, default: '' },
+    width: { type: Number, default: 0 },
+    height: { type: Number, default: 0 },
+  },
   file: {
     fileName: { type: String, default: '' },
     storedName: { type: String, default: '' },
@@ -92,6 +99,10 @@ const roomSchema = new mongoose.Schema({
   }],
   waitingRoom: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   approvedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  bannedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  locked: { type: Boolean, default: false },
+  spotlightedUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  mutedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 }, { timestamps: true });
 
 roomSchema.index({ host: 1 });
