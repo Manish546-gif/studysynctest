@@ -517,6 +517,7 @@ export function useSocket(roomId) {
     spotlightedUserId,
     roomLocked,
     hostId,
+    originalHostId,
     modMutedUsers,
     emitDraw,
     emitMove,

@@ -318,6 +318,7 @@ export default function Workspace() {
     spotlightedUserId,
     roomLocked,
     hostId,
+    originalHostId,
     modMutedUsers,
     emitKickUser,
     emitBanUser,
