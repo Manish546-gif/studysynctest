@@ -41,48 +41,51 @@ export default function PublicRoomDirectory() {
   const subjects = ['Study', 'Math', 'Science', 'CS', 'Language', 'Writing', 'Other']
 
   return (
-    <div className="min-h-screen bg-black text-white p-8">
+    <div className="min-h-screen bg-[#0e0f13] text-[#e8eaed] p-6 lg:p-8">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">Public Rooms</h1>
+        <h1 className="text-3xl font-bold mb-2 text-[#e8eaed]">Public Study Rooms</h1>
+        <p className="text-sm text-[#9b9e9e] mb-6">Explore and join open community study spaces across all topics.</p>
 
-        <div className="flex gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row gap-3 mb-6">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search rooms..."
-            className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white placeholder:text-white/40 focus:outline-none focus:border-purple-500"
+            placeholder="Search public rooms..."
+            className="flex-1 bg-[#16191e] border border-[#2a2d33] rounded-xl px-4 py-2.5 text-xs text-[#e8eaed] placeholder:text-[#9b9e9e]/50 focus:outline-none focus:border-[#53fc18] transition-colors"
           />
           <select
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            className="bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+            className="bg-[#16191e] border border-[#2a2d33] rounded-xl px-4 py-2.5 text-xs text-[#e8eaed] focus:outline-none focus:border-[#53fc18] cursor-pointer"
           >
-            <option value="">All Subjects</option>
-            {subjects.map((s) => <option key={s} value={s}>{s}</option>)}
+            <option value="" className="bg-[#16191e]">All Subjects</option>
+            {subjects.map((s) => <option key={s} value={s} className="bg-[#16191e]">{s}</option>)}
           </select>
         </div>
 
         {loading ? (
-          <div className="text-white/60 text-center py-12">Loading...</div>
+          <div className="text-[#9b9e9e] text-center py-16 text-sm font-semibold">Loading public rooms...</div>
         ) : rooms.length === 0 ? (
-          <div className="text-white/60 text-center py-12">No public rooms found</div>
+          <div className="bg-[#16191e] border border-[#2a2d33] rounded-2xl text-[#9b9e9e] text-center py-16 text-sm font-semibold shadow-xl">
+            No public rooms found matching your search
+          </div>
         ) : (
-          <div className="grid gap-4">
+          <div className="grid gap-3">
             {rooms.map((room) => (
               <motion.div key={room._id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                className="bg-white/5 border border-white/10 rounded-xl p-4 flex items-center justify-between">
+                className="bg-[#16191e] border border-[#2a2d33] rounded-2xl p-5 flex items-center justify-between shadow-lg hover:border-[#53fc18]/50 transition-colors">
                 <div>
-                  <div className="font-semibold text-lg">{room.name}</div>
-                  <div className="text-sm text-white/60">
-                    Hosted by {room.host?.name || 'Unknown'} • {room.members?.length || 0} members • {room.tag || 'Study'}
+                  <div className="font-bold text-base text-[#e8eaed] mb-1">{room.name}</div>
+                  <div className="text-xs text-[#9b9e9e]">
+                    Hosted by <span className="text-[#e8eaed] font-semibold">{room.host?.name || 'Unknown'}</span> • {room.members?.length || 0} active members • {room.tag || 'Study'}
                     {room.subject && ` • ${room.subject}`}
                   </div>
                 </div>
                 <button
                   onClick={() => joinRoom(room.code)}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-medium transition"
+                  className="px-5 py-2 bg-[#53fc18] hover:bg-[#48de13] text-black rounded-xl text-xs font-bold transition shadow-md shrink-0"
                 >
-                  Join
+                  Join Room
                 </button>
               </motion.div>
             ))}
@@ -90,17 +93,17 @@ export default function PublicRoomDirectory() {
         )}
 
         {pages > 1 && (
-          <div className="flex justify-center gap-2 mt-6">
+          <div className="flex justify-center gap-2 mt-8">
             {Array.from({ length: pages }, (_, i) => (
               <button key={i} onClick={() => fetchRooms(i + 1)}
-                className={`px-3 py-1 rounded-lg text-sm ${page === i + 1 ? 'bg-purple-600 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10'}`}>
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${page === i + 1 ? 'bg-[#53fc18] text-black shadow-md' : 'bg-[#16191e] text-[#9b9e9e] border border-[#2a2d33] hover:bg-[#20242b]'}`}>
                 {i + 1}
               </button>
             ))}
           </div>
         )}
 
-        <Link to="/dashboard" className="inline-block mt-6 text-purple-400 hover:text-purple-300 transition">
+        <Link to="/dashboard" className="inline-block mt-8 text-xs font-bold text-[#53fc18] hover:underline transition">
           ← Back to Dashboard
         </Link>
       </div>

@@ -2,20 +2,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Plus,
-  Folder,
-  FileText,
-  PenTool,
-  Trash2,
-  Share2,
-  Search,
-  X,
-  ExternalLink,
-  Layers,
-  Loader2,
+  Plus, Folder, FileText, PenTool, Trash2, Share2,
+  Search, X, ExternalLink, Layers, Loader2, BookOpen, Clock, Sparkles
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
 import ShareWhiteboardModal from '../components/whiteboard/ShareWhiteboardModal'
 import { SkeletonCard } from '../components/common/Skeleton'
 import ConfirmationModal from '../components/common/ConfirmationModal'
@@ -34,8 +26,83 @@ function timeAgo(value) {
   return date.toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
+function BoardCard({ board, isOwner, onOpen, onDelete, onShare, onMove, notebooks = [] }) {
+  const [moving, setMoving] = useState(false)
+  const actionCount = board.actions?.length || 0
+
+  return (
+    <div
+      className="kick-card group"
+      style={{
+        background: '#16191e',
+        border: '1px solid #2a2d33',
+        borderRadius: 10,
+        overflow: 'hidden',
+        display: 'flex', flexDirection: 'column',
+      }}
+    >
+      {/* Canvas Thumbnail Preview */}
+      <div
+        onClick={onOpen}
+        style={{
+          height: 120,
+          background: '#0e0f13',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          position: 'relative', cursor: 'pointer',
+        }}
+      >
+        <PenTool size={32} style={{ color: '#53fc18', opacity: 0.8 }} />
+        <div style={{
+          position: 'absolute', top: 10, right: 10,
+          background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+          borderRadius: 4, padding: '2px 8px', fontSize: 10, fontWeight: 700, color: '#53fc18',
+        }}>
+          {actionCount} Actions
+        </div>
+      </div>
+
+      {/* Card Content */}
+      <div style={{ padding: 14, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <h3 onClick={onOpen} style={{ fontSize: 15, fontWeight: 700, color: '#e8eaed', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} className="hover:text-[#53fc18] transition-colors">
+              {board.title || 'Untitled Board'}
+            </h3>
+          </div>
+          <p style={{ fontSize: 12, color: '#808a93', marginBottom: 12, lineHeight: 1.3, height: 32, overflow: 'hidden' }}>
+            {board.description || 'Interactive collaborative whiteboard canvas.'}
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid #2a2d33' }}>
+          <span style={{ fontSize: 11, color: '#808a93', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Clock size={11} /> {timeAgo(board.updatedAt)}
+          </span>
+
+          <div style={{ display: 'flex', items: 'center', gap: 6 }}>
+            {onShare && (
+              <button onClick={onShare} style={{ background: '#0e0f13', border: '1px solid #2a2d33', borderRadius: 6, padding: '5px 8px', color: '#53fc18', cursor: 'pointer' }} title="Share Board">
+                <Share2 size={13} />
+              </button>
+            )}
+            {isOwner && onDelete && (
+              <button onClick={onDelete} style={{ background: '#0e0f13', border: '1px solid #2a2d33', borderRadius: 6, padding: '5px 8px', color: '#ff6b6b', cursor: 'pointer' }} title="Delete Board">
+                <Trash2 size={13} />
+              </button>
+            )}
+            <button onClick={onOpen} className="btn-kick" style={{ fontSize: 12, padding: '5px 12px' }}>
+              Open
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function MyWhiteboards() {
   const { user } = useAuth()
+  const { toast } = useToast()
   const navigate = useNavigate()
 
   const [boards, setBoards] = useState([])
@@ -48,12 +115,11 @@ export default function MyWhiteboards() {
   const [boardDesc, setBoardDesc] = useState('')
   const [boardNotebook, setBoardNotebook] = useState('')
   const [creatingBoard, setCreatingBoard] = useState(false)
-  const [boardError, setBoardError] = useState('')
 
   const [createNotebookOpen, setCreateNotebookOpen] = useState(false)
   const [notebookName, setNotebookName] = useState('')
   const [creatingNotebook, setCreatingNotebook] = useState(false)
-  const [notebookError, setNotebookError] = useState('')
+
   const [shareBoard, setShareBoard] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [deleting, setDeleting] = useState(false)
@@ -74,8 +140,8 @@ export default function MyWhiteboards() {
   useEffect(() => { load() }, [load])
 
   const myId = String(user?.id)
-
   const q = search.trim().toLowerCase()
+
   const matchBoard = (b) =>
     !q ||
     b.title?.toLowerCase().includes(q) ||
@@ -84,34 +150,17 @@ export default function MyWhiteboards() {
   const ownedBoards = boards.filter((b) => String(b.owner?._id || b.owner) === myId)
   const shared = boards.filter((b) => String(b.owner?._id || b.owner) !== myId).filter(matchBoard)
   const owned = ownedBoards.filter(matchBoard)
-  const unfiled = owned.filter((b) => !b.notebook)
   const visibleNotebooks = notebooks.filter(
     (nb) =>
       !q ||
       nb.name?.toLowerCase().includes(q) ||
       ownedBoards.some((b) => String(b.notebook) === String(nb._id) && matchBoard(b))
   )
-  const searchEmpty =
-    q &&
-    !shared.length &&
-    !owned.length &&
-    !visibleNotebooks.length
-
-  const openCreateBoard = () => {
-    setBoardError('')
-    setCreateBoardOpen(true)
-  }
-
-  const openCreateNotebook = () => {
-    setNotebookError('')
-    setCreateNotebookOpen(true)
-  }
 
   const handleCreateBoard = async (e) => {
     e.preventDefault()
     if (!boardTitle.trim()) return
     setCreatingBoard(true)
-    setBoardError('')
     try {
       const data = await api.createWhiteboard({
         title: boardTitle.trim(),
@@ -119,15 +168,12 @@ export default function MyWhiteboards() {
         notebook: boardNotebook || null,
       })
       setBoards((prev) => [data.whiteboard, ...prev])
-      setBoardTitle('')
-      setBoardDesc('')
-      setBoardNotebook('')
+      setBoardTitle(''); setBoardDesc(''); setBoardNotebook('')
       setCreateBoardOpen(false)
-      if (!data.whiteboard.pending) {
-        navigate(`/whiteboards/${data.whiteboard._id}`)
-      }
+      toast('Whiteboard created!', 'success')
+      navigate(`/whiteboards/${data.whiteboard._id}`)
     } catch (err) {
-      setBoardError(err.message || 'Failed to create whiteboard')
+      toast(err.message || 'Failed to create whiteboard', 'error')
     } finally {
       setCreatingBoard(false)
     }
@@ -137,14 +183,14 @@ export default function MyWhiteboards() {
     e.preventDefault()
     if (!notebookName.trim()) return
     setCreatingNotebook(true)
-    setNotebookError('')
     try {
       const data = await api.createNotebook(notebookName.trim())
-      setNotebooks((prev) => [data.notebook, ...prev])
+      setNotebooks((prev) => [...prev, data.notebook])
       setNotebookName('')
       setCreateNotebookOpen(false)
+      toast('Notebook created!', 'success')
     } catch (err) {
-      setNotebookError(err.message || 'Failed to create notebook')
+      toast(err.message || 'Failed to create notebook', 'error')
     } finally {
       setCreatingNotebook(false)
     }
@@ -159,70 +205,67 @@ export default function MyWhiteboards() {
         await api.deleteNotebook(id)
         setNotebooks((prev) => prev.filter((n) => n._id !== id))
         setBoards((prev) => prev.map((b) => (String(b.notebook) === String(id) ? { ...b, notebook: null } : b)))
+        toast('Notebook deleted', 'info')
       } else {
         await api.deleteWhiteboard(id)
         setBoards((prev) => prev.filter((b) => b._id !== id))
+        toast('Whiteboard deleted', 'info')
       }
       setDeleteConfirm(null)
     } catch (err) {
-      alert(err.message)
+      toast(err.message || 'Deletion failed', 'error')
     } finally {
       setDeleting(false)
     }
   }
 
-  const handleMove = async (id, notebookId) => {
-    try {
-      const data = await api.updateWhiteboard(id, { notebook: notebookId || null })
-      setBoards((prev) => prev.map((b) => (b._id === id ? data.whiteboard : b)))
-    } catch (err) {
-      alert(err.message)
-    }
-  }
-
-  const inputCls =
-    'w-full px-4 py-2.5 rounded-lg border border-white/15 bg-white/5 text-sm text-white placeholder:text-white/25 outline-none focus:border-[#0f71ef] transition-colors'
-
   return (
-    <div className="min-h-screen bg-[#1e1c26]">
-      <div className="p-6 md:p-12 max-w-6xl mx-auto">
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+    <div style={{ background: '#0e0f13', minHeight: '100vh', padding: '32px 24px' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        
+        {/* Header */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 28 }}>
           <div>
-            <h1 className="text-2xl font-bold text-white mb-1">My Whiteboards</h1>
-            <p className="text-white/40 text-sm">Create boards, organize them into notebooks, and share with others.</p>
+            <h1 style={{ fontSize: 24, fontWeight: 800, color: '#e8eaed', margin: 0 }}>
+              My Whiteboards & Notebooks
+            </h1>
+            <p style={{ fontSize: 13, color: '#808a93', marginTop: 4 }}>
+              Collaborative drawing canvases, study diagrams, and organized notebooks.
+            </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div style={{ display: 'flex', gap: 10 }}>
             <button
-              onClick={() => openCreateNotebook()}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white/5 text-white rounded-lg text-sm font-semibold hover:bg-white/10 transition-colors"
+              onClick={() => setCreateNotebookOpen(true)}
+              className="btn-kick-outline"
             >
               <Folder size={16} /> New Notebook
             </button>
             <button
-              onClick={() => openCreateBoard()}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#0f71ef] text-white rounded-lg text-sm font-semibold hover:bg-[#0d62cc] transition-colors"
+              onClick={() => setCreateBoardOpen(true)}
+              className="btn-kick"
             >
               <Plus size={16} /> New Whiteboard
             </button>
           </div>
         </div>
 
-        {error && <p className="text-sm text-red-400 mb-6">{error}</p>}
-
+        {/* Search */}
         {!loading && (
-          <div className="relative mb-8 max-w-md">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none" />
+          <div style={{ position: 'relative', marginBottom: 24, maxWidth: 440 }}>
+            <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#808a93' }} />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search whiteboards and notebooks..."
-              className="w-full pl-10 pr-9 py-2.5 rounded-lg border border-white/15 bg-white/5 text-sm text-white placeholder:text-white/25 outline-none focus:border-[#0f71ef] transition-colors"
+              style={{
+                width: '100%', background: '#16191e', border: '1px solid #2a2d33', borderRadius: 8,
+                padding: '10px 14px 10px 40px', fontSize: 14, color: '#e8eaed', outline: 'none',
+              }}
             />
             {q && (
               <button
                 onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white transition-colors"
-                title="Clear search"
+                style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#808a93', cursor: 'pointer' }}
               >
                 <X size={14} />
               </button>
@@ -230,128 +273,121 @@ export default function MyWhiteboards() {
           </div>
         )}
 
-        {searchEmpty && (
-          <p className="text-sm text-white/40 mb-6">
-            No whiteboards or notebooks match "{search.trim()}".
-          </p>
-        )}
-
+        {/* Content */}
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <SkeletonCard />
-            <SkeletonCard />
-            <SkeletonCard />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+            <SkeletonCard /><SkeletonCard /><SkeletonCard />
           </div>
         ) : (
-          <div className="space-y-10">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+
+            {/* Shared With Me */}
             {shared.length > 0 && (
               <section>
-                <div className="flex items-center gap-2 mb-4">
-                  <Share2 size={16} className="text-white/40" />
-                  <h2 className="text-sm font-bold text-white uppercase tracking-wider">Shared with me</h2>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <h2 style={{ fontSize: 14, fontWeight: 800, color: '#53fc18', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Share2 size={16} /> Shared With Me
+                </h2>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
                   {shared.map((wb) => (
                     <BoardCard
                       key={wb._id}
                       board={wb}
                       isOwner={false}
                       onOpen={() => navigate(`/whiteboards/${wb._id}`)}
-                      onDelete={() => setDeleteConfirm({ type: 'board', id: wb._id })}
                     />
                   ))}
                 </div>
               </section>
             )}
 
+            {/* Notebooks Grid */}
             <section>
-              <div className="flex items-center gap-2 mb-4">
-                <Folder size={16} className="text-white/40" />
-                <h2 className="text-sm font-bold text-white uppercase tracking-wider">Notebooks</h2>
-              </div>
+              <h2 style={{ fontSize: 14, fontWeight: 800, color: '#808a93', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Folder size={16} style={{ color: '#53fc18' }} /> Notebooks ({visibleNotebooks.length})
+              </h2>
+
               {visibleNotebooks.length === 0 ? (
-                q ? null : (
-                  <button
-                    onClick={() => openCreateNotebook()}
-                    className="w-full border-2 border-dashed border-white/20 rounded-xl p-6 flex items-center justify-center gap-2 text-white/30 hover:border-[#0f71ef] hover:text-[#0f71ef] transition-colors"
-                  >
-                    <Folder size={18} /> Create your first notebook to organize boards
-                  </button>
-                )
+                <div style={{ background: '#16191e', border: '1px border-dashed #2a2d33', borderRadius: 12, padding: 24, textAlign: 'center' }}>
+                  <p style={{ fontSize: 13, color: '#808a93' }}>No notebooks created yet. Group related whiteboards into notebooks!</p>
+                </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
                   {visibleNotebooks.map((nb) => {
                     const nbBoards = owned.filter((b) => String(b.notebook) === String(nb._id))
                     return (
                       <div
                         key={nb._id}
-                        className="bg-[#2b2935] rounded-xl border border-white/10 overflow-hidden"
+                        style={{ background: '#16191e', border: '1px solid #2a2d33', borderRadius: 10, padding: 16 }}
                       >
-                        <div className="flex items-center gap-3 px-4 py-3">
-                          <div className="w-9 h-9 rounded-lg bg-white/10 text-white flex items-center justify-center shrink-0">
-                            <Folder size={16} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                          <div style={{ width: 36, height: 36, borderRadius: 8, background: '#1a3a0a', color: '#53fc18', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Folder size={18} />
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-white truncate">{nb.name}</p>
-                            <p className="text-[11px] text-white/40">{nbBoards.length} board{nbBoards.length !== 1 ? 's' : ''}</p>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#e8eaed', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {nb.name}
+                            </h3>
+                            <p style={{ fontSize: 11, color: '#808a93', margin: '2px 0 0' }}>{nbBoards.length} Whiteboards</p>
                           </div>
-                          <button
-                            onClick={() => setDeleteConfirm({ type: 'notebook', id: nb._id })}
-                            className="text-white/30 hover:text-red-400 transition-colors shrink-0"
-                            title="Delete notebook"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                        <div className="px-3 pb-3 space-y-2">
-                          {nbBoards.map((wb) => (
-                            <div
-                              key={wb._id}
-                              className="flex items-center gap-2.5 p-2.5 rounded-lg bg-white/5 border border-white/10 hover:border-[#0f71ef] cursor-pointer transition-colors"
-                              onClick={() => navigate(`/whiteboards/${wb._id}`)}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <button
+                              onClick={() => {
+                                if (nbBoards.length > 0) {
+                                  setShareBoard(nbBoards[0])
+                                } else {
+                                  navigator.clipboard.writeText(window.location.href)
+                                  toast('Notebook link copied to clipboard!', 'info')
+                                }
+                              }}
+                              style={{ background: 'none', border: 'none', color: '#53fc18', cursor: 'pointer', padding: 4 }}
+                              className="hover:opacity-80"
+                              title="Share Notebook"
                             >
-                              <FileText size={14} className="text-white/30 shrink-0" />
-                              <p className="flex-1 text-xs font-medium text-white truncate">{wb.title}</p>
-                              <span className="text-[10px] text-white/30 shrink-0">{wb.actions?.length || 0}</span>
-                            </div>
-                          ))}
-                          {nbBoards.length === 0 && (
-                            <p className="text-xs text-white/25 px-1 py-1">No boards yet — add one below.</p>
-                          )}
+                              <Share2 size={14} />
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirm({ type: 'notebook', id: nb._id })}
+                              style={{ background: 'none', border: 'none', color: '#808a93', cursor: 'pointer', padding: 4 }}
+                              className="hover:text-[#ff4f4f]"
+                              title="Delete Notebook"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )
                   })}
+
+
                 </div>
               )}
             </section>
 
+            {/* Owned Whiteboards */}
             <section>
-              <div className="flex items-center gap-2 mb-4">
-                <PenTool size={16} className="text-white/40" />
-                <h2 className="text-sm font-bold text-white uppercase tracking-wider">Whiteboards</h2>
-              </div>
-              {unfiled.length === 0 ? (
-                q ? null : (
-                  <button
-                    onClick={() => openCreateBoard()}
-                    className="w-full border-2 border-dashed border-white/20 rounded-xl p-6 flex items-center justify-center gap-2 text-white/30 hover:border-[#0f71ef] hover:text-[#0f71ef] transition-colors"
-                  >
-                    <Plus size={18} /> Create your first whiteboard
+              <h2 style={{ fontSize: 14, fontWeight: 800, color: '#808a93', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <PenTool size={16} style={{ color: '#53fc18' }} /> My Canvases ({owned.length})
+              </h2>
+
+              {owned.length === 0 ? (
+                <div style={{ background: '#16191e', border: '1px solid #2a2d33', borderRadius: 12, padding: 40, textAlign: 'center' }}>
+                  <PenTool size={32} style={{ color: '#808a93', margin: '0 auto 12px' }} />
+                  <p style={{ fontSize: 14, color: '#e8eaed', fontWeight: 600 }}>No whiteboards created yet</p>
+                  <button onClick={() => setCreateBoardOpen(true)} className="btn-kick" style={{ margin: '16px auto 0' }}>
+                    + Create First Whiteboard
                   </button>
-                )
+                </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {unfiled.map((wb) => (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                  {owned.map((wb) => (
                     <BoardCard
                       key={wb._id}
                       board={wb}
-                      isOwner
-                      notebooks={notebooks}
+                      isOwner={true}
                       onOpen={() => navigate(`/whiteboards/${wb._id}`)}
-                      onDelete={() => setDeleteConfirm({ type: 'board', id: wb._id })}
                       onShare={() => setShareBoard(wb)}
-                      onMove={handleMove}
+                      onDelete={() => setDeleteConfirm({ type: 'board', id: wb._id })}
                     />
                   ))}
                 </div>
@@ -361,202 +397,83 @@ export default function MyWhiteboards() {
         )}
       </div>
 
-      {/* Create whiteboard modal */}
+      {/* ── MODALS ── */}
       <AnimatePresence>
+        {/* Create Board Modal */}
         {createBoardOpen && (
-          <Modal title="New Whiteboard" onClose={() => setCreateBoardOpen(false)}>
-            <form onSubmit={handleCreateBoard} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-white/50 mb-1.5">Title</label>
-                <input autoFocus value={boardTitle} onChange={(e) => setBoardTitle(e.target.value)} placeholder="e.g. Calculus Revision" className={inputCls} />
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setCreateBoardOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 50 }} />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 16 }}>
+              <div style={{ background: '#16191e', border: '1px solid #2a2d33', borderRadius: 12, width: '100%', maxWidth: 440, padding: 24 }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e8eaed', margin: 0 }}>Create New Whiteboard</h2>
+                  <button onClick={() => setCreateBoardOpen(false)} style={{ background: 'none', border: 'none', color: '#808a93', cursor: 'pointer' }}><X size={18} /></button>
+                </div>
+                <form onSubmit={handleCreateBoard} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#808a93', display: 'block', marginBottom: 6 }}>Whiteboard Title</label>
+                    <input autoFocus value={boardTitle} onChange={(e) => setBoardTitle(e.target.value)} placeholder="e.g. Physics Formula Diagram" style={{ width: '100%', background: '#0e0f13', border: '1px solid #3a4048', borderRadius: 6, padding: '10px 14px', fontSize: 14, color: '#e8eaed', outline: 'none' }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#808a93', display: 'block', marginBottom: 6 }}>Description (optional)</label>
+                    <textarea rows={2} value={boardDesc} onChange={(e) => setBoardDesc(e.target.value)} placeholder="Notes or instructions..." style={{ width: '100%', background: '#0e0f13', border: '1px solid #3a4048', borderRadius: 6, padding: '10px 14px', fontSize: 14, color: '#e8eaed', outline: 'none', resize: 'none' }} />
+                  </div>
+                  <button type="submit" disabled={creatingBoard || !boardTitle.trim()} className="btn-kick" style={{ width: '100%', padding: 12 }}>
+                    {creatingBoard ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                    {creatingBoard ? 'Creating...' : 'Create Whiteboard'}
+                  </button>
+                </form>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-white/50 mb-1.5">Description (optional)</label>
-                <input value={boardDesc} onChange={(e) => setBoardDesc(e.target.value)} placeholder="What is this board for?" className={inputCls} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-white/50 mb-1.5">Notebook (optional)</label>
-                <select value={boardNotebook} onChange={(e) => setBoardNotebook(e.target.value)} className={inputCls}>
-                  <option value="">No notebook</option>
-                  {notebooks.map((n) => (
-                    <option key={n._id} value={n._id}>{n.name}</option>
-                  ))}
-                </select>
-              </div>
-              {boardError && <p className="text-xs text-red-400">{boardError}</p>}
-              <div className="flex justify-end gap-2 pt-1">
-                <button type="button" onClick={() => setCreateBoardOpen(false)} className="px-4 py-2.5 text-sm text-white/50 hover:bg-white/10 rounded-lg transition-colors">Cancel</button>
-                <button type="submit" disabled={!boardTitle.trim() || creatingBoard} className="px-5 py-2.5 bg-[#0f71ef] text-white rounded-lg text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2 hover:bg-[#0d62cc] transition-colors">
-                  {creatingBoard ? (<><Loader2 size={15} className="animate-spin" /> Creating...</>) : 'Create Board'}
-                </button>
-              </div>
-            </form>
-          </Modal>
+            </motion.div>
+          </>
         )}
-      </AnimatePresence>
 
-      {/* Create notebook modal */}
-      <AnimatePresence>
+        {/* Create Notebook Modal */}
         {createNotebookOpen && (
-          <Modal title="New Notebook" onClose={() => setCreateNotebookOpen(false)}>
-            <form onSubmit={handleCreateNotebook} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-white/50 mb-1.5">Name</label>
-                <input autoFocus value={notebookName} onChange={(e) => setNotebookName(e.target.value)} placeholder="e.g. Chemistry" className={inputCls} />
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setCreateNotebookOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 50 }} />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 16 }}>
+              <div style={{ background: '#16191e', border: '1px solid #2a2d33', borderRadius: 12, width: '100%', maxWidth: 400, padding: 24 }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e8eaed', margin: 0 }}>Create New Notebook</h2>
+                  <button onClick={() => setCreateNotebookOpen(false)} style={{ background: 'none', border: 'none', color: '#808a93', cursor: 'pointer' }}><X size={18} /></button>
+                </div>
+                <form onSubmit={handleCreateNotebook} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#808a93', display: 'block', marginBottom: 6 }}>Notebook Name</label>
+                    <input autoFocus value={notebookName} onChange={(e) => setNotebookName(e.target.value)} placeholder="e.g. Mathematics Notes" style={{ width: '100%', background: '#0e0f13', border: '1px solid #3a4048', borderRadius: 6, padding: '10px 14px', fontSize: 14, color: '#e8eaed', outline: 'none' }} />
+                  </div>
+                  <button type="submit" disabled={creatingNotebook || !notebookName.trim()} className="btn-kick" style={{ width: '100%', padding: 12 }}>
+                    {creatingNotebook ? <Loader2 size={16} className="animate-spin" /> : <Folder size={16} />}
+                    {creatingNotebook ? 'Creating...' : 'Create Notebook'}
+                  </button>
+                </form>
               </div>
-              {notebookError && <p className="text-xs text-red-400">{notebookError}</p>}
-              <div className="flex justify-end gap-2 pt-1">
-                <button type="button" onClick={() => setCreateNotebookOpen(false)} className="px-4 py-2.5 text-sm text-white/50 hover:bg-white/10 rounded-lg transition-colors">Cancel</button>
-                <button type="submit" disabled={!notebookName.trim() || creatingNotebook} className="px-5 py-2.5 bg-[#0f71ef] text-white rounded-lg text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2 hover:bg-[#0d62cc] transition-colors">
-                  {creatingNotebook ? (<><Loader2 size={15} className="animate-spin" /> Creating...</>) : 'Create Notebook'}
-                </button>
-              </div>
-            </form>
-          </Modal>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {shareBoard && <ShareWhiteboardModal board={shareBoard} onClose={() => setShareBoard(null)} />}
-      </AnimatePresence>
+      {shareBoard && (
+        <ShareWhiteboardModal
+          board={shareBoard}
+          whiteboard={shareBoard}
+          onClose={() => setShareBoard(null)}
+          onUpdated={(updated) => setBoards((prev) => prev.map((b) => (b._id === updated._id ? updated : b)))}
+        />
+      )}
+
 
       <ConfirmationModal
         open={!!deleteConfirm}
         onClose={() => setDeleteConfirm(null)}
         onConfirm={handleConfirmDelete}
-        title={deleteConfirm?.type === 'notebook' ? 'Delete Notebook' : 'Delete Whiteboard'}
-        message={
-          deleteConfirm?.type === 'notebook'
-            ? 'This notebook will be deleted. Its whiteboards will be moved to the main list.'
-            : 'This whiteboard will be permanently deleted. This cannot be undone.'
-        }
+        title={`Delete ${deleteConfirm?.type === 'notebook' ? 'Notebook' : 'Whiteboard'}`}
+        message="Are you sure you want to delete this item?"
         confirmText="Delete"
         confirmVariant="danger"
         loading={deleting}
       />
     </div>
-  )
-}
-
-function Modal({ title, onClose, children }) {
-  useEffect(() => {
-    const { overflow } = document.body.style
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = overflow }
-  }, [])
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 12 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 12 }}
-        transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-        className="w-full max-w-[28rem] bg-[#2b2935] rounded-xl border border-white/10 shadow-xl overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
-          <h3 className="text-base font-semibold text-white">{title}</h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-white/40 hover:bg-white/10 transition-colors">
-            <X size={16} />
-          </button>
-        </div>
-        <div className="p-5">{children}</div>
-      </motion.div>
-    </motion.div>
-  )
-}
-
-function BoardCard({ board, isOwner, notebooks = [], onOpen, onDelete, onShare, onMove }) {
-  const [busy, setBusy] = useState(false)
-
-  const handleMove = async (e) => {
-    const value = e.target.value
-    setBusy(true)
-    try {
-      await onMove(board._id, value || null)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <motion.div
-      layout
-      className="group bg-[#2b2935] rounded-xl border border-white/10 overflow-hidden flex flex-col"
-    >
-      <button onClick={onOpen} className="flex-1 flex flex-col text-left p-5">
-        <div className="w-10 h-10 rounded-lg bg-white/10 text-white flex items-center justify-center mb-3">
-          <FileText size={18} />
-        </div>
-        <p className="text-sm font-semibold text-white truncate">{board.title}</p>
-        <p className="text-xs text-white/40 mt-1 line-clamp-2 min-h-[2rem]">
-          {board.description || 'No description'}
-        </p>
-        <div className="flex items-center gap-3 mt-3 text-[11px] text-white/30">
-          <span>{board.actions?.length || 0} elements</span>
-          <span>·</span>
-          <span>{timeAgo(board.updatedAt)}</span>
-          {!isOwner && board.owner?.name && (
-            <>
-              <span>·</span>
-              <span className="truncate">by {board.owner.name}</span>
-            </>
-          )}
-        </div>
-      </button>
-      <div className="flex items-center gap-1 px-3 pb-3">
-        <button
-          onClick={onOpen}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#0f71ef]/20 text-[#0f71ef] rounded-lg text-xs font-semibold hover:bg-[#0f71ef]/30 transition-colors"
-        >
-          <ExternalLink size={13} /> Open
-        </button>
-        {isOwner ? (
-          <>
-            <button
-              onClick={onShare}
-              aria-label="Share"
-              className="w-9 h-9 rounded-lg flex items-center justify-center text-white/50 hover:bg-white/10 hover:text-white transition-colors"
-              title="Share"
-            >
-              <Share2 size={15} />
-            </button>
-            <div className="relative" title="Move to notebook">
-              <Layers size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
-              <select
-                value={String(board.notebook || '')}
-                onChange={handleMove}
-                disabled={busy}
-                className="pl-8 pr-2 h-9 rounded-lg border border-white/15 bg-white/5 text-xs text-white/70 outline-none cursor-pointer disabled:opacity-50"
-              >
-                <option value="">No notebook</option>
-                {notebooks.map((n) => (
-                  <option key={n._id} value={n._id}>{n.name}</option>
-                ))}
-              </select>
-            </div>
-            <button
-              onClick={onDelete}
-              aria-label="Delete"
-              className="w-9 h-9 rounded-lg flex items-center justify-center text-white/30 hover:bg-red-500/20 hover:text-red-400 transition-colors"
-              title="Delete"
-            >
-              <Trash2 size={15} />
-            </button>
-          </>
-        ) : (
-          <span className="text-[10px] px-2 py-1 rounded-md bg-white/10 text-white/60 font-medium">
-            {board.myRole === 'editor' || board.myRole === 'link-editor' ? 'Editor' : 'Viewer'}
-          </span>
-        )}
-      </div>
-    </motion.div>
   )
 }

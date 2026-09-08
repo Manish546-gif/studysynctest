@@ -157,34 +157,34 @@ export default function History() {
 
   return (
     <motion.div
-      className="p-6 md:p-12 max-w-5xl mx-auto"
+      className="min-h-screen bg-[#0e0f13] text-[#e8eaed] p-6 md:p-12 max-w-5xl mx-auto"
       variants={container}
       initial="hidden"
       animate="show"
     >
       {/* Header */}
       <motion.div variants={fadeUp} className="mb-8">
-        <h1 className="font-display text-3xl font-bold text-on-surface mb-2">Session History</h1>
-        <p className="text-on-surface/50 text-sm">Review your past study sessions and materials.</p>
+        <h1 className="text-3xl font-bold text-[#e8eaed] mb-2">Session History</h1>
+        <p className="text-[#9b9e9e] text-sm">Review your past study sessions and materials.</p>
       </motion.div>
 
       {/* Search + Filter */}
       <motion.div variants={fadeUp} className="flex items-center gap-3 mb-8">
-        <div className="flex-1 flex items-center gap-2 bg-surface-container-low rounded-xl px-4 py-2.5 border border-outline-variant/30 focus-within:border-primary-container transition-colors">
-          <Search size={16} className="text-on-surface/30 shrink-0" />
+        <div className="flex-1 flex items-center gap-2.5 bg-[#16191e] rounded-xl px-4 py-2.5 border border-[#2a2d33] focus-within:border-[#53fc18] transition-colors">
+          <Search size={16} className="text-[#9b9e9e] shrink-0" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search sessions..."
-            className="flex-1 bg-transparent text-sm text-on-surface placeholder:text-on-surface/30 outline-none"
+            className="flex-1 bg-transparent text-sm text-[#e8eaed] placeholder:text-[#9b9e9e]/50 outline-none"
           />
         </div>
         <button
           onClick={() => setActiveFilter(activeFilter === 'all' ? 'starred' : 'all')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold border transition-colors ${
             activeFilter !== 'all'
-              ? 'bg-primary-container text-on-primary-container border-primary-container'
-              : 'bg-surface-container-low text-on-surface/60 border-outline-variant/30 hover:bg-surface-container'
+              ? 'bg-[#53fc18] text-black border-[#53fc18]'
+              : 'bg-[#16191e] text-[#9b9e9e] border-[#2a2d33] hover:bg-[#20242b] hover:text-[#e8eaed]'
           }`}
         >
           <Filter size={14} />
@@ -193,7 +193,7 @@ export default function History() {
         <button
           onClick={exportCSV}
           disabled={filtered.length === 0}
-          className="inline-flex items-center gap-2 bg-surface-container-high text-on-surface text-sm px-4 py-2 rounded-xl border border-outline-variant/30 hover:bg-surface-container-high/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-2 bg-[#53fc18] text-black font-bold text-xs px-4 py-2.5 rounded-xl border border-[#53fc18] hover:bg-[#48de13] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
         >
           <Download size={14} />
           Export CSV
@@ -210,17 +210,17 @@ export default function History() {
           <SkeletonListRow />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-24 bg-surface-container-low rounded-2xl hairline">
-          <div className="w-16 h-16 rounded-2xl bg-primary-container/50 flex items-center justify-center mx-auto mb-4">
-            <Clock size={28} className="text-on-primary-container/60" />
+        <div className="text-center py-24 bg-[#16191e] rounded-2xl border border-[#2a2d33] shadow-xl">
+          <div className="w-16 h-16 rounded-2xl bg-[#0e0f13] border border-[#2a2d33] flex items-center justify-center mx-auto mb-4">
+            <Clock size={28} className="text-[#53fc18]" />
           </div>
           {rooms.length === 0 ? (
             <>
-              <p className="font-display text-base font-bold text-on-surface mb-1">No sessions yet</p>
-              <p className="text-sm text-on-surface/40 max-w-[260px] mx-auto">Create or join a study room and your session history will appear here.</p>
+              <p className="text-base font-bold text-[#e8eaed] mb-1">No sessions yet</p>
+              <p className="text-xs text-[#9b9e9e] max-w-[260px] mx-auto">Create or join a study room and your session history will appear here.</p>
             </>
           ) : (
-            <p className="text-sm text-on-surface/40">No sessions found matching "{search}"</p>
+            <p className="text-xs text-[#9b9e9e]">No sessions found matching "{search}"</p>
           )}
         </div>
       ) : (
@@ -228,8 +228,8 @@ export default function History() {
           {filtered.map((group) => (
             <motion.div key={group.group} variants={fadeUp}>
               <div className="flex items-center gap-3 mb-4">
-                <span className="text-xs font-bold text-primary uppercase tracking-wider">{group.group}</span>
-                <div className="flex-1 h-px bg-outline-variant/20" />
+                <span className="text-xs font-extrabold text-[#53fc18] uppercase tracking-wider">{group.group}</span>
+                <div className="flex-1 h-px bg-[#2a2d33]" />
               </div>
 
               <div className="space-y-3">
@@ -239,25 +239,25 @@ export default function History() {
                     variants={fadeUp}
                     whileHover={{ y: -2, transition: { duration: 0.15 } }}
                     onClick={() => navigate(`/workspace/${session.id}`)}
-                    className="flex items-start gap-4 p-4 bg-surface-container-low rounded-2xl border border-outline-variant/20 cursor-pointer group hover:border-outline-variant/40 transition-colors"
+                    className="flex items-start gap-4 p-4 bg-[#16191e] rounded-2xl border border-[#2a2d33] cursor-pointer group hover:border-[#53fc18]/50 transition-colors shadow-lg"
                   >
                     {/* Time indicator */}
                     <div className="flex flex-col items-center w-12 shrink-0 pt-0.5">
-                      <Clock size={14} className="text-primary mb-1" />
-                      <span className="text-[10px] font-medium text-on-surface/40 text-center leading-tight">
+                      <Clock size={14} className="text-[#53fc18] mb-1" />
+                      <span className="text-[10px] font-mono font-bold text-[#9b9e9e] text-center leading-tight">
                         {session.duration}
                       </span>
                     </div>
 
                     {/* Content */}
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-semibold text-on-surface mb-1 group-hover:text-primary transition-colors">
+                      <h3 className="text-sm font-bold text-[#e8eaed] mb-1 group-hover:text-[#53fc18] transition-colors">
                         {session.title}
                       </h3>
-                      <p className="text-xs text-on-surface/40 mb-2">{session.time}</p>
+                      <p className="text-xs text-[#9b9e9e] mb-2">{session.time}</p>
                       <div className="flex items-center gap-2 flex-wrap">
                         {session.tags.map((tag) => (
-                          <span key={tag} className="px-2 py-0.5 bg-surface-container-high rounded-md text-[10px] font-medium text-on-surface/50">
+                          <span key={tag} className="px-2 py-0.5 bg-[#0e0f13] border border-[#2a2d33] rounded-md text-[10px] font-bold text-[#9b9e9e]">
                             {tag}
                           </span>
                         ))}
@@ -275,7 +275,7 @@ export default function History() {
                       )}
                       <button
                         aria-label={`Open ${session.title}`}
-                        className="w-8 h-8 rounded-xl bg-primary-container text-on-primary-container flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:shadow-sm"
+                        className="w-8 h-8 rounded-xl bg-[#53fc18] text-black flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
                       >
                         <ArrowRight size={14} />
                       </button>
@@ -293,7 +293,7 @@ export default function History() {
         <motion.div variants={fadeUp} className="mt-8 text-center">
           <button
             onClick={() => {}}
-            className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl border border-outline-variant/40 text-sm font-medium text-on-surface/50 hover:bg-surface-container-low transition-colors"
+            className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl border border-[#2a2d33] bg-[#16191e] text-xs font-bold text-[#9b9e9e] hover:text-[#e8eaed] hover:bg-[#20242b] transition-colors"
           >
             <ChevronDown size={16} />
             Show Older Sessions

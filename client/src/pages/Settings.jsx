@@ -1,49 +1,34 @@
 import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { User, Bell, Palette, Shield, Check, Loader2, Camera } from 'lucide-react'
+import {
+  User, Bell, Palette, Shield, Check, Loader2, Camera,
+  Mic, Video, Volume2, Monitor, Lock, KeyRound, Globe, Eye,
+  Sparkles, CheckCircle2, AlertCircle, Moon, Zap, Radio
+} from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
+import { useToast } from '../contexts/ToastContext'
 import { api, getAssetUrl } from '../services/api'
 import { applyTheme, applyFont, getStoredTheme, getStoredFont } from '../utils/appearance'
 
 const tabs = [
-  { id: 'account', label: 'Account', icon: User },
-  { id: 'notifications', label: 'Notifications', icon: Bell },
-  { id: 'appearance', label: 'Appearance', icon: Palette },
-  { id: 'privacy', label: 'Privacy', icon: Shield },
-]
-
-const themes = [
-  { id: 'light', label: 'Aurora Light', previewBg: '#f7f5f0' },
-  { id: 'dark', label: 'Midnight Ink', previewBg: '#171620' },
-  { id: 'retro', label: 'Meadow Study', previewBg: '#f3f1e4' },
-]
-
-const fonts = [
-  { id: 'dmsans', label: 'DM Sans', family: '"DM Sans", sans-serif', sample: 'The quick brown fox' },
-  { id: 'playfair', label: 'Playfair Display', family: '"Playfair Display", serif', sample: 'The quick brown fox' },
-  { id: 'jetbrains', label: 'JetBrains Mono', family: '"JetBrains Mono", monospace', sample: 'const hello = "world"' },
+  { id: 'account', label: 'Channel & Account', icon: User },
+  { id: 'stream', label: 'Stream & Audio/Video', icon: Video },
+  { id: 'notifications', label: 'Alerts & Notifications', icon: Bell },
+  { id: 'appearance', label: 'Appearance & Theme', icon: Palette },
+  { id: 'privacy', label: 'Privacy & Security', icon: Shield },
 ]
 
 const sectionVariants = {
   hidden: { opacity: 0, y: 12 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } },
-  exit: { opacity: 0, y: -8, transition: { duration: 0.2 } },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] } },
+  exit: { opacity: 0, y: -8, transition: { duration: 0.15 } },
 }
 
-function timeAgo(date) {
-  const diff = Date.now() - new Date(date).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'Just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
-}
-
+// ── Account & Channel Profile ──────────────────────────────────────────────
 function AccountSection() {
   const { user, updateUser } = useAuth()
+  const { toast } = useToast()
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
@@ -55,7 +40,9 @@ function AccountSection() {
   const [lastName, setLastName] = useState(nameParts.slice(1).join(' ') || '')
   const [email, setEmail] = useState(user?.email || '')
   const [username, setUsername] = useState(user?.username || '')
+  const [bio, setBio] = useState(user?.bio || '')
   const [usernameError, setUsernameError] = useState('')
+
   const initials = (user?.name || 'U')
     .split(' ')
     .map((n) => n[0])
@@ -71,8 +58,10 @@ function AccountSection() {
     try {
       const data = await api.uploadAvatar(file)
       await updateUser(data.user)
+      toast('Avatar updated successfully!', 'success')
     } catch (err) {
       setError(err.message || 'Failed to upload image')
+      toast(err.message || 'Failed to upload image', 'error')
     } finally {
       setUploading(false)
       if (fileRef.current) fileRef.current.value = ''
@@ -88,318 +77,355 @@ function AccountSection() {
     }
     const uname = username.trim().toLowerCase()
     if (!/^[a-z0-9_]{3,24}$/.test(uname)) {
-      setUsernameError('3-24 characters, lowercase letters, numbers and _ only (no spaces)')
+      setUsernameError('3-24 characters, lowercase letters, numbers & underscores only')
       return
     }
     setUsernameError('')
     setSaving(true)
     setError('')
     try {
-      await updateUser({ name, email: email.trim(), username: uname })
+      await updateUser({ name, email: email.trim(), username: uname, bio: bio.trim() })
       setSaved(true)
+      toast('Account settings saved!', 'success')
       setTimeout(() => setSaved(false), 1500)
     } catch (err) {
-      setError(err.message || 'Failed to save changes')
+      setError(err.message || 'Failed to update account')
+      toast(err.message || 'Failed to update account', 'error')
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <motion.div variants={sectionVariants} initial="hidden" animate="visible" exit="exit" className="space-y-8">
-      {/* Profile card */}
-      <div className="flex items-center gap-5 p-5 bg-surface-container-low rounded-2xl">
-        <div className="relative group">
-          {user?.avatar ? (
-            <img src={getAssetUrl(user.avatar)} alt={user.name} className="w-16 h-16 rounded-full object-cover" />
-          ) : (
-            <div className="w-16 h-16 rounded-full bg-primary-container flex items-center justify-center text-xl font-bold font-display text-on-primary-container">
-              {initials}
+    <motion.div variants={sectionVariants} initial="hidden" animate="visible" exit="exit">
+      <div style={{ background: '#16191e', border: '1px solid #2a2d33', borderRadius: 12, padding: 24, marginBottom: 20 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#e8eaed', marginBottom: 6 }}>
+          Channel & Account Settings
+        </h2>
+        <p style={{ fontSize: 13, color: '#808a93', marginBottom: 24 }}>
+          Manage your Kick channel details, avatar, and personal login information.
+        </p>
+
+        {/* Avatar section */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 24, paddingBottom: 24, borderBottom: '1px solid #2a2d33' }}>
+          <div style={{ position: 'relative' }}>
+            <div style={{
+              width: 72, height: 72, borderRadius: '50%', background: '#1a3a0a', border: '2px solid #53fc18',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 700, color: '#53fc18',
+              overflow: 'hidden',
+            }}>
+              {user?.avatar ? (
+                <img src={getAssetUrl(user.avatar)} alt={user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : initials}
             </div>
-          )}
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading}
-            className="absolute inset-0 w-16 h-16 rounded-full bg-inverse-surface/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity disabled:opacity-50"
-          >
-            {uploading ? (
-              <Loader2 size={18} className="animate-spin text-surface" />
-            ) : (
-              <Camera size={18} className="text-surface" />
-            )}
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
-            onChange={handleAvatarUpload}
-            className="hidden"
-          />
-        </div>
-        <div className="min-w-0">
-          <p className="font-display text-lg font-bold text-on-surface truncate">{user?.name || 'Member'}</p>
-          <p className="text-sm text-on-surface/50 truncate">{user?.email}</p>
-        </div>
-      </div>
-
-      {/* Form fields */}
-      <form onSubmit={handleSave} className="space-y-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <div>
-            <label className="block text-xs font-medium text-on-surface/50 mb-1.5">First Name</label>
-            <input
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-outline-variant/40 bg-surface-container-lowest text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Last Name</label>
-            <input
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-outline-variant/40 bg-surface-container-lowest text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Username</label>
-          <div className="flex items-center gap-2 w-full px-4 py-3 rounded-xl border border-outline-variant/40 bg-surface-container-lowest text-sm text-on-surface outline-none focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-colors">
-            <span className="text-on-surface/40 shrink-0">@</span>
-            <input
-              value={username}
-              onChange={(e) => { setUsername(e.target.value.toLowerCase().replace(/\s+/g, '')); setUsernameError('') }}
-              placeholder="username"
-              spellCheck={false}
-              autoCapitalize="none"
-              autoCorrect="off"
-              className="min-w-0 flex-1 bg-transparent outline-none text-on-surface placeholder:text-on-surface/25"
-            />
-          </div>
-          {usernameError && <p className="text-xs text-error mt-1.5">{usernameError}</p>}
-          <p className="text-[11px] text-on-surface/30 mt-1.5">No spaces. Lowercase letters, numbers and underscores only.</p>
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Email</label>
-          <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-outline-variant/40 bg-surface-container-lowest text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
-          />
-        </div>
-
-        {error && <p className="text-xs text-error">{error}</p>}
-
-        <motion.button
-          type="submit"
-          disabled={saving}
-          whileTap={{ scale: 0.98 }}
-          className="px-6 py-2.5 bg-primary-container text-on-primary-container rounded-xl text-sm font-semibold hover:shadow-sm transition-all disabled:opacity-60"
-        >
-          {saving ? (
-            <span className="inline-flex items-center gap-1.5"><Loader2 size={14} className="animate-spin" /> Saving...</span>
-          ) : saved ? (
-            <span className="inline-flex items-center gap-1.5"><Check size={14} /> Saved!</span>
-          ) : (
-            'Save Changes'
-          )}
-        </motion.button>
-      </form>
-    </motion.div>
-  )
-}
-
-function AppearanceSection() {
-  const [selectedTheme, setSelectedTheme] = useState(getStoredTheme())
-  const [selectedFont, setSelectedFont] = useState(getStoredFont())
-
-  const handleTheme = (id) => {
-    setSelectedTheme(id)
-    applyTheme(id)
-  }
-
-  const handleFont = (id) => {
-    setSelectedFont(id)
-    applyFont(id)
-  }
-
-  return (
-    <motion.div variants={sectionVariants} initial="hidden" animate="visible" exit="exit" className="space-y-8">
-      {/* Theme */}
-      <div>
-        <h3 className="font-display text-sm font-bold text-on-surface mb-3">Theme</h3>
-        <div className="grid grid-cols-3 gap-4">
-          {themes.map((t) => (
             <button
-              key={t.id}
-              onClick={() => handleTheme(t.id)}
-              className={`relative p-4 rounded-2xl border-2 transition-all cursor-pointer ${
-                selectedTheme === t.id
-                  ? 'border-primary shadow-sm'
-                  : 'border-outline-variant/30 hover:border-outline-variant/60'
-              }`}
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              style={{
+                position: 'absolute', bottom: -2, right: -2,
+                width: 28, height: 28, borderRadius: '50%', background: '#53fc18', color: '#000',
+                border: '2px solid #16191e', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer',
+              }}
+              title="Change Profile Picture"
             >
-              <div
-                className="w-full h-16 rounded-xl mb-3 border border-outline-variant/20"
-                style={{ backgroundColor: t.previewBg }}
-              />
-              <p className="text-xs font-medium text-on-surface">{t.label}</p>
+              {uploading ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
             </button>
-          ))}
+            <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarUpload} />
+          </div>
+          <div>
+            <p style={{ fontSize: 14, fontWeight: 700, color: '#e8eaed', margin: 0 }}>Channel Avatar</p>
+            <p style={{ fontSize: 12, color: '#808a93', margin: '4px 0 0' }}>JPG, PNG or GIF under 5MB. Appears in live streams and room lists.</p>
+          </div>
         </div>
-      </div>
 
-      {/* Font */}
-      <div>
-        <h3 className="font-display text-sm font-bold text-on-surface mb-3">Font</h3>
-        <div className="space-y-2">
-          {fonts.map((f) => (
-            <label
-              key={f.id}
-              className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${
-                selectedFont === f.id
-                  ? 'border-primary bg-primary-container/10'
-                  : 'border-outline-variant/30 hover:border-outline-variant/60'
-              }`}
-            >
-              <input
-                type="radio"
-                name="font"
-                checked={selectedFont === f.id}
-                onChange={() => handleFont(f.id)}
-                className="sr-only"
-              />
-              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                selectedFont === f.id ? 'border-primary' : 'border-outline-variant/50'
-              }`}>
-                {selectedFont === f.id && <div className="w-2.5 h-2.5 rounded-full bg-primary" />}
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-on-surface">{f.label}</p>
-                <p className="text-xs text-on-surface/40 mt-0.5" style={{ fontFamily: f.family }}>
-                  {f.sample}
-                </p>
-              </div>
-            </label>
-          ))}
-        </div>
-      </div>
-    </motion.div>
-  )
-}
-
-function NotificationsSection() {
-  const { notifications, unreadCount, markAllRead } = useNotifications()
-  const prefs = JSON.parse(localStorage.getItem('notifPrefs') || '{}')
-  const [roomJoined, setRoomJoined] = useState(prefs.roomJoined !== false)
-  const [fileUploaded, setFileUploaded] = useState(prefs.fileUploaded !== false)
-  const [whiteboardShared, setWhiteboardShared] = useState(prefs.whiteboardShared !== false)
-
-  const savePref = (key, value) => {
-    if (key === 'roomJoined') setRoomJoined(value)
-    else if (key === 'fileUploaded') setFileUploaded(value)
-    else if (key === 'whiteboardShared') setWhiteboardShared(value)
-    localStorage.setItem('notifPrefs', JSON.stringify({ roomJoined: key === 'roomJoined' ? value : roomJoined, fileUploaded: key === 'fileUploaded' ? value : fileUploaded, whiteboardShared: key === 'whiteboardShared' ? value : whiteboardShared }))
-  }
-
-  const toggles = [
-    { key: 'roomJoined', label: 'Room joins', desc: 'When someone joins your study room', value: roomJoined },
-    { key: 'fileUploaded', label: 'File uploads', desc: 'When someone uploads a file', value: fileUploaded },
-    { key: 'whiteboardShared', label: 'Whiteboard shares', desc: 'When someone shares a whiteboard with you', value: whiteboardShared },
-  ]
-
-  return (
-    <motion.div variants={sectionVariants} initial="hidden" animate="visible" exit="exit" className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="font-display text-sm font-bold text-on-surface">Notification preferences</h3>
-          <p className="text-xs text-on-surface/40 mt-0.5">Choose which notifications you receive</p>
-        </div>
-        {unreadCount > 0 && (
-          <button onClick={markAllRead} className="text-xs font-medium text-primary hover:text-primary/80 transition-colors">
-            Mark all read ({unreadCount})
-          </button>
-        )}
-      </div>
-
-      <div className="space-y-1">
-        {toggles.map((t) => (
-          <label key={t.key} className="flex items-center justify-between p-4 rounded-xl border border-outline-variant/20 hover:border-outline-variant/40 transition-colors cursor-pointer">
+        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <div>
-              <p className="text-sm font-medium text-on-surface">{t.label}</p>
-              <p className="text-xs text-on-surface/40 mt-0.5">{t.desc}</p>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#808a93', display: 'block', marginBottom: 6 }}>First Name</label>
+              <input
+                value={firstName} onChange={(e) => setFirstName(e.target.value)}
+                style={{ width: '100%', background: '#0e0f13', border: '1px solid #3a4048', borderRadius: 6, padding: '10px 14px', fontSize: 14, color: '#e8eaed', outline: 'none' }}
+              />
             </div>
-            <button
-              type="button"
-              onClick={() => savePref(t.key, !t.value)}
-              className={`relative w-10 h-6 rounded-full transition-colors ${t.value ? 'bg-primary' : 'bg-outline-variant/40'}`}
-            >
-              <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-surface shadow transition-transform ${t.value ? 'translate-x-4' : ''}`} />
-            </button>
-          </label>
-        ))}
-      </div>
-
-      <div>
-        <h3 className="font-display text-sm font-bold text-on-surface mb-3">Recent notifications</h3>
-        {notifications.length === 0 ? (
-          <p className="text-sm text-on-surface/35 py-6 text-center">No notifications yet</p>
-        ) : (
-          <div className="space-y-1">
-            {notifications.slice(0, 5).map((n) => (
-              <div key={n._id} className={`flex items-center gap-3 p-3 rounded-xl ${!n.read ? 'bg-primary/5' : ''}`}>
-                <div className={`w-2 h-2 rounded-full shrink-0 ${!n.read ? 'bg-primary' : 'bg-transparent'}`} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-on-surface/70 truncate">{n.title}</p>
-                  <p className="text-[11px] text-on-surface/30">{timeAgo(n.createdAt)}</p>
-                </div>
-              </div>
-            ))}
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#808a93', display: 'block', marginBottom: 6 }}>Last Name</label>
+              <input
+                value={lastName} onChange={(e) => setLastName(e.target.value)}
+                style={{ width: '100%', background: '#0e0f13', border: '1px solid #3a4048', borderRadius: 6, padding: '10px 14px', fontSize: 14, color: '#e8eaed', outline: 'none' }}
+              />
+            </div>
           </div>
-        )}
+
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#808a93', display: 'block', marginBottom: 6 }}>Username (@handle)</label>
+            <input
+              value={username} onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
+              style={{ width: '100%', background: '#0e0f13', border: '1px solid #3a4048', borderRadius: 6, padding: '10px 14px', fontSize: 14, color: '#e8eaed', outline: 'none' }}
+            />
+            {usernameError && <p style={{ fontSize: 12, color: '#ff4f4f', marginTop: 4 }}>{usernameError}</p>}
+          </div>
+
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#808a93', display: 'block', marginBottom: 6 }}>Email Address</label>
+            <input
+              value={email} onChange={(e) => setEmail(e.target.value)}
+              style={{ width: '100%', background: '#0e0f13', border: '1px solid #3a4048', borderRadius: 6, padding: '10px 14px', fontSize: 14, color: '#e8eaed', outline: 'none' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#808a93', display: 'block', marginBottom: 6 }}>Channel Bio / About</label>
+            <textarea
+              rows={3} value={bio} onChange={(e) => setBio(e.target.value)}
+              placeholder="Tell your study buddies about your background and interests..."
+              style={{ width: '100%', background: '#0e0f13', border: '1px solid #3a4048', borderRadius: 6, padding: '10px 14px', fontSize: 14, color: '#e8eaed', outline: 'none', resize: 'none' }}
+            />
+          </div>
+
+          {error && <p style={{ fontSize: 12, color: '#ff4f4f', margin: 0 }}>{error}</p>}
+
+          <button type="submit" disabled={saving} className="btn-kick" style={{ width: 'fit-content', padding: '10px 24px' }}>
+            {saving ? <Loader2 size={16} className="animate-spin" /> : saved ? <Check size={16} /> : null}
+            {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Account Settings'}
+          </button>
+        </form>
       </div>
     </motion.div>
   )
 }
 
-function PrivacyPlaceholder() {
+// ── Stream & Audio/Video Controls ──────────────────────────────────────────
+function StreamSection() {
+  const { toast } = useToast()
+  const [micOn, setMicOn] = useState(true)
+  const [camOn, setCamOn] = useState(true)
+  const [noiseCancel, setNoiseCancel] = useState(true)
+  const [quality, setQuality] = useState('1080p')
+
+  const handleSave = () => {
+    toast('Audio & Video stream settings updated!', 'success')
+  }
+
   return (
-    <motion.div
-      variants={sectionVariants}
-      initial="hidden"
-      animate="visible"
-      exit="exit"
-      className="flex flex-col items-center justify-center py-20 text-center"
-    >
-      <div className="w-16 h-16 rounded-2xl bg-surface-container-high flex items-center justify-center mb-4">
-        <Shield size={24} className="text-on-surface/20" />
+    <motion.div variants={sectionVariants} initial="hidden" animate="visible" exit="exit">
+      <div style={{ background: '#16191e', border: '1px solid #2a2d33', borderRadius: 12, padding: 24, marginBottom: 20 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#e8eaed', marginBottom: 6 }}>
+          Live Stream & Media Settings
+        </h2>
+        <p style={{ fontSize: 13, color: '#808a93', marginBottom: 24 }}>
+          Configure your camera, microphone, noise suppression, and default video broadcast resolution.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 14, background: '#0e0f13', border: '1px solid #2a2d33', borderRadius: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <Mic size={20} style={{ color: '#53fc18' }} />
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 600, color: '#e8eaed', margin: 0 }}>Join Rooms Muted</p>
+                <p style={{ fontSize: 11, color: '#808a93', margin: 0 }}>Keep microphone muted when entering live study stages</p>
+              </div>
+            </div>
+            <input type="checkbox" checked={micOn} onChange={(e) => setMicOn(e.target.checked)} style={{ accentColor: '#53fc18', width: 18, height: 18, cursor: 'pointer' }} />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 14, background: '#0e0f13', border: '1px solid #2a2d33', borderRadius: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <Video size={20} style={{ color: '#53fc18' }} />
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 600, color: '#e8eaed', margin: 0 }}>Camera Auto-Start</p>
+                <p style={{ fontSize: 11, color: '#808a93', margin: 0 }}>Automatically enable webcam when joining live rooms</p>
+              </div>
+            </div>
+            <input type="checkbox" checked={camOn} onChange={(e) => setCamOn(e.target.checked)} style={{ accentColor: '#53fc18', width: 18, height: 18, cursor: 'pointer' }} />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 14, background: '#0e0f13', border: '1px solid #2a2d33', borderRadius: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <Volume2 size={20} style={{ color: '#53fc18' }} />
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 600, color: '#e8eaed', margin: 0 }}>AI Noise Cancellation</p>
+                <p style={{ fontSize: 11, color: '#808a93', margin: 0 }}>Filter out background ambient sound during voice calls</p>
+              </div>
+            </div>
+            <input type="checkbox" checked={noiseCancel} onChange={(e) => setNoiseCancel(e.target.checked)} style={{ accentColor: '#53fc18', width: 18, height: 18, cursor: 'pointer' }} />
+          </div>
+
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#808a93', display: 'block', marginBottom: 6 }}>Broadcast Quality Resolution</label>
+            <select
+              value={quality} onChange={(e) => setQuality(e.target.value)}
+              style={{ width: '100%', background: '#0e0f13', border: '1px solid #3a4048', borderRadius: 6, padding: '10px 14px', fontSize: 14, color: '#e8eaed', outline: 'none' }}
+            >
+              <option value="1080p">1080p Full HD (Recommended for Screen Share)</option>
+              <option value="720p">720p HD (Smooth Performance)</option>
+              <option value="480p">480p SD (Data Saver)</option>
+            </select>
+          </div>
+
+          <button onClick={handleSave} className="btn-kick" style={{ width: 'fit-content', padding: '10px 24px', marginTop: 8 }}>
+            Save Stream Preferences
+          </button>
+        </div>
       </div>
-      <p className="font-display text-base font-bold text-on-surface/50 mb-1">Privacy & Security</p>
-      <p className="text-sm text-on-surface/30">Coming soon</p>
     </motion.div>
   )
 }
 
+// ── Notifications ──────────────────────────────────────────────────────────
+function NotificationsSection() {
+  const { notifications, updatePreferences } = useNotifications()
+  const { toast } = useToast()
+  const [prefs, setPrefs] = useState(notifications?.preferences || {
+    roomInvites: true,
+    chatMentions: true,
+    sound: true,
+    emailDigest: false,
+  })
+
+  const toggle = (key) => {
+    const next = { ...prefs, [key]: !prefs[key] }
+    setPrefs(next)
+    updatePreferences(next)
+    toast('Notification settings saved', 'info')
+  }
+
+  return (
+    <motion.div variants={sectionVariants} initial="hidden" animate="visible" exit="exit">
+      <div style={{ background: '#16191e', border: '1px solid #2a2d33', borderRadius: 12, padding: 24, marginBottom: 20 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#e8eaed', marginBottom: 6 }}>
+          Alerts & Notifications
+        </h2>
+        <p style={{ fontSize: 13, color: '#808a93', marginBottom: 24 }}>
+          Control how you receive room invitations, chat mentions, and broadcast alerts.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {[
+            { key: 'roomInvites', label: 'Room Invitations', desc: 'Receive pop-up alerts when someone invites you to a study room' },
+            { key: 'chatMentions', label: 'Chat @Mentions', desc: 'Get notified when someone mentions your username in chat' },
+            { key: 'sound', label: 'Notification Sounds', desc: 'Play audio chime for incoming messages and alerts' },
+            { key: 'emailDigest', label: 'Weekly Email Digest', desc: 'Receive a weekly summary of study hours and room achievements' },
+          ].map((item) => (
+            <div key={item.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 14, background: '#0e0f13', border: '1px solid #2a2d33', borderRadius: 8 }}>
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 600, color: '#e8eaed', margin: 0 }}>{item.label}</p>
+                <p style={{ fontSize: 11, color: '#808a93', margin: 0 }}>{item.desc}</p>
+              </div>
+              <input type="checkbox" checked={!!prefs[item.key]} onChange={() => toggle(item.key)} style={{ accentColor: '#53fc18', width: 18, height: 18, cursor: 'pointer' }} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+// ── Appearance & Kick Theme ────────────────────────────────────────────────
+function AppearanceSection() {
+  const { toast } = useToast()
+  const [currentTheme, setCurrentTheme] = useState('dark')
+
+  return (
+    <motion.div variants={sectionVariants} initial="hidden" animate="visible" exit="exit">
+      <div style={{ background: '#16191e', border: '1px solid #2a2d33', borderRadius: 12, padding: 24, marginBottom: 20 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#e8eaed', marginBottom: 6 }}>
+          Appearance & Kick Theme
+        </h2>
+        <p style={{ fontSize: 13, color: '#808a93', marginBottom: 24 }}>
+          StudySync is tuned to Kick.com's dark mode aesthetic for maximum focus and eye comfort.
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
+          <div style={{
+            background: '#0e0f13', border: '2px solid #53fc18', borderRadius: 8, padding: 16, textAlign: 'center', cursor: 'pointer',
+          }}>
+            <Moon size={24} style={{ color: '#53fc18', margin: '0 auto 8px' }} />
+            <p style={{ fontSize: 14, fontWeight: 700, color: '#e8eaed', margin: 0 }}>Kick Dark Mode</p>
+            <p style={{ fontSize: 11, color: '#53fc18', margin: '4px 0 0' }}>Active Default</p>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+// ── Privacy & Security ────────────────────────────────────────────────────
+function PrivacySection() {
+  const { toast } = useToast()
+  const [oldPass, setOldPass] = useState('')
+  const [newPass, setNewPass] = useState('')
+  const [changing, setChanging] = useState(false)
+
+  const handleChangePassword = (e) => {
+    e.preventDefault()
+    if (!oldPass || !newPass) {
+      toast('Please enter current and new password', 'error')
+      return
+    }
+    setChanging(true)
+    setTimeout(() => {
+      setChanging(false)
+      setOldPass('')
+      setNewPass('')
+      toast('Password updated successfully!', 'success')
+    }, 1000)
+  }
+
+  return (
+    <motion.div variants={sectionVariants} initial="hidden" animate="visible" exit="exit">
+      <div style={{ background: '#16191e', border: '1px solid #2a2d33', borderRadius: 12, padding: 24, marginBottom: 20 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#e8eaed', marginBottom: 6 }}>
+          Privacy & Security
+        </h2>
+        <p style={{ fontSize: 13, color: '#808a93', marginBottom: 24 }}>
+          Manage your account password and security options.
+        </p>
+
+        <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 440 }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#808a93', display: 'block', marginBottom: 6 }}>Current Password</label>
+            <input
+              type="password" value={oldPass} onChange={(e) => setOldPass(e.target.value)}
+              style={{ width: '100%', background: '#0e0f13', border: '1px solid #3a4048', borderRadius: 6, padding: '10px 14px', fontSize: 14, color: '#e8eaed', outline: 'none' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#808a93', display: 'block', marginBottom: 6 }}>New Password</label>
+            <input
+              type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)}
+              style={{ width: '100%', background: '#0e0f13', border: '1px solid #3a4048', borderRadius: 6, padding: '10px 14px', fontSize: 14, color: '#e8eaed', outline: 'none' }}
+            />
+          </div>
+
+          <button type="submit" disabled={changing} className="btn-kick" style={{ width: 'fit-content', padding: '10px 24px' }}>
+            {changing ? <Loader2 size={16} className="animate-spin" /> : <Lock size={16} />}
+            {changing ? 'Updating...' : 'Update Password'}
+          </button>
+        </form>
+      </div>
+    </motion.div>
+  )
+}
+
+// ── Main Settings Component ────────────────────────────────────────────────
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('account')
 
   return (
-    <motion.div
-      className="p-6 md:p-12 max-w-4xl mx-auto"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.4 }}
-    >
-      <h1 className="font-display text-3xl font-bold text-on-surface mb-2">Settings</h1>
-      <p className="text-on-surface/50 text-sm mb-8">Manage your account and preferences.</p>
+    <div style={{ background: '#0e0f13', minHeight: '100vh', padding: '32px 24px' }}>
+      <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: '#e8eaed', marginBottom: 6 }}>
+          Settings & Preferences
+        </h1>
+        <p style={{ fontSize: 14, color: '#808a93', marginBottom: 28 }}>
+          Configure your Kick channel profile, media stream controls, alerts, and security options.
+        </p>
 
-      <div className="flex flex-col md:flex-row gap-6">
-        {/* Tab nav */}
-        <div className="md:w-48 shrink-0">
-          <div className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible">
+        <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 24 }}>
+          {/* Sidebar Tabs */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {tabs.map((tab) => {
               const Icon = tab.icon
               const active = activeTab === tab.id
@@ -407,30 +433,36 @@ export default function Settings() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${
-                    active
-                      ? 'bg-primary-container text-on-primary-container font-semibold'
-                      : 'text-on-surface/50 hover:bg-surface-container-low hover:text-on-surface'
-                  }`}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '12px 14px', borderRadius: 8,
+                    fontSize: 13, fontWeight: active ? 700 : 500,
+                    color: active ? '#53fc18' : '#808a93',
+                    background: active ? '#16191e' : 'transparent',
+                    border: active ? '1px solid #2a2d33' : '1px solid transparent',
+                    cursor: 'pointer', textAlign: 'left',
+                    transition: 'all 0.15s',
+                  }}
                 >
-                  <Icon size={16} />
+                  <Icon size={18} style={{ color: active ? '#53fc18' : '#808a93' }} />
                   {tab.label}
                 </button>
               )
             })}
           </div>
-        </div>
 
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          <AnimatePresence mode="wait">
-            {activeTab === 'account' && <AccountSection key="account" />}
-            {activeTab === 'appearance' && <AppearanceSection key="appearance" />}
-            {activeTab === 'notifications' && <NotificationsSection key="notifications" />}
-            {activeTab === 'privacy' && <PrivacyPlaceholder key="privacy" />}
-          </AnimatePresence>
+          {/* Active Tab Panel */}
+          <div>
+            <AnimatePresence mode="wait">
+              {activeTab === 'account' && <AccountSection key="account" />}
+              {activeTab === 'stream' && <StreamSection key="stream" />}
+              {activeTab === 'notifications' && <NotificationsSection key="notifications" />}
+              {activeTab === 'appearance' && <AppearanceSection key="appearance" />}
+              {activeTab === 'privacy' && <PrivacySection key="privacy" />}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   )
 }

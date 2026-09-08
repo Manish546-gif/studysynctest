@@ -1,16 +1,9 @@
 import { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  X,
-  FileText,
-  MessageCircle,
-  Users,
-  UserPlus,
-  Send,
-  Copy,
-  Check,
-  KeyRound,
+  X, FileText, MessageCircle, Users, UserPlus, Send, Copy, Check, KeyRound, Crown,
 } from 'lucide-react'
+import { getAssetUrl } from '../../services/api'
 import FilePreview from '../common/FilePreview'
 
 function formatMessageTime(value) {
@@ -22,6 +15,15 @@ function formatMessageTime(value) {
   }
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
+
+const MEMBER_COLORS = [
+  'bg-[#1a3a0a] text-[#53fc18]',
+  'bg-[#0a1a3a] text-[#3d8bff]',
+  'bg-[#2a1a00] text-amber-400',
+  'bg-[#2a001a] text-pink-400',
+  'bg-[#003a1a] text-teal-400',
+  'bg-[#1a001a] text-purple-400',
+]
 
 export default function WhiteboardPanel({
   _isOpen,
@@ -47,12 +49,7 @@ export default function WhiteboardPanel({
   codeCopied,
   onCopyCode,
 }) {
-  const memberColors = [
-    'bg-blue-500', 'bg-purple-500', 'bg-green-500', 'bg-orange-500',
-    'bg-pink-500', 'bg-teal-500', 'bg-indigo-500', 'bg-rose-500',
-  ]
-
-  const [width, setWidth] = useState(380)
+  const [width, setWidth] = useState(360)
   const resizing = useRef(false)
 
   const startResize = (e) => {
@@ -77,10 +74,10 @@ export default function WhiteboardPanel({
   }
 
   const tabs = [
-    { id: 'files', label: 'Files', icon: FileText },
-    { id: 'chat', label: 'Chat', icon: MessageCircle },
-    { id: 'members', label: 'Members', icon: Users },
-    { id: 'invite', label: 'Invite', icon: UserPlus },
+    { id: 'files',   label: 'Files',    icon: FileText },
+    { id: 'chat',    label: 'Chat',     icon: MessageCircle },
+    { id: 'members', label: 'Members',  icon: Users },
+    { id: 'invite',  label: 'Invite',   icon: UserPlus },
   ]
 
   return (
@@ -89,17 +86,20 @@ export default function WhiteboardPanel({
       animate={{ width, opacity: 1 }}
       exit={{ width: 0, opacity: 0 }}
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-      className="bg-surface-container-low border-l border-outline-variant/20 flex flex-col overflow-hidden shrink-0 h-full relative"
+      className="bg-[#16191e] border-l border-[#2a2d33] flex flex-col overflow-hidden shrink-0 h-full relative"
     >
+      {/* Resize handle */}
       <div
-        className="absolute top-0 left-0 bottom-0 w-1.5 cursor-col-resize group hover:bg-primary/30 active:bg-primary/50 transition-colors z-20"
+        className="absolute top-0 left-0 bottom-0 w-1 cursor-col-resize hover:bg-[#53fc18]/30 active:bg-[#53fc18]/50 transition-colors z-20"
         onPointerDown={startResize}
         onPointerMove={onResize}
         onPointerUp={stopResize}
         onPointerCancel={stopResize}
       />
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-outline-variant/20 shrink-0">
-        <div className="flex items-center gap-1">
+
+      {/* Tab Bar */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[#2a2d33] shrink-0 bg-[#0e0f13]">
+        <div className="flex items-center gap-0.5">
           {tabs.map((tab) => {
             const Icon = tab.icon
             const active = activeTab === tab.id
@@ -107,22 +107,29 @@ export default function WhiteboardPanel({
               <button
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                  active ? 'bg-primary-container text-on-primary-container' : 'text-on-surface/40 hover:bg-surface-container hover:text-on-surface'
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                  active
+                    ? 'bg-[#53fc18] text-[#0e0f13]'
+                    : 'text-[#9b9e9e] hover:bg-[#1e2228] hover:text-[#e8eaed]'
                 }`}
               >
-                <Icon size={13} />
+                <Icon size={12} />
                 {tab.label}
               </button>
             )
           })}
         </div>
-        <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors">
-          <X size={15} />
+        <button
+          onClick={onClose}
+          className="w-6 h-6 rounded-lg flex items-center justify-center text-[#9b9e9e] hover:bg-[#1e2228] hover:text-[#e8eaed] transition-colors"
+        >
+          <X size={13} />
         </button>
       </div>
 
+      {/* Tab Content */}
       <div className="flex-1 min-h-0 flex flex-col">
+        {/* FILES TAB */}
         {activeTab === 'files' && (
           <FilePreview
             roomId={roomId}
@@ -136,107 +143,127 @@ export default function WhiteboardPanel({
           />
         )}
 
+        {/* CHAT TAB */}
         {activeTab === 'chat' && (
           <>
-            <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div ref={chatScrollRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
               {messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <MessageCircle size={28} className="text-on-surface/15 mb-3" />
-                  <p className="text-sm text-on-surface/40">No messages yet</p>
-                  <p className="text-xs text-on-surface/25 mt-1">Say hello to your study group</p>
+                  <div className="w-12 h-12 rounded-2xl bg-[#0e0f13] border border-[#2a2d33] flex items-center justify-center mb-3">
+                    <MessageCircle size={22} className="text-[#53fc18]" />
+                  </div>
+                  <p className="text-xs font-semibold text-[#e8eaed]">No messages yet</p>
+                  <p className="text-[11px] text-[#9b9e9e] mt-1">Start the conversation</p>
                 </div>
               ) : (
                 messages.map((msg) => {
                   const initials = (msg.name || '?')
-                    .split(' ')
-                    .map((n) => n[0])
-                    .join('')
-                    .toUpperCase()
-                    .slice(0, 2)
+                    .split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
                   const isOwn = msg.userId === user?.id
-                  const time = formatMessageTime(msg.createdAt)
                   return (
-                    <div key={msg._id || `${msg.createdAt}-${msg.userId}-${msg.text}`} className="flex items-start gap-2.5">
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                        isOwn ? 'bg-primary text-on-primary' : 'bg-primary-container text-on-primary-container'
+                    <div key={msg._id || `${msg.createdAt}-${msg.userId}`} className="flex items-start gap-2">
+                      <div className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 text-[10px] font-bold ${
+                        isOwn ? 'bg-[#1a3a0a] text-[#53fc18]' : 'bg-[#0a1a3a] text-[#3d8bff]'
                       }`}>
-                        <span className="text-[11px] font-bold">{initials}</span>
+                        {initials}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline gap-2 mb-0.5">
-                          <span className="text-xs font-semibold text-on-surface">{msg.name}{isOwn ? ' (You)' : ''}</span>
-                          <span className="text-[10px] text-on-surface/30">{time}</span>
+                          <span className="text-[11px] font-bold text-[#e8eaed]">{msg.name}{isOwn ? ' (You)' : ''}</span>
+                          <span className="text-[10px] text-[#9b9e9e]/50">{formatMessageTime(msg.createdAt)}</span>
                         </div>
-                        <p className="text-sm text-on-surface/70 leading-relaxed break-words">{msg.text}</p>
+                        <p className="text-xs text-[#9b9e9e] leading-relaxed break-words">{msg.text}</p>
                       </div>
                     </div>
                   )
                 })
               )}
             </div>
-            <form onSubmit={onSendChat} className="p-3 border-t border-outline-variant/20">
-              <div className="flex items-center gap-2 bg-surface-container-lowest rounded-xl px-3 py-2 border border-outline-variant/20">
+
+            {typingUsers?.length > 0 && (
+              <div className="px-3 pb-1">
+                <p className="text-[10px] text-[#9b9e9e] italic">
+                  {typingUsers.length === 1 ? `${typingUsers[0].name} is typing...` : `${typingUsers.map(u => u.name).join(', ')} are typing...`}
+                </p>
+              </div>
+            )}
+
+            <form onSubmit={onSendChat} className="p-2.5 border-t border-[#2a2d33] shrink-0">
+              <div className="flex items-center gap-2 bg-[#0e0f13] border border-[#2a2d33] rounded-xl px-3 py-2 focus-within:border-[#53fc18] transition-colors">
                 <input
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={onChatKeyDown}
-                  placeholder="Type a message..."
-                  className="flex-1 bg-transparent text-sm text-on-surface placeholder:text-on-surface/30 outline-none"
+                  placeholder="Message..."
+                  className="flex-1 bg-transparent text-xs text-[#e8eaed] placeholder:text-[#9b9e9e]/40 outline-none"
                 />
-                <button type="submit" className="text-primary p-1.5 rounded-lg hover:bg-primary-container/30 transition-colors">
-                  <Send size={16} />
+                <button type="submit" className="text-[#53fc18] p-1 rounded-lg hover:bg-[#1a3a0a] transition-colors">
+                  <Send size={13} />
                 </button>
               </div>
-              {typingUsers?.length > 0 && (
-                <p className="text-on-surface/40 text-xs italic mt-1.5 px-1">
-                  {typingUsers.length === 1
-                    ? `${typingUsers[0].name} is typing...`
-                    : `${typingUsers.map((u) => u.name).join(', ')} are typing...`}
-                </p>
-              )}
             </form>
           </>
         )}
 
+        {/* MEMBERS TAB */}
         {activeTab === 'members' && (
-          <div className="flex-1 overflow-y-auto p-4 space-y-2">
-            {members.map((member, i) => (
-              <div key={member._id || i} className="flex items-center gap-3 p-3 rounded-xl hover:bg-surface-container transition-colors">
-                <div className={`w-10 h-10 rounded-xl ${memberColors[i % memberColors.length]} flex items-center justify-center text-white font-bold text-sm`}>
-                  {member.name?.charAt(0)?.toUpperCase() || '?'}
+          <div className="flex-1 overflow-y-auto p-3 space-y-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-[#9b9e9e]/50 px-2 pb-1">
+              In this room ({members.length})
+            </p>
+            {members.map((member, i) => {
+              const isHost = member._id === room?.host?._id
+              const isSelf = member._id === user?.id
+              return (
+                <div key={member._id || i} className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-[#1e2228] transition-colors">
+                  <div className={`w-8 h-8 rounded-xl ${MEMBER_COLORS[i % MEMBER_COLORS.length]} flex items-center justify-center text-[11px] font-bold overflow-hidden shrink-0`}>
+                    {member.avatar ? (
+                      <img src={getAssetUrl(member.avatar)} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none' }} />
+                    ) : (
+                      <span>{(member.username || member.name || '?').charAt(0)?.toUpperCase()}</span>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-semibold text-[#e8eaed] truncate">
+                      @{member.username || member.name || 'Unknown'}
+                      {isSelf && <span className="ml-1 text-[9px] text-[#53fc18]">(You)</span>}
+                    </p>
+                    <p className="text-[10px] text-[#9b9e9e]/50 flex items-center gap-1">
+                      {isHost && <Crown size={9} className="text-yellow-400" />}
+                      {isHost ? 'Host' : 'Member'}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-on-surface truncate">
-                    {member.name || 'Unknown'}
-                    {member._id === user?.id && <span className="ml-1 text-[10px] text-primary">(You)</span>}
-                  </p>
-                  <p className="text-[11px] text-on-surface/40">
-                    {member._id === room.host?._id ? 'Host' : 'Member'}
-                  </p>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
 
+        {/* INVITE TAB */}
         {activeTab === 'invite' && (
           <div className="flex-1 p-4 flex flex-col items-center justify-center text-center gap-4">
-            <div className="w-20 h-20 rounded-2xl bg-tertiary-container flex items-center justify-center">
-              <KeyRound size={32} className="text-on-tertiary-container" />
+            <div className="w-16 h-16 rounded-2xl bg-[#0e0f13] border border-[#2a2d33] flex items-center justify-center">
+              <KeyRound size={28} className="text-[#53fc18]" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-on-surface mb-1">Share Room Code</p>
-              <p className="text-xs text-on-surface/40">Send this code to others so they can join</p>
+              <p className="text-sm font-bold text-[#e8eaed] mb-1">Room Invite Code</p>
+              <p className="text-xs text-[#9b9e9e]">Share this code to invite others</p>
             </div>
-            <div className="w-full bg-surface rounded-xl p-4 border border-outline-variant/20">
-              <p className="text-3xl font-mono font-bold text-on-surface tracking-[0.3em] text-center">{code}</p>
+            <div className="w-full bg-[#0e0f13] border border-[#2a2d33] rounded-xl p-4">
+              <p className="text-2xl font-mono font-black text-[#53fc18] tracking-[0.3em] text-center">
+                {code || '------'}
+              </p>
             </div>
             <button
               onClick={onCopyCode}
-              className="w-full py-3 rounded-xl bg-primary-container text-on-primary-container text-sm font-semibold flex items-center justify-center gap-2 hover:shadow-sm transition-shadow"
+              className={`w-full py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+                codeCopied
+                  ? 'bg-[#1a3a0a] border border-[#53fc18] text-[#53fc18]'
+                  : 'bg-[#53fc18] text-black hover:bg-[#48de13]'
+              }`}
             >
-              {codeCopied ? <Check size={16} /> : <Copy size={16} />}
-              {codeCopied ? 'Copied to Clipboard!' : 'Copy Code'}
+              {codeCopied ? <Check size={15} /> : <Copy size={15} />}
+              {codeCopied ? 'Copied!' : 'Copy Code'}
             </button>
           </div>
         )}

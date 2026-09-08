@@ -9,16 +9,23 @@ const LINK_OPTIONS = [
   { value: 'edit', label: 'Can edit', icon: Pencil },
 ]
 
-export default function ShareWhiteboardModal({ board, onClose }) {
+export default function ShareWhiteboardModal({ board, whiteboard, onClose }) {
+  const targetBoard = board || whiteboard || {}
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('editor')
   const [status, setStatus] = useState('')
   const [message, setMessage] = useState('')
   const [copied, setCopied] = useState(false)
-  const [currentBoard, setCurrentBoard] = useState(board)
+  const [currentBoard, setCurrentBoard] = useState(targetBoard)
 
-  const entries = currentBoard.sharedWith || []
-  const shareUrl = `${window.location.origin}/whiteboards/${board._id}`
+  useEffect(() => {
+    if (board || whiteboard) {
+      setCurrentBoard(board || whiteboard)
+    }
+  }, [board, whiteboard])
+
+  const entries = currentBoard?.sharedWith || []
+  const shareUrl = `${window.location.origin}/whiteboards/${targetBoard._id || ''}`
 
   useEffect(() => {
     const { overflow } = document.body.style

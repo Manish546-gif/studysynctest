@@ -69,6 +69,7 @@ setSocketIO(io);
 
 app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: '10mb' }));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/giphy', giphyRoutes);
@@ -116,6 +117,7 @@ io.use(async (socket, next) => {
 });
 
 const activeRooms = new Map();
+app.set('activeRooms', activeRooms);
 // roomId -> Map(userId -> userName) of active screen sharers
 const roomScreenShares = new Map();
 
@@ -200,6 +202,9 @@ io.on('connection', (socket) => {
           waitingRoom: waitingDetails,
           admitted: false,
         });
+
+        // Waiting users can still use the room's general chat (like Discord text channels)
+        socket.emit('chat-history', room.messages || []);
 
         console.log(`${socket.user.name} waiting for room ${room.name}`);
         return;

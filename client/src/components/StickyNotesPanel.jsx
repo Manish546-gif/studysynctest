@@ -14,22 +14,22 @@ export default function StickyNotesPanel({ stickyNotes, emitStickyAdd, emitStick
   }
 
   return (
-    <div className="space-y-2">
-      <div className="space-y-1.5">
+    <div className="space-y-3">
+      <div className="space-y-2">
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Write a note..."
           rows={2}
-          className="w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-zoom-blue resize-none"
+          className="w-full bg-[#0e0f13] border border-[#2a2d33] rounded-xl px-3 py-2 text-xs text-[#e8eaed] placeholder:text-[#9b9e9e]/50 focus:outline-none focus:border-[#53fc18] resize-none transition-colors"
         />
-        <div className="flex items-center gap-1.5">
-          <div className="flex gap-1">
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1.5">
             {COLORS.map((c) => (
               <button
                 key={c}
                 onClick={() => setColor(c)}
-                className={`w-4 h-4 rounded-full border-2 transition ${color === c ? 'border-white scale-110' : 'border-transparent'}`}
+                className={`w-5 h-5 rounded-full border-2 transition ${color === c ? 'border-white scale-110 shadow-md' : 'border-transparent opacity-80 hover:opacity-100'}`}
                 style={{ backgroundColor: c }}
               />
             ))}
@@ -37,9 +37,9 @@ export default function StickyNotesPanel({ stickyNotes, emitStickyAdd, emitStick
           <button
             onClick={add}
             disabled={!text.trim()}
-            className="ml-auto px-2.5 py-1 bg-zoom-blue text-white rounded text-[11px] font-medium hover:bg-[#0b5fc7] disabled:opacity-40 flex items-center gap-1"
+            className="ml-auto px-3 py-1.5 bg-[#53fc18] text-black rounded-xl text-xs font-bold hover:bg-[#48de13] disabled:opacity-40 flex items-center gap-1.5 transition-all"
           >
-            <Plus size={11} /> Add
+            <Plus size={13} /> Add
           </button>
         </div>
       </div>

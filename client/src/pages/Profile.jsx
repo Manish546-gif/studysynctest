@@ -1,9 +1,15 @@
 import { useRef, useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { Clock, Users, Edit3, ChevronRight, Loader2, Settings, Camera, UserRound, AtSign, Check } from 'lucide-react'
+import {
+  Clock, Users, Edit3, ChevronRight, Loader2, Settings, Camera,
+  UserRound, AtSign, Check, Flame, Trophy, Zap, ShieldCheck,
+  Share2, Globe, Code, MessageCircle, MessageSquare, PenTool, Radio,
+  Calendar, Award, Sparkles, BookOpen, Layers, ExternalLink
+} from 'lucide-react'
 import gsap from 'gsap'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
 import { api, getAssetUrl } from '../services/api'
 
 const container = {
@@ -13,7 +19,7 @@ const container = {
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } },
+  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] } },
 }
 
 function timeAgo(date) {
@@ -28,27 +34,62 @@ function timeAgo(date) {
   return new Date(date).toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
+// Channel Banners - flat dark solid colors (no gradients)
+const BANNERS = [
+  '#1a3a0a',
+  '#0a1a3a',
+  '#0f1f3a',
+  '#2a1a3a',
+]
+
 export default function Profile() {
   const statsRef = useRef(null)
   const navigate = useNavigate()
   const { user, updateUser } = useAuth()
+  const { toast } = useToast()
+  
   const [rooms, setRooms] = useState([])
+  const [whiteboards, setWhiteboards] = useState([])
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('overview') // overview | rooms | whiteboards | stats
 
+  // Form states
   const [username, setUsername] = useState(user?.username || '')
+  const [name, setName] = useState(user?.name || '')
+  const [bio, setBio] = useState(user?.bio || 'Passionate student & streamer building collaborative study spaces.')
+  const [githubUrl, setGithubUrl] = useState(user?.githubUrl || '')
+  const [discordTag, setDiscordTag] = useState(user?.discordTag || '')
+  
   const [usernameError, setUsernameError] = useState('')
-  const [savingUsername, setSavingUsername] = useState(false)
-  const [usernameSaved, setUsernameSaved] = useState(false)
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [profileSaved, setProfileSaved] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [copiedLink, setCopiedLink] = useState(false)
+
   const fileInputRef = useRef(null)
 
-  const initials = user?.name
-    ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-    : 'U'
+  const initials = (name || user?.name || 'User')
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2)
 
   useEffect(() => {
     if (user?.username) setUsername(user.username)
-  }, [user?.username])
+    if (user?.name) setName(user.name)
+    if (user?.bio) setBio(user.bio)
+  }, [user])
+
+  useEffect(() => {
+    Promise.all([
+      api.getRooms().catch(() => ({ rooms: [] })),
+      api.getWhiteboards().catch(() => ({ whiteboards: [] })),
+    ]).then(([roomData, wbData]) => {
+      setRooms(roomData.rooms || [])
+      setWhiteboards(wbData.whiteboards || [])
+    }).finally(() => setLoading(false))
+  }, [])
 
   const handleAvatarUpload = async (e) => {
     const file = e.target.files?.[0]
@@ -57,260 +98,473 @@ export default function Profile() {
     try {
       const data = await api.uploadAvatar(file)
       await updateUser(data.user)
+      toast('Avatar updated successfully!', 'success')
     } catch (err) {
-      alert(err.message || 'Failed to upload avatar')
+      toast(err.message || 'Failed to upload avatar', 'error')
     } finally {
       setUploadingAvatar(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
-  const handleSaveUsername = async () => {
-    const val = username.trim()
-    if (!/^[a-z0-9_]{3,24}$/.test(val)) {
-      setUsernameError('3-24 characters, lowercase letters, numbers and _ only (no spaces)')
+  const handleSaveProfile = async () => {
+    const cleanUser = username.trim().toLowerCase()
+    if (!/^[a-z0-9_]{3,24}$/.test(cleanUser)) {
+      setUsernameError('Username must be 3-24 characters (lowercase letters, numbers, underscores)')
       return
     }
     setUsernameError('')
-    setSavingUsername(true)
-    setUsernameSaved(false)
+    setSavingProfile(true)
     try {
-      await updateUser({ username: val })
-      setUsernameSaved(true)
-      setTimeout(() => setUsernameSaved(false), 2000)
+      await updateUser({
+        username: cleanUser,
+        name: name.trim(),
+        bio: bio.trim(),
+        githubUrl: githubUrl.trim(),
+        discordTag: discordTag.trim(),
+      })
+      setProfileSaved(true)
+      toast('Profile updated successfully!', 'success')
+      setTimeout(() => setProfileSaved(false), 2000)
     } catch (err) {
-      setUsernameError(err.message || 'Could not update username')
+      setUsernameError(err.message || 'Could not update profile')
+      toast(err.message || 'Could not update profile', 'error')
     } finally {
-      setSavingUsername(false)
+      setSavingProfile(false)
     }
   }
 
-  useEffect(() => {
-    api.getRooms()
-      .then((data) => setRooms(data.rooms || []))
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
+  const copyChannelLink = () => {
+    navigator.clipboard.writeText(window.location.href)
+    setCopiedLink(true)
+    toast('Channel link copied to clipboard!', 'info')
+    setTimeout(() => setCopiedLink(false), 2000)
+  }
 
   const createdRooms = rooms.filter((r) => r.host?._id === user?.id)
   const joinedRooms = rooms.filter((r) => r.host?._id !== user?.id)
+  const hasAvatar = user?.avatar && user.avatar.trim().length > 0
 
   const activities = [...rooms]
     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-    .slice(0, 5)
+    .slice(0, 6)
     .map((r) => {
       const isHost = r.host?._id === user?.id
       return {
-        icon: isHost ? Edit3 : Users,
-        text: `${isHost ? 'Created' : 'Joined'} room "${r.name}"`,
+        icon: isHost ? Radio : Users,
+        text: `${isHost ? 'Hosted stream' : 'Joined channel'} "${r.name}"`,
         time: timeAgo(r.updatedAt),
         roomId: r._id,
       }
     })
 
+  // GSAP Counter Animation
   useEffect(() => {
     if (!statsRef.current) return
     const ctx = gsap.context(() => {
       gsap.fromTo(
-        '.count-up',
+        '.stat-count',
         { textContent: 0 },
         {
           textContent: (i, el) => el.dataset.target,
-          duration: 1.5,
+          duration: 1.2,
           ease: 'power2.out',
-          delay: 0.3,
           snap: { textContent: 1 },
-          stagger: 0.15,
+          stagger: 0.1,
         }
       )
     }, statsRef)
     return () => ctx.revert()
-  }, [rooms.length, createdRooms.length])
-
-  const hasAvatar = user?.avatar && user.avatar.trim().length > 0
+  }, [activeTab, rooms.length])
 
   return (
-    <motion.div
-      className="p-6 md:p-12 max-w-4xl mx-auto"
-      variants={container}
-      initial="hidden"
-      animate="show"
-    >
-      {/* Profile Header */}
-      <motion.div
-        variants={fadeUp}
-        className="bg-surface-container-low rounded-3xl hairline p-8 md:p-10 mb-8"
+    <div style={{ background: '#0e0f13', minHeight: '100vh' }}>
+      {/* ── Kick Channel Banner ────────────────────────────────────────── */}
+      <div
+        style={{
+          height: 180,
+          background: BANNERS[0],
+          position: 'relative',
+          borderBottom: '1px solid #2a2d33',
+        }}
       >
-        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
-          {/* Avatar */}
-          <div className="relative shrink-0">
+        <div style={{
+          position: 'absolute', inset: 0,
+          backgroundImage: 'radial-gradient(rgba(83,252,24,0.08) 1px, transparent 1px)',
+          backgroundSize: '24px 24px',
+        }} />
+        <div style={{
+          position: 'absolute', bottom: 16, right: 24,
+          display: 'flex', gap: 10,
+        }}>
+          <button
+            onClick={copyChannelLink}
+            className="btn-kick-outline"
+            style={{ fontSize: 12, padding: '6px 12px' }}
+          >
+            {copiedLink ? <Check size={14} /> : <Share2 size={14} />}
+            {copiedLink ? 'Link Copied' : 'Share Channel'}
+          </button>
+          <button
+            onClick={() => navigate('/settings')}
+            className="btn-kick-outline"
+            style={{ fontSize: 12, padding: '6px 12px' }}
+          >
+            <Settings size={14} /> Settings
+          </button>
+        </div>
+      </div>
+
+      {/* ── Channel Profile Header Card ───────────────────────────────── */}
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px 32px' }}>
+        <div style={{
+          position: 'relative', marginTop: -50, marginBottom: 24,
+          display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 20,
+        }}>
+          {/* Avatar with Volt Green Ring */}
+          <div style={{ position: 'relative' }}>
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingAvatar}
-              className="group block relative"
-              title="Change profile picture"
+              style={{
+                width: 104, height: 104, borderRadius: '50%',
+                background: '#16191e',
+                border: '3px solid #53fc18',
+                padding: 3,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                cursor: 'pointer',
+                position: 'relative',
+                overflow: 'hidden',
+                display: 'block',
+              }}
+              title="Click to update channel avatar"
             >
               {uploadingAvatar ? (
-                <div className="w-24 h-24 rounded-full bg-surface-container-high flex items-center justify-center ring-4 ring-surface-container-high">
-                  <Loader2 size={24} className="animate-spin text-primary" />
+                <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: '#1e2228', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Loader2 size={24} className="animate-spin text-[#53fc18]" />
                 </div>
               ) : hasAvatar ? (
                 <img
                   src={getAssetUrl(user.avatar)}
                   alt={user.name}
-                  className="w-24 h-24 rounded-full object-cover ring-4 ring-surface-container-high"
-                  onError={(e) => { e.target.style.display = 'none' }}
+                  style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
                 />
               ) : (
-                <div className="w-24 h-24 rounded-full bg-primary-container flex items-center justify-center text-3xl font-bold font-display text-on-primary-container ring-4 ring-surface-container-high">
+                <div style={{
+                  width: '100%', height: '100%', borderRadius: '50%',
+                  background: '#1a3a0a', color: '#53fc18',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 32, fontWeight: 800,
+                }}>
                   {initials}
                 </div>
               )}
-              <span className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                <Camera size={22} className="text-white" />
-              </span>
+              <div className="hover-avatar-overlay" style={{
+                position: 'absolute', inset: 0, borderRadius: '50%',
+                background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                opacity: 0, transition: 'opacity 0.2s',
+              }}>
+                <Camera size={22} color="#fff" />
+              </div>
             </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleAvatarUpload}
-            />
+            <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarUpload} />
           </div>
 
-          {/* Info */}
-          <div className="flex-1 text-center sm:text-left">
-            <h1 className="font-display text-2xl font-bold text-on-surface mb-1">
-              {user?.name || 'Student'}
-            </h1>
-            <p className="flex items-center justify-center sm:justify-start gap-1 text-sm text-primary mb-1">
-              <AtSign size={13} /> {user?.username || 'username'}
-            </p>
-            <p className="text-sm text-on-surface/50 mb-4">{user?.email}</p>
-            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 text-xs text-on-surface/40">
-              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-high">
-                <Users size={13} /> {rooms.length} {rooms.length === 1 ? 'room' : 'rooms'}
-              </span>
-              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-high">
-                <Edit3 size={13} /> {createdRooms.length} created
+          {/* User & Channel Header Info */}
+          <div style={{ flex: 1, minWidth: 260 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <h1 style={{ fontSize: 24, fontWeight: 800, color: '#e8eaed', margin: 0 }}>
+                {name || user?.name || 'Student Creator'}
+              </h1>
+              <span title="Verified Kick Creator" style={{
+                background: '#53fc18', color: '#0e0f13',
+                borderRadius: '50%', width: 18, height: 18,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Check size={12} strokeWidth={3} />
               </span>
             </div>
+
+            <p style={{ fontSize: 14, color: '#53fc18', fontWeight: 600, margin: '2px 0 6px', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <AtSign size={14} /> {username || user?.username || 'username'}
+            </p>
+
+            <p style={{ fontSize: 13, color: '#b0b8c1', maxWidth: 600, lineHeight: 1.4 }}>
+              {bio}
+            </p>
           </div>
 
-          {/* Settings link */}
-          <button
-            onClick={() => navigate('/settings')}
-            className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-surface-container-high text-on-surface/60 text-sm font-medium hover:bg-primary-container hover:text-on-primary-container transition-colors"
-          >
-            <Settings size={15} />
-            Settings
-          </button>
-        </div>
-      </motion.div>
+          {/* Quick Action Badges */}
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{
+              background: '#16191e', border: '1px solid #2a2d33',
+              borderRadius: 8, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <Flame size={20} style={{ color: '#ff6b6b' }} />
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 800, color: '#e8eaed', margin: 0 }}>7 Days</p>
+                <p style={{ fontSize: 10, color: '#808a93', margin: 0 }}>Study Streak</p>
+              </div>
+            </div>
 
-      {/* Profile Details / Username */}
-      <motion.div variants={fadeUp} className="bg-surface-container-low rounded-2xl hairline p-6 mb-8">
-        <h2 className="font-display text-base font-bold text-on-surface mb-4 flex items-center gap-2">
-          <UserRound size={16} className="text-primary" /> Profile Details
-        </h2>
-        <div>
-          <label className="text-xs font-medium text-on-surface/50 mb-1.5 block">Username</label>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <span className="text-on-surface/40 shrink-0">@</span>
-              <input
-                value={username}
-                onChange={(e) => {
-                  setUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))
-                  setUsernameError('')
-                }}
-                placeholder="username"
-                spellCheck={false}
-                autoCapitalize="none"
-                autoCorrect="off"
-                className="min-w-0 flex-1 bg-surface-container-high rounded-xl hairline px-3 py-2 text-sm text-on-surface outline-none focus:ring-2 focus:ring-primary placeholder:text-on-surface/25"
-              />
+            <div style={{
+              background: '#16191e', border: '1px solid #2a2d33',
+              borderRadius: 8, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <Trophy size={20} style={{ color: '#ffb800' }} />
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 800, color: '#e8eaed', margin: 0 }}>{createdRooms.length} Rooms</p>
+                <p style={{ fontSize: 10, color: '#808a93', margin: 0 }}>Hosted</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Kick Profile Channel Navigation Tabs ───────────────────── */}
+        <div style={{
+          borderBottom: '1px solid #2a2d33',
+          display: 'flex', gap: 8, marginBottom: 24,
+        }}>
+          {[
+            { id: 'overview', label: 'Overview & Badges', icon: Sparkles },
+            { id: 'rooms', label: `My Rooms (${rooms.length})`, icon: Radio },
+            { id: 'whiteboards', label: `Whiteboards (${whiteboards.length})`, icon: PenTool },
+            { id: 'edit', label: 'Edit Profile & Handles', icon: UserRound },
+          ].map((tab) => {
+            const Icon = tab.icon
+            const active = activeTab === tab.id
+            return (
               <button
-                onClick={handleSaveUsername}
-                disabled={savingUsername || username === user?.username}
-                className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-on-primary text-sm font-medium hover:opacity-90 transition disabled:opacity-40"
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  padding: '12px 16px',
+                  fontSize: 14, fontWeight: active ? 700 : 500,
+                  color: active ? '#53fc18' : '#808a93',
+                  borderBottom: active ? '2px solid #53fc18' : '2px solid transparent',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  transition: 'all 0.15s',
+                }}
               >
-                {savingUsername ? <Loader2 size={14} className="animate-spin" /> : usernameSaved ? <Check size={14} /> : null}
-                {savingUsername ? 'Saving' : usernameSaved ? 'Saved' : 'Save'}
+                <Icon size={16} /> {tab.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* ── TAB 1: OVERVIEW & BADGES ───────────────────────────────── */}
+        {activeTab === 'overview' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
+            {/* Achievements & Badges */}
+            <div style={{ background: '#16191e', border: '1px solid #2a2d33', borderRadius: 12, padding: 20 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e8eaed', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Award size={18} style={{ color: '#53fc18' }} /> Creator Badges & Rank
+              </h2>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div style={{ background: '#0e0f13', border: '1px solid #2a2d33', borderRadius: 8, padding: 12 }}>
+                  <ShieldCheck size={20} style={{ color: '#53fc18', marginBottom: 6 }} />
+                  <p style={{ fontSize: 13, fontWeight: 700, color: '#e8eaed', margin: 0 }}>Verified Host</p>
+                  <p style={{ fontSize: 11, color: '#808a93', margin: '2px 0 0' }}>Official StudySync Channel</p>
+                </div>
+                <div style={{ background: '#0e0f13', border: '1px solid #2a2d33', borderRadius: 8, padding: 12 }}>
+                  <Zap size={20} style={{ color: '#3d8bff', marginBottom: 6 }} />
+                  <p style={{ fontSize: 13, fontWeight: 700, color: '#e8eaed', margin: 0 }}>Active Streamer</p>
+                  <p style={{ fontSize: 11, color: '#808a93', margin: '2px 0 0' }}>{createdRooms.length}+ Rooms Created</p>
+                </div>
+                <div style={{ background: '#0e0f13', border: '1px solid #2a2d33', borderRadius: 8, padding: 12 }}>
+                  <Flame size={20} style={{ color: '#ff6b6b', marginBottom: 6 }} />
+                  <p style={{ fontSize: 13, fontWeight: 700, color: '#e8eaed', margin: 0 }}>Daily Streak</p>
+                  <p style={{ fontSize: 11, color: '#808a93', margin: '2px 0 0' }}>7 Consecutive Days</p>
+                </div>
+                <div style={{ background: '#0e0f13', border: '1px solid #2a2d33', borderRadius: 8, padding: 12 }}>
+                  <BookOpen size={20} style={{ color: '#a855f7', marginBottom: 6 }} />
+                  <p style={{ fontSize: 13, fontWeight: 700, color: '#e8eaed', margin: 0 }}>Collaborator</p>
+                  <p style={{ fontSize: 11, color: '#808a93', margin: '2px 0 0' }}>{rooms.length} Channels Joined</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Social Handles & Bio */}
+            <div style={{ background: '#16191e', border: '1px solid #2a2d33', borderRadius: 12, padding: 20 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e8eaed', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Globe size={18} style={{ color: '#53fc18' }} /> Social Connections
+              </h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#0e0f13', padding: '10px 14px', borderRadius: 8, border: '1px solid #2a2d33' }}>
+                  <Code size={18} style={{ color: '#808a93' }} />
+                  <span style={{ fontSize: 13, color: '#e8eaed', flex: 1 }}>{githubUrl || 'github.com/username'}</span>
+                  <span style={{ fontSize: 11, color: '#53fc18', background: '#1a3a0a', padding: '2px 8px', borderRadius: 4 }}>Linked</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#0e0f13', padding: '10px 14px', borderRadius: 8, border: '1px solid #2a2d33' }}>
+                  <MessageSquare size={18} style={{ color: '#808a93' }} />
+                  <span style={{ fontSize: 13, color: '#e8eaed', flex: 1 }}>{discordTag || 'Discord Tag'}</span>
+                  <span style={{ fontSize: 11, color: '#53fc18', background: '#1a3a0a', padding: '2px 8px', borderRadius: 4 }}>Connected</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 2: MY ROOMS ────────────────────────────────────────── */}
+        {activeTab === 'rooms' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#e8eaed', margin: 0 }}>
+                My Hosted & Joined Rooms
+              </h2>
+              <button onClick={() => navigate('/dashboard')} className="btn-kick">
+                + Create New Room
+              </button>
+            </div>
+            {rooms.length === 0 ? (
+              <div style={{ background: '#16191e', border: '1px solid #2a2d33', borderRadius: 12, padding: 40, textAlign: 'center' }}>
+                <Radio size={32} style={{ color: '#808a93', margin: '0 auto 12px' }} />
+                <p style={{ fontSize: 14, color: '#e8eaed', fontWeight: 600 }}>No rooms created yet</p>
+                <p style={{ fontSize: 12, color: '#808a93', marginTop: 4 }}>Create your first live study room to start streaming with peers!</p>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                {rooms.map((room) => (
+                  <div key={room._id} className="kick-card" style={{ padding: 16, borderRadius: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, background: '#1a3a0a', color: '#53fc18', padding: '2px 8px', borderRadius: 4 }}>
+                        {(room.tags || room.subjects || ['Study'])[0]}
+                      </span>
+                      <span style={{ fontSize: 11, color: '#53fc18', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#53fc18' }} /> LIVE
+                      </span>
+                    </div>
+                    <h3 style={{ fontSize: 15, fontWeight: 700, color: '#e8eaed', marginBottom: 4 }}>{room.name}</h3>
+                    <p style={{ fontSize: 12, color: '#808a93', marginBottom: 14, lineHeight: 1.3 }}>{room.description || 'Interactive live study channel.'}</p>
+                    <button onClick={() => navigate(`/workspace/${room._id}`)} className="btn-kick" style={{ width: '100%', fontSize: 12, padding: '8px 0' }}>
+                      Enter Room Stage
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── TAB 3: WHITEBOARDS ─────────────────────────────────────── */}
+        {activeTab === 'whiteboards' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#e8eaed', margin: 0 }}>
+                My Canvas & Whiteboards
+              </h2>
+              <button onClick={() => navigate('/whiteboards')} className="btn-kick">
+                + New Whiteboard
+              </button>
+            </div>
+            {whiteboards.length === 0 ? (
+              <div style={{ background: '#16191e', border: '1px solid #2a2d33', borderRadius: 12, padding: 40, textAlign: 'center' }}>
+                <PenTool size={32} style={{ color: '#808a93', margin: '0 auto 12px' }} />
+                <p style={{ fontSize: 14, color: '#e8eaed', fontWeight: 600 }}>No whiteboards created yet</p>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }}>
+                {whiteboards.map((wb) => (
+                  <div key={wb._id} className="kick-card" style={{ padding: 16, borderRadius: 10 }}>
+                    <PenTool size={20} style={{ color: '#53fc18', marginBottom: 10 }} />
+                    <h3 style={{ fontSize: 14, fontWeight: 700, color: '#e8eaed', marginBottom: 4 }}>{wb.title || 'Untitled Board'}</h3>
+                    <p style={{ fontSize: 11, color: '#808a93', marginBottom: 12 }}>Updated {timeAgo(wb.updatedAt)}</p>
+                    <button onClick={() => navigate(`/whiteboards/${wb._id}`)} className="btn-kick-outline" style={{ width: '100%', fontSize: 12 }}>
+                      Open Board
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── TAB 4: EDIT PROFILE ────────────────────────────────────── */}
+        {activeTab === 'edit' && (
+          <div style={{ background: '#16191e', border: '1px solid #2a2d33', borderRadius: 12, padding: 24, maxWidth: 640 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: '#e8eaed', marginBottom: 20 }}>
+              Edit Channel Info & Handles
+            </h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#808a93', display: 'block', marginBottom: 6 }}>Display Name</label>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  style={{
+                    width: '100%', background: '#0e0f13', border: '1px solid #3a4048',
+                    borderRadius: 6, padding: '10px 14px', fontSize: 14, color: '#e8eaed', outline: 'none',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#808a93', display: 'block', marginBottom: 6 }}>Username (@handle)</label>
+                <input
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
+                  style={{
+                    width: '100%', background: '#0e0f13', border: '1px solid #3a4048',
+                    borderRadius: 6, padding: '10px 14px', fontSize: 14, color: '#e8eaed', outline: 'none',
+                  }}
+                />
+                {usernameError && <p style={{ fontSize: 12, color: '#ff4f4f', marginTop: 4 }}>{usernameError}</p>}
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#808a93', display: 'block', marginBottom: 6 }}>Channel Bio</label>
+                <textarea
+                  rows={3}
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  style={{
+                    width: '100%', background: '#0e0f13', border: '1px solid #3a4048',
+                    borderRadius: 6, padding: '10px 14px', fontSize: 14, color: '#e8eaed', outline: 'none',
+                    resize: 'none',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#808a93', display: 'block', marginBottom: 6 }}>GitHub Profile URL</label>
+                <input
+                  value={githubUrl}
+                  onChange={(e) => setGithubUrl(e.target.value)}
+                  placeholder="https://github.com/username"
+                  style={{
+                    width: '100%', background: '#0e0f13', border: '1px solid #3a4048',
+                    borderRadius: 6, padding: '10px 14px', fontSize: 14, color: '#e8eaed', outline: 'none',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#808a93', display: 'block', marginBottom: 6 }}>Discord Tag</label>
+                <input
+                  value={discordTag}
+                  onChange={(e) => setDiscordTag(e.target.value)}
+                  placeholder="user#1234 or @username"
+                  style={{
+                    width: '100%', background: '#0e0f13', border: '1px solid #3a4048',
+                    borderRadius: 6, padding: '10px 14px', fontSize: 14, color: '#e8eaed', outline: 'none',
+                  }}
+                />
+              </div>
+
+              <button
+                onClick={handleSaveProfile}
+                disabled={savingProfile}
+                className="btn-kick"
+                style={{ width: '100%', padding: '12px 0', marginTop: 8 }}
+              >
+                {savingProfile ? <Loader2 size={16} className="animate-spin" /> : profileSaved ? <Check size={16} /> : null}
+                {savingProfile ? 'Saving Changes...' : profileSaved ? 'Saved!' : 'Save Channel Profile'}
               </button>
             </div>
           </div>
-          {usernameError && <p className="text-xs text-red-400 mt-1.5">{usernameError}</p>}
-          <p className="text-[11px] text-on-surface/30 mt-1.5">
-            3-24 characters. Lowercase letters, numbers and underscores only. No spaces. This is how people find and mention you.
-          </p>
-        </div>
-      </motion.div>
-
-      {/* Stats */}
-      <motion.div ref={statsRef} variants={fadeUp} className="grid grid-cols-3 gap-4 mb-8">
-        <div className="bg-surface-container-low rounded-2xl hairline p-6 text-center">
-          <Users size={20} className="text-primary mx-auto mb-2" />
-          <p className="font-display text-3xl font-bold text-on-surface">
-            <span className="count-up" data-target={rooms.length}>0</span>
-          </p>
-          <p className="text-xs text-on-surface/40 mt-1">Total Rooms</p>
-        </div>
-        <div className="bg-surface-container-low rounded-2xl hairline p-6 text-center">
-          <Edit3 size={20} className="text-tertiary mx-auto mb-2" />
-          <p className="font-display text-3xl font-bold text-on-surface">
-            <span className="count-up" data-target={createdRooms.length}>0</span>
-          </p>
-          <p className="text-xs text-on-surface/40 mt-1">Created</p>
-        </div>
-        <div className="bg-surface-container-low rounded-2xl hairline p-6 text-center">
-          <Users size={20} className="text-secondary mx-auto mb-2" />
-          <p className="font-display text-3xl font-bold text-on-surface">
-            <span className="count-up" data-target={joinedRooms.length}>0</span>
-          </p>
-          <p className="text-xs text-on-surface/40 mt-1">Joined</p>
-        </div>
-      </motion.div>
-
-      {/* Recent Activity */}
-      <motion.div variants={fadeUp} className="bg-surface-container-low rounded-2xl hairline p-6">
-        <h2 className="font-display text-base font-bold text-on-surface mb-4">Recent Activity</h2>
-        {loading ? (
-          <div className="flex items-center justify-center py-10">
-            <Loader2 size={18} className="animate-spin text-primary" />
-          </div>
-        ) : activities.length === 0 ? (
-          <div className="text-center py-10">
-            <Clock size={24} className="mx-auto text-on-surface/15 mb-3" />
-            <p className="text-sm text-on-surface/40">No activity yet</p>
-            <p className="text-xs text-on-surface/25 mt-1">Create or join a room to see activity here</p>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {activities.map((a, i) => {
-              const Icon = a.icon
-              return (
-                <motion.div
-                  key={`${a.roomId}-${i}`}
-                  variants={fadeUp}
-                  onClick={() => navigate(`/workspace/${a.roomId}`)}
-                  className="flex items-center gap-4 py-3 border-b border-outline-variant/15 last:border-0 group cursor-pointer"
-                >
-                  <div className="w-9 h-9 rounded-xl bg-surface-container-high flex items-center justify-center shrink-0 group-hover:bg-primary-container/30 transition-colors">
-                    <Icon size={16} className="text-on-surface/40" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-on-surface/70 truncate">{a.text}</p>
-                    <p className="text-[11px] text-on-surface/30 mt-0.5">{a.time}</p>
-                  </div>
-                  <ChevronRight size={14} className="text-on-surface/20 group-hover:text-on-surface/40 transition-colors shrink-0" />
-                </motion.div>
-              )
-            })}
-          </div>
         )}
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   )
 }

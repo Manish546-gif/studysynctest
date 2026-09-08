@@ -3,15 +3,15 @@ import { isNetworkError, refreshQueueCount } from './sync';
 
 export { isNetworkError };
 
-const API_URL = (import.meta.env.VITE_API_URL || '') + '/api';
+const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api';
 
-const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/$/, '');
 
 export const getAssetUrl = (url) => {
   if (!url) return '';
   if (/^https?:\/\//i.test(url)) return url;
   if (url.startsWith('/')) return `${API_ORIGIN}${url}`;
-  return url;
+  return `${API_ORIGIN}/${url}`;
 };
 
 async function parseRes(res) {

@@ -266,13 +266,14 @@ export function useLiveKit(socketRef, roomId, user) {
           VideoPresets.h720,
         ],
         screenShareEncoding: {
-          maxBitrate: 18_000_000,
-          maxFramerate: 30,
+          maxBitrate: 30_000_000,   // 30 Mbps — enough for 2K@60fps VP9
+          maxFramerate: 60,
           degradationPreference: 'maintain-framerate',
+          priority: 'high',
         },
         screenShareSimulcastLayers: [
-          VideoPresets.h360,
           VideoPresets.h720,
+          VideoPresets.h1080,
           VideoPresets.h1440,
         ],
       },
@@ -443,11 +444,11 @@ export function useLiveKit(socketRef, roomId, user) {
         await room.localParticipant.setScreenShareEnabled(true, {
           video: {
             resolution: { width: 2560, height: 1440 },
-            maxFramerate: 30,
-            degradationPreference: 'maintain-resolution',
+            maxFramerate: 60,
+            degradationPreference: 'maintain-framerate',
           },
           audio: shareAudio
-            ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+            ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false, sampleRate: 48000, channelCount: 2 }
             : false,
         });
         return null;
@@ -469,11 +470,11 @@ export function useLiveKit(socketRef, roomId, user) {
       await room.localParticipant.setScreenShareEnabled(true, {
         video: {
           resolution: { width: 2560, height: 1440 },
-          maxFramerate: 30,
-          degradationPreference: 'maintain-resolution',
+          maxFramerate: 60,
+          degradationPreference: 'maintain-framerate',
         },
         audio: shareAudio
-          ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+          ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false, sampleRate: 48000, channelCount: 2 }
           : false,
       });
       logTag('screen share started successfully');

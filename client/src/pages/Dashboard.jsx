@@ -3,23 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate, Link } from 'react-router-dom'
 import gsap from 'gsap'
 import {
-  Users,
-  Pencil,
-  ArrowRight,
-  Calendar,
-  Clock,
-  Plus,
-  X,
-  Loader2,
-  Flame,
-  Copy,
-  Check,
-  LogIn,
-  KeyRound,
-  Trash2,
-  BarChart3,
-  BookOpen,
-  PenTool,
+  Users, Pencil, ArrowRight, Calendar, Clock, Plus, X,
+  Loader2, Flame, Copy, Check, LogIn, KeyRound, Trash2,
+  BarChart3, BookOpen, PenTool, Eye, Hash, Zap, Lock, Unlock, Globe, Shield
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
@@ -27,45 +13,15 @@ import { api } from '../services/api'
 import { SkeletonRoomCard } from '../components/common/Skeleton'
 import ConfirmationModal from '../components/common/ConfirmationModal'
 
-const container = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.08, delayChildren: 0.1 } },
-}
-
-const fadeUp = {
-  hidden: { opacity: 0, y: 24 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } },
-}
-
-const TAG_COLORS = [
-  'bg-tertiary-container text-on-tertiary-container',
-  'bg-primary-container text-on-primary-container',
-  'bg-secondary-container text-on-secondary-container',
-  'bg-error-container text-on-error-container',
+// ── Flat solid colors for room thumbnails (no gradients) ───────────────────────
+const ROOM_GRADS = [
+  '#1a3a0a',
+  '#0a1a3a',
+  '#003a1a',
+  '#2a1a00',
+  '#2a001a',
+  '#1a1a00',
 ]
-
-function Avatar({ initials, className = '' }) {
-  return (
-    <div className={`w-8 h-8 rounded-full bg-surface-container-high border-2 border-surface flex items-center justify-center text-[11px] font-bold font-display text-on-surface-variant ${className}`}>
-      {initials}
-    </div>
-  )
-}
-
-function startOfDay(date) {
-  const d = new Date(date)
-  d.setHours(0, 0, 0, 0)
-  return d
-}
-
-function sessionDayLabel(date) {
-  const today = startOfDay(new Date())
-  const day = startOfDay(new Date(date))
-  const diffDays = Math.round((today - day) / 86400000)
-  if (diffDays === 0) return 'TODAY'
-  if (diffDays === 1) return 'YESTERDAY'
-  return day.toLocaleDateString([], { month: 'short' }).toUpperCase()
-}
 
 function timeAgo(date) {
   const diff = Date.now() - new Date(date).getTime()
@@ -79,22 +35,87 @@ function timeAgo(date) {
   return new Date(date).toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
+function sessionDayLabel(date) {
+  const today = new Date(); today.setHours(0,0,0,0)
+  const day = new Date(date); day.setHours(0,0,0,0)
+  const diffDays = Math.round((today - day) / 86400000)
+  if (diffDays === 0) return 'TODAY'
+  if (diffDays === 1) return 'YESTERDAY'
+  return day.toLocaleDateString([], { month: 'short' }).toUpperCase()
+}
+
+// ── Kick & Discord Modal wrapper ───────────────────────────────────────────
+function KickModal({ onClose, children }) {
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={onClose}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 50 }}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 16 }}
+      >
+        <div
+          style={{
+            background: '#16191e',
+            border: '1px solid #2a2d33',
+            borderRadius: 12,
+            width: '100%', maxWidth: 460,
+            padding: 24,
+            boxShadow: '0 24px 80px rgba(0,0,0,0.85)',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {children}
+        </div>
+      </motion.div>
+    </>
+  )
+}
+
+const kickInputStyle = {
+  width: '100%',
+  background: '#0e0f13',
+  border: '1px solid #3a4048',
+  borderRadius: 6,
+  padding: '10px 14px',
+  fontSize: 14,
+  color: '#e8eaed',
+  outline: 'none',
+  transition: 'border-color 0.15s ease',
+  fontFamily: 'Inter, sans-serif',
+}
+
 export default function Dashboard() {
   const statsRef = useRef(null)
   const { user } = useAuth()
   const { toast } = useToast()
   const navigate = useNavigate()
+  
   const [rooms, setRooms] = useState([])
   const [loading, setLoading] = useState(true)
-  const [modal, setModal] = useState(null)
+
+  // Modals & form state
+  const [modal, setModal] = useState(null) // 'create' | 'join' | 'created' | 'privateLock'
+  const [selectedPrivateRoom, setSelectedPrivateRoom] = useState(null)
+  const [privatePasscode, setPrivatePasscode] = useState('')
+  const [privateError, setPrivateError] = useState('')
+
   const [newRoomName, setNewRoomName] = useState('')
   const [newRoomDesc, setNewRoomDesc] = useState('')
   const [newRoomIsPublic, setNewRoomIsPublic] = useState(true)
+  const [newRoomPasscode, setNewRoomPasscode] = useState('')
   const [creatingRoom, setCreatingRoom] = useState(false)
   const [createError, setCreateError] = useState('')
+
   const [joinCode, setJoinCode] = useState('')
   const [joining, setJoining] = useState(false)
   const [joinError, setJoinError] = useState('')
+
   const [createdRoom, setCreatedRoom] = useState(null)
   const [codeCopied, setCodeCopied] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState(null)
@@ -113,85 +134,71 @@ export default function Dashboard() {
     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
     .slice(0, 5)
 
-  useEffect(() => {
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        '.stat-number',
-        { textContent: 0 },
-        {
-          textContent: (i, el) => el.dataset.target,
-          duration: 1.2,
-          ease: 'power2.out',
-          delay: 0.4,
-          snap: { textContent: 1 },
-          stagger: 0.2,
-        }
-      )
-    }, statsRef)
-    return () => ctx.revert()
-  }, [rooms.length, createdRooms.length])
-
-  useEffect(() => {
-    if (modal !== 'created') return
-    const timer = setTimeout(() => setModal(null), 5000)
-    return () => clearTimeout(timer)
-  }, [modal])
-
-  useEffect(() => {
-    if (!modal) return
-    const { overflow } = document.body.style
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = overflow }
-  }, [modal])
-
+  // ── Handlers ─────────────────────────────────────────────────────────────
   const handleCreateRoom = async (e) => {
     e.preventDefault()
     if (!newRoomName.trim()) return
-    setCreatingRoom(true)
-    setCreateError('')
+    setCreatingRoom(true); setCreateError('')
     try {
-      const data = await api.createRoom({ name: newRoomName.trim(), description: newRoomDesc.trim(), isPublic: newRoomIsPublic })
+      const data = await api.createRoom({
+        name: newRoomName.trim(),
+        description: newRoomDesc.trim(),
+        isPublic: newRoomIsPublic,
+        code: newRoomPasscode.trim(),
+      })
       setRooms((prev) => [data.room, ...prev])
-      setNewRoomName('')
-      setNewRoomDesc('')
-      setNewRoomIsPublic(true)
-      setCreatedRoom(data.room)
-      setModal('created')
-      toast('Room created successfully', 'success')
+      setNewRoomName(''); setNewRoomDesc(''); setNewRoomIsPublic(true); setNewRoomPasscode('')
+      setCreatedRoom(data.room); setModal('created')
+      toast(`Room "${data.room.name}" created!`, 'success')
     } catch (err) {
       setCreateError(err.message || 'Failed to create room')
       toast(err.message || 'Failed to create room', 'error')
-    } finally {
-      setCreatingRoom(false)
-    }
+    } finally { setCreatingRoom(false) }
   }
 
   const handleJoinByLink = (e) => {
     e.preventDefault()
     if (!joinCode.trim()) return
-    setJoining(true)
-    setJoinError('')
+    setJoining(true); setJoinError('')
     const clean = joinCode.trim()
     const base = `${window.location.origin}/workspace/`
     let id = clean
-    if (clean.startsWith(base)) {
-      id = clean.slice(base.length).split('?')[0]
-    } else if (clean.startsWith('/workspace/')) {
-      id = clean.split('/workspace/')[1].split('?')[0]
-    }
+    if (clean.startsWith(base)) id = clean.slice(base.length).split('?')[0]
+    else if (clean.startsWith('/workspace/')) id = clean.split('/workspace/')[1].split('?')[0]
     id = id.trim()
     setJoining(false)
-    if (!id) {
-      setJoinError('Paste a valid invite link')
-      toast('Paste a valid invite link', 'error')
-      return
-    }
+    if (!id) { setJoinError('Paste a valid invite link or room ID'); toast('Invalid room link', 'error'); return }
     navigate(`/workspace/${id}`)
   }
 
-  const handleJoinRoom = async (roomId) => {
-    // Do NOT call api.joinRoom — let the socket join-room handler manage admission via waiting room
-    navigate(`/workspace/${roomId}`)
+  const handleJoinRoom = (room) => {
+    const isHost = room.host?._id === user?.id
+    const isMember = room.members?.some((m) => m._id === user?.id || m === user?.id)
+    
+    // Discord Private Room Logic: if room is private & user is not host/member, require passcode/key
+    if (!room.isPublic && !isHost && !isMember) {
+      setSelectedPrivateRoom(room)
+      setPrivatePasscode('')
+      setPrivateError('')
+      setModal('privateLock')
+      return
+    }
+
+    navigate(`/workspace/${room._id}`)
+  }
+
+  const handleVerifyPrivatePasscode = (e) => {
+    e.preventDefault()
+    if (!selectedPrivateRoom) return
+    const expected = selectedPrivateRoom.code || ''
+    if (expected && privatePasscode.trim().toUpperCase() !== expected.toUpperCase()) {
+      setPrivateError('Incorrect Room Passcode / Key')
+      toast('Incorrect Room Passcode', 'error')
+      return
+    }
+    setModal(null)
+    toast('Access granted to Private Server!', 'success')
+    navigate(`/workspace/${selectedPrivateRoom._id}`)
   }
 
   const handleDeleteRoom = async () => {
@@ -203,11 +210,8 @@ export default function Dashboard() {
       setDeleteTargetId(null)
       toast('Room deleted', 'info')
     } catch (err) {
-      alert(err.message)
       toast(err.message || 'Failed to delete room', 'error')
-    } finally {
-      setDeletingRoom(false)
-    }
+    } finally { setDeletingRoom(false) }
   }
 
   const copyInviteLink = () => {
@@ -219,465 +223,347 @@ export default function Dashboard() {
   }
 
   return (
-    <motion.div
-      className="p-6 md:p-12 max-w-7xl mx-auto"
-      variants={container}
-      initial="hidden"
-      animate="show"
-    >
-      {/* Hero + Stats */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10 items-start">
-        <motion.div
-          variants={fadeUp}
-          className="lg:col-span-2 relative bg-primary-container rounded-[20px] p-8 md:p-10 overflow-hidden"
-        >
-          <div className="absolute -top-20 -right-20 w-72 h-72 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
-          <div className="relative z-10">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/15 text-on-primary-container text-xs font-semibold mb-4">
-              <Flame size={14} className="text-primary" />
-              {rooms.length} Active {rooms.length === 1 ? 'Room' : 'Rooms'}
-            </span>
-            <h1 className="font-display text-3xl md:text-4xl font-bold text-on-primary-container mb-3">
-              Welcome back, {displayName}!
-            </h1>
-            <p className="text-on-primary-container/70 text-sm md:text-base max-w-[28rem] mb-8 leading-relaxed">
-              You've been crushing it this week. Keep the momentum going - join a room
-              or create a new one to start collaborating.
-            </p>
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                onClick={() => { setModal('create'); setCreatedRoom(null); setCreateError(''); }}
-                className="flex items-center gap-2 px-5 py-2.5 bg-inverse-surface text-surface rounded-xl text-sm font-semibold hover:shadow-lg transition-shadow"
-              >
-                <Pencil size={15} />
-                Create Room
-              </button>
-              <button
-                onClick={() => { setModal('join'); setJoinCode(''); setJoinError(''); }}
-                className="flex items-center gap-2 px-5 py-2.5 bg-surface/30 text-on-primary-container rounded-xl text-sm font-semibold backdrop-blur-sm hover:bg-surface/50 transition-colors"
-              >
-                <LogIn size={15} />
-                Join Room
-              </button>
-            </div>
-          </div>
-          <div className="absolute bottom-6 right-8 text-on-primary-container/10">
-            <Pencil size={120} strokeWidth={1} />
-          </div>
-        </motion.div>
+    <div style={{ background: '#0e0f13', minHeight: '100vh', padding: '24px' }}>
 
-        <div ref={statsRef} className="flex flex-col gap-6">
-          <motion.div
-            variants={fadeUp}
-            className="bg-surface-container-low rounded-[20px] p-6 flex items-center gap-5 flex-1"
+      {/* ── Page header ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: '#e8eaed', lineHeight: 1.2 }}>
+            Discord & Kick Study Channels
+          </h1>
+          <p style={{ fontSize: 13, color: '#808a93', marginTop: 4 }}>
+            Welcome back, <span style={{ color: '#53fc18' }}>{displayName}</span>
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            className="btn-kick-outline"
+            onClick={() => { setModal('join'); setJoinCode(''); setJoinError('') }}
           >
-            <div className="w-14 h-14 rounded-2xl bg-tertiary-container flex items-center justify-center shrink-0">
-              <Users size={24} className="text-on-tertiary-container" />
-            </div>
-            <div>
-              <p className="text-xs text-on-surface/50 mb-0.5">Study Rooms</p>
-              <div className="flex items-baseline gap-2">
-                <span className="font-display text-3xl font-bold text-on-surface">
-                  <span className="stat-number" data-target={rooms.length}>0</span>
-                </span>
-                <span className="text-xs font-medium text-on-surface/40">Total</span>
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            variants={fadeUp}
-            className="bg-surface-container-low rounded-[20px] p-6 flex items-center gap-5 flex-1"
+            <LogIn size={15} /> Join with Code
+          </button>
+          <button
+            className="btn-kick"
+            onClick={() => { setModal('create'); setCreatedRoom(null); setCreateError('') }}
           >
-            <div className="w-14 h-14 rounded-2xl bg-primary-container flex items-center justify-center shrink-0">
-              <Flame size={24} className="text-on-primary-container" />
-            </div>
-            <div>
-              <p className="text-xs text-on-surface/50 mb-0.5">Rooms Created</p>
-              <div className="flex items-baseline gap-2">
-                <span className="font-display text-3xl font-bold text-on-surface">
-                  <span className="stat-number" data-target={createdRooms.length}>0</span>
-                </span>
-                <span className="text-xs font-medium text-on-surface/40">By you</span>
-              </div>
-            </div>
-          </motion.div>
+            <Plus size={15} /> Create Channel
+          </button>
         </div>
       </div>
 
-      {/* Quick Actions */}
-      <motion.div variants={fadeUp} className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <Link to="/stats" className="bg-surface-container-low rounded-2xl p-4 flex flex-col items-center gap-2 hover:bg-surface-container transition group">
-          <div className="w-12 h-12 rounded-xl bg-primary-container flex items-center justify-center group-hover:scale-105 transition">
-            <BarChart3 size={22} className="text-on-primary-container" />
-          </div>
-          <span className="text-sm font-semibold text-on-surface">Study Stats</span>
-        </Link>
-        <Link to="/flashcards" className="bg-surface-container-low rounded-2xl p-4 flex flex-col items-center gap-2 hover:bg-surface-container transition group">
-          <div className="w-12 h-12 rounded-xl bg-tertiary-container flex items-center justify-center group-hover:scale-105 transition">
-            <BookOpen size={22} className="text-on-tertiary-container" />
-          </div>
-          <span className="text-sm font-semibold text-on-surface">Flashcards</span>
-        </Link>
-        <Link to="/whiteboards" className="bg-surface-container-low rounded-2xl p-4 flex flex-col items-center gap-2 hover:bg-surface-container transition group">
-          <div className="w-12 h-12 rounded-xl bg-success-container flex items-center justify-center group-hover:scale-105 transition">
-            <PenTool size={22} className="text-on-success-container" />
-          </div>
-          <span className="text-sm font-semibold text-on-surface">Whiteboards</span>
-        </Link>
-      </motion.div>
-
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <motion.div variants={fadeUp} className="lg:col-span-8">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="font-display text-xl font-bold text-on-surface">My Rooms</h2>
-          </div>
-
-          {loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <SkeletonRoomCard />
-              <SkeletonRoomCard />
+      {/* ── Stats row ── */}
+      <div ref={statsRef} style={{ display: 'flex', gap: 12, marginBottom: 28 }}>
+        {[
+          { label: 'Study Rooms', value: rooms.length, icon: Users, color: '#53fc18', bg: '#1a3a0a' },
+          { label: 'Rooms Created', value: createdRooms.length, icon: Zap, color: '#3d8bff', bg: '#0a1a3a' },
+          { label: 'Recent Sessions', value: recentRooms.length, icon: Clock, color: '#ff6b6b', bg: '#2a0a0a' },
+        ].map((stat) => (
+          <div key={stat.label} style={{
+            flex: 1,
+            background: '#16191e',
+            border: '1px solid #2a2d33',
+            borderRadius: 8,
+            padding: '16px 20px',
+            display: 'flex', alignItems: 'center', gap: 14,
+          }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: 8,
+              background: stat.bg,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: stat.color, flexShrink: 0,
+            }}>
+              <stat.icon size={20} />
             </div>
-          ) : rooms.length === 0 ? (
-            <div className="text-center py-20 bg-surface-container-low rounded-[20px] hairline">
-              <div className="w-16 h-16 rounded-2xl bg-primary-container/50 flex items-center justify-center mx-auto mb-4">
-                <Users size={28} className="text-on-primary-container/60" />
-              </div>
-              <p className="font-display text-base font-bold text-on-surface mb-1">No rooms yet</p>
-              <p className="text-sm text-on-surface/40 mb-6 max-w-[240px] mx-auto">Create your first study room or join one with an invite link to get started.</p>
-              <div className="flex justify-center gap-3">
-                <button onClick={() => { setModal('create'); setCreateError(''); }} className="px-5 py-2.5 bg-primary text-on-primary rounded-xl text-sm font-semibold hover:shadow-md hover:shadow-primary/20 transition-shadow">
-                  Create Room
-                </button>
-                <button onClick={() => setModal('join')} className="px-5 py-2.5 bg-surface-container-high text-on-surface rounded-xl text-sm font-semibold border border-outline-variant/40 hover:bg-surface-container-high/80 transition-colors">
-                  Join with Code
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
-              {rooms.map((room, idx) => (
-                <motion.div
-                  key={room._id}
-                  whileHover={{ y: -4 }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-                  tabIndex={0}
-                  role="button"
-                  aria-label={`Join ${room.name}`}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && e.target === e.currentTarget) handleJoinRoom(room._id)
-                  }}
-                  className="bg-surface-container-low rounded-[20px] overflow-hidden cursor-pointer group focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-                  onClick={() => navigate(`/workspace/${room._id}`)}
-                >
-                  <div className="relative h-40 overflow-hidden bg-primary-container/30 flex items-center justify-center">
-                    <Pencil size={48} className="text-on-surface/10" />
-                    <span className={`absolute top-3 left-3 px-2.5 py-1 rounded-lg text-[11px] font-semibold ${TAG_COLORS[idx % TAG_COLORS.length]}`}>
-                      {room.tag || 'Study'}
-                    </span>
-                    <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-surface/80 backdrop-blur-sm rounded-lg px-2 py-1">
-                      <Users size={11} className="text-on-surface/60" />
-                      <span className="text-[11px] font-bold text-on-surface/80">{room.members?.length || 0}</span>
-                    </div>
-                    {room.host?._id === user?.id && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setDeleteTargetId(room._id); }}
-                        className="absolute bottom-3 right-3 w-8 h-8 rounded-lg bg-error-container/80 backdrop-blur-sm flex items-center justify-center text-error opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </div>
-                  <div className="p-5">
-                    <h3 className="font-display text-base font-bold text-on-surface mb-3">{room.name}</h3>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        {room.members?.slice(0, 3).map((m, i) => (
-                          <Avatar
-                            key={m._id || i}
-                            initials={m.name?.charAt(0) || '?'}
-                            className={i > 0 ? '-ml-2' : ''}
-                          />
-                        ))}
-                        {room.members?.length > 3 && (
-                          <span className="ml-2 text-xs text-on-surface/45 font-medium">+{room.members.length - 3}</span>
-                        )}
-                      </div>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleJoinRoom(room._id); }}
-                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-primary text-on-primary rounded-xl text-xs font-semibold hover:shadow-md transition-shadow"
-                      >
-                        Open <ArrowRight size={13} />
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          )}
-
-          <div className="flex gap-3">
-            <motion.button
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-              onClick={() => { setModal('create'); setCreatedRoom(null); }}
-              className="flex-1 rounded-[20px] border-2 border-dashed border-outline-variant/40 bg-surface-container-lowest p-8 flex flex-col items-center justify-center gap-3 text-on-surface/45 hover:border-primary/40 hover:bg-surface-container-low transition-colors"
-            >
-              <div className="w-12 h-12 rounded-2xl bg-surface-container-high flex items-center justify-center">
-                <Plus size={22} className="text-on-surface/45" />
-              </div>
-              <span className="font-display text-sm font-semibold">Create Room</span>
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-              onClick={() => { setModal('join'); setJoinCode(''); setJoinError(''); }}
-              className="flex-1 rounded-[20px] border-2 border-dashed border-outline-variant/40 bg-surface-container-lowest p-8 flex flex-col items-center justify-center gap-3 text-on-surface/45 hover:border-secondary/40 hover:bg-surface-container-low transition-colors"
-            >
-              <div className="w-12 h-12 rounded-2xl bg-surface-container-high flex items-center justify-center">
-                <KeyRound size={22} className="text-on-surface/45" />
-              </div>
-              <span className="font-display text-sm font-semibold">Join Room</span>
-            </motion.button>
-          </div>
-        </motion.div>
-
-        <motion.div variants={fadeUp} className="lg:col-span-4">
-          <div className="bg-surface-container-low rounded-[20px] p-6 h-full flex flex-col">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-tertiary-container flex items-center justify-center">
-                <Calendar size={18} className="text-on-tertiary-container" />
-              </div>
-              <h2 className="font-display text-lg font-bold text-on-surface">Recent Sessions</h2>
-            </div>
-
-            <div className="flex flex-col gap-1 flex-1">
-              {recentRooms.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-10 text-center flex-1">
-                  <Calendar size={28} className="text-on-surface/15 mb-3" />
-                  <p className="text-sm text-on-surface/40">No sessions yet</p>
-                  <p className="text-xs text-on-surface/25 mt-1">Create or join a room to get started</p>
-                </div>
-              ) : (
-                recentRooms.map((room) => (
-                  <div
-                    key={room._id}
-                    onClick={() => navigate(`/workspace/${room._id}`)}
-                    className="flex items-start gap-4 py-4 border-b border-outline-variant/20 last:border-0 cursor-pointer group"
-                  >
-                    <div className="flex flex-col items-center w-11 shrink-0">
-                      <span className="text-[10px] font-bold text-primary tracking-wider leading-none mb-0.5">{sessionDayLabel(room.updatedAt)}</span>
-                      <span className="font-display text-2xl font-bold text-on-surface leading-none">{new Date(room.updatedAt).getDate()}</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-on-surface truncate mb-1">{room.name}</p>
-                      <div className="flex items-center gap-3 text-xs text-on-surface/45">
-                        <span className="inline-flex items-center gap-1">
-                          <Clock size={12} /> {timeAgo(room.updatedAt)}
-                        </span>
-                        <span className="inline-flex items-center gap-1">
-                          <Users size={12} /> {room.members?.length || 0}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
+            <div>
+              <p style={{ fontSize: 22, fontWeight: 700, color: '#e8eaed', lineHeight: 1 }}>{stat.value}</p>
+              <p style={{ fontSize: 12, color: '#808a93', marginTop: 4 }}>{stat.label}</p>
             </div>
           </div>
-        </motion.div>
+        ))}
       </div>
 
-      {/* Modal Overlays */}
-      <AnimatePresence>
-        {modal === 'create' && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setModal(null)}
-              className="fixed inset-0 bg-inverse-surface/30 z-50"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed inset-0 flex items-center justify-center z-[60] p-4"
-            >
-              <div className="bg-surface rounded-[24px] shadow-2xl w-full max-w-[28rem] p-6" onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="font-display text-lg font-bold text-on-surface">Create New Room</h2>
-                  <button onClick={() => setModal(null)} aria-label="Close" className="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors">
-                    <X size={18} />
-                  </button>
-                </div>
+      {/* ── Main content grid: Room cards & Recent Activity ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24 }}>
+        
+        {/* Rooms Grid */}
+        <div>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e8eaed', marginBottom: 16 }}>
+            My Active Rooms & Channels
+          </h2>
 
-                <form onSubmit={handleCreateRoom} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Room Name</label>
-                    <input
-                      autoFocus
-                      value={newRoomName}
-                      onChange={(e) => setNewRoomName(e.target.value)}
-                      placeholder="e.g., Advanced Algorithms Study"
-                      className="w-full rounded-2xl border border-outline-variant/50 bg-surface-container-lowest px-4 py-3 text-sm text-on-surface placeholder:text-on-surface/30 outline-none focus:border-primary-container transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Description (optional)</label>
-                    <textarea
-                      value={newRoomDesc}
-                      onChange={(e) => setNewRoomDesc(e.target.value)}
-                      placeholder="What will you study together?"
-                      rows={3}
-                      className="w-full rounded-2xl border border-outline-variant/50 bg-surface-container-lowest px-4 py-3 text-sm text-on-surface placeholder:text-on-surface/30 outline-none resize-none focus:border-primary-container transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Room Type</label>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setNewRoomIsPublic(true)}
-                        className={`flex-1 py-2.5 rounded-xl text-xs font-medium border transition-all ${newRoomIsPublic ? 'bg-primary-container/20 border-primary-container text-primary-container' : 'border-outline-variant/50 text-on-surface/40 hover:bg-surface-container'}`}
-                      >
-                        Public
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setNewRoomIsPublic(false)}
-                        className={`flex-1 py-2.5 rounded-xl text-xs font-medium border transition-all ${!newRoomIsPublic ? 'bg-primary-container/20 border-primary-container text-primary-container' : 'border-outline-variant/50 text-on-surface/40 hover:bg-surface-container'}`}
-                      >
-                        Private
-                      </button>
+          {loading ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
+              <SkeletonRoomCard /><SkeletonRoomCard /><SkeletonRoomCard />
+            </div>
+          ) : rooms.length === 0 ? (
+            <div style={{ background: '#16191e', border: '1px solid #2a2d33', borderRadius: 12, padding: 40, textAlign: 'center' }}>
+              <Users size={32} style={{ color: '#808a93', margin: '0 auto 12px' }} />
+              <p style={{ fontSize: 14, color: '#e8eaed', fontWeight: 600 }}>No study channels created</p>
+              <p style={{ fontSize: 12, color: '#808a93', marginTop: 4 }}>Create a Public or Private room to start streaming!</p>
+              <button onClick={() => setModal('create')} className="btn-kick" style={{ margin: '16px auto 0' }}>
+                + Create First Channel
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
+              {rooms.map((room, idx) => {
+                const isHost = room.host?._id === user?.id
+                const isPublic = room.isPublic !== false
+
+                return (
+                  <div
+                    key={room._id}
+                    className="kick-card group"
+                    style={{
+                      background: '#16191e',
+                      border: '1px solid #2a2d33',
+                      borderRadius: 10,
+                      overflow: 'hidden',
+                      display: 'flex', flexDirection: 'column',
+                    }}
+                  >
+                    {/* Card Thumbnail Header */}
+                    <div style={{
+                      height: 80,
+                      background: ROOM_GRADS[idx % ROOM_GRADS.length],
+                      padding: 12,
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                      position: 'relative',
+                    }}>
+                      {/* Discord Public/Private Badge */}
+                      <span style={{
+                        fontSize: 10, fontWeight: 700,
+                        background: isPublic ? 'rgba(83, 252, 24, 0.2)' : 'rgba(255, 107, 107, 0.2)',
+                        color: isPublic ? '#53fc18' : '#ff6b6b',
+                        border: `1px solid ${isPublic ? '#53fc18' : '#ff6b6b'}`,
+                        padding: '2px 8px', borderRadius: 4,
+                        display: 'flex', alignItems: 'center', gap: 4,
+                      }}>
+                        {isPublic ? <Globe size={11} /> : <Lock size={11} />}
+                        {isPublic ? 'PUBLIC' : 'PRIVATE'}
+                      </span>
+
+                      {/* Delete button for Host */}
+                      {isHost && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDeleteTargetId(room._id) }}
+                          style={{ background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: 4, color: '#ff4f4f', cursor: 'pointer', padding: 4 }}
+                          title="Delete Channel"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
                     </div>
-                    <p className="text-[10px] text-on-surface/30 mt-1">{newRoomIsPublic ? 'Anyone can join; new users require host approval' : 'Only invited members can join'}</p>
+
+                    {/* Card Details */}
+                    <div style={{ padding: 14, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                      <div>
+                        <h3 style={{ fontSize: 15, fontWeight: 700, color: '#e8eaed', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {room.name}
+                        </h3>
+                        <p style={{ fontSize: 12, color: '#808a93', marginBottom: 12, lineHeight: 1.3, height: 32, overflow: 'hidden' }}>
+                          {room.description || 'Live study channel & video stage.'}
+                        </p>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid #2a2d33' }}>
+                        <span style={{ fontSize: 11, color: '#808a93', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Users size={12} /> {room.members?.length || 1} members
+                        </span>
+                        <button
+                          onClick={() => handleJoinRoom(room)}
+                          className={isPublic ? 'btn-kick' : 'btn-kick-outline'}
+                          style={{ fontSize: 12, padding: '5px 12px' }}
+                        >
+                          {isPublic ? 'Join' : 'Unlock'}
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  {createError && (
-                    <p className="text-xs text-error">{createError}</p>
-                  )}
-                  <button
-                    type="submit"
-                    disabled={creatingRoom || !newRoomName.trim()}
-                    className="w-full py-3 rounded-2xl bg-primary-container text-on-primary-fixed text-sm font-semibold hover:shadow-md transition-shadow disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {creatingRoom ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                    {creatingRoom ? 'Creating...' : 'Create Room'}
-                  </button>
-                </form>
-              </div>
-            </motion.div>
-          </>
-        )}
+                )
+              })}
+            </div>
+          )}
+        </div>
 
-        {modal === 'created' && createdRoom && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setModal(null)}
-              className="fixed inset-0 bg-inverse-surface/30 z-50"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed inset-0 flex items-center justify-center z-[60] p-4"
-            >
-              <div className="bg-surface rounded-[24px] shadow-2xl w-full max-w-[28rem] p-8 text-center" onClick={(e) => e.stopPropagation()}>
-                <div className="w-16 h-16 rounded-2xl bg-success-container flex items-center justify-center mx-auto mb-4">
-                  <Check size={32} className="text-on-success-container" />
-                </div>
-                <h2 className="font-display text-lg font-bold text-on-surface mb-1">Room Created!</h2>
-                <p className="text-sm text-on-surface/50 mb-6">Share this link to invite others</p>
-
-                <div className="bg-surface-container-low rounded-2xl p-4 mb-6">
-                  <p className="text-[10px] font-semibold text-on-surface/40 uppercase tracking-widest mb-2">Invite Link</p>
-                  <div className="flex items-center justify-center gap-3">
-                    <span className="text-xs font-mono text-on-surface/80 truncate max-w-[70%]">
-                      {window.location.origin}/workspace/{createdRoom._id}
-                    </span>
-                    <button
-                      onClick={copyInviteLink}
-                      aria-label={codeCopied ? 'Invite link copied' : 'Copy invite link'}
-                      className="w-10 h-10 rounded-xl flex items-center justify-center bg-surface-container-high text-on-surface/60 hover:text-on-surface transition-colors shrink-0"
-                    >
-                      {codeCopied ? <Check size={18} className="text-on-success-container" /> : <Copy size={18} />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => { setModal(null); navigate(`/workspace/${createdRoom._id}`); }}
-                    className="flex-1 py-3 rounded-2xl bg-primary text-on-primary text-sm font-semibold hover:shadow-md transition-shadow"
-                  >
-                    Enter Room
-                  </button>
-                  <button
-                    onClick={() => setModal(null)}
-                    className="px-6 py-3 rounded-2xl bg-surface-container-high text-on-surface text-sm font-medium hover:bg-surface-container-high/80 transition-colors"
-                  >
-                    Later
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </>
-        )}
-
-        {modal === 'join' && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setModal(null)}
-              className="fixed inset-0 bg-inverse-surface/30 z-50"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed inset-0 flex items-center justify-center z-[60] p-4"
-            >
-              <div className="bg-surface rounded-[24px] shadow-2xl w-full max-w-[28rem] p-6" onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="font-display text-lg font-bold text-on-surface">Join Room</h2>
-                  <button onClick={() => setModal(null)} aria-label="Close" className="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface/40 hover:bg-surface-container transition-colors">
-                    <X size={18} />
-                  </button>
-                </div>
-
-                <form onSubmit={handleJoinByLink} className="space-y-4">
+        {/* Recent Session Log */}
+        <div>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e8eaed', marginBottom: 16 }}>
+            Recent Activity
+          </h2>
+          <div style={{ background: '#16191e', border: '1px solid #2a2d33', borderRadius: 10, overflow: 'hidden' }}>
+            {recentRooms.length === 0 ? (
+              <p style={{ padding: 20, fontSize: 12, color: '#808a93', textAlign: 'center' }}>No recent activities</p>
+            ) : (
+              recentRooms.map((r) => (
+                <div
+                  key={r._id}
+                  onClick={() => handleJoinRoom(r)}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '12px 16px', borderBottom: '1px solid #2a2d33', cursor: 'pointer',
+                  }}
+                  className="hover:bg-[#1e2228]"
+                >
                   <div>
-                    <label className="block text-xs font-medium text-on-surface/50 mb-1.5">Invite Link</label>
-                    <input
-                      autoFocus
-                      value={joinCode}
-                      onChange={(e) => { setJoinCode(e.target.value.trim()); setJoinError(''); }}
-                      placeholder="Paste the invite link here"
-                      className="w-full rounded-2xl border border-outline-variant/50 bg-surface-container-lowest px-4 py-3 text-sm text-on-surface placeholder:text-on-surface/30 outline-none focus:border-primary-container transition-colors"
-                    />
-                    {joinError && (
-                      <p className="text-xs text-error mt-2">{joinError}</p>
-                    )}
+                    <p style={{ fontSize: 13, fontWeight: 600, color: '#e8eaed' }}>{r.name}</p>
+                    <p style={{ fontSize: 11, color: '#808a93' }}>{timeAgo(r.updatedAt)}</p>
                   </div>
-                  <button
-                    type="submit"
-                    disabled={joining || !joinCode.trim()}
-                    className="w-full py-3 rounded-2xl bg-primary text-on-primary text-sm font-semibold hover:shadow-md transition-shadow disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {joining ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
-                    {joining ? 'Joining...' : 'Join Room'}
-                  </button>
-                </form>
+                  <ArrowRight size={14} color="#808a93" />
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── MODALS ── */}
+      <AnimatePresence>
+        {/* Create Room Modal */}
+        {modal === 'create' && (
+          <KickModal onClose={() => setModal(null)}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e8eaed' }}>Create Discord-Style Channel</h2>
+              <button onClick={() => setModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#808a93' }}>
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleCreateRoom} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#808a93', marginBottom: 6 }}>Channel Name</label>
+                <input autoFocus value={newRoomName} onChange={(e) => setNewRoomName(e.target.value)}
+                  placeholder="e.g., Computer Science Lounge" style={kickInputStyle} />
               </div>
-            </motion.div>
-          </>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#808a93', marginBottom: 6 }}>Channel Description</label>
+                <textarea value={newRoomDesc} onChange={(e) => setNewRoomDesc(e.target.value)}
+                  placeholder="What will you study in this channel?" rows={2} style={{ ...kickInputStyle, resize: 'none' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#808a93', marginBottom: 6 }}>Channel Privacy Type</label>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button type="button" onClick={() => setNewRoomIsPublic(true)}
+                    style={{
+                      flex: 1, padding: 10, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                      background: newRoomIsPublic ? '#1a3a0a' : '#0e0f13',
+                      border: `1px solid ${newRoomIsPublic ? '#53fc18' : '#3a4048'}`,
+                      color: newRoomIsPublic ? '#53fc18' : '#808a93',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    }}>
+                    <Globe size={14} /> Public Server
+                  </button>
+                  <button type="button" onClick={() => setNewRoomIsPublic(false)}
+                    style={{
+                      flex: 1, padding: 10, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                      background: !newRoomIsPublic ? '#3a0a0a' : '#0e0f13',
+                      border: `1px solid ${!newRoomIsPublic ? '#ff6b6b' : '#3a4048'}`,
+                      color: !newRoomIsPublic ? '#ff6b6b' : '#808a93',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    }}>
+                    <Lock size={14} /> Private Locked
+                  </button>
+                </div>
+              </div>
+
+              {!newRoomIsPublic && (
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#808a93', marginBottom: 6 }}>Set Private Passcode / Key (optional)</label>
+                  <input value={newRoomPasscode} onChange={(e) => setNewRoomPasscode(e.target.value)}
+                    placeholder="e.g. SECRET123" style={kickInputStyle} />
+                </div>
+              )}
+
+              {createError && <p style={{ fontSize: 12, color: '#ff4f4f' }}>{createError}</p>}
+              <button type="submit" disabled={creatingRoom || !newRoomName.trim()} className="btn-kick" style={{ width: '100%', padding: 12, marginTop: 4 }}>
+                {creatingRoom ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                {creatingRoom ? 'Creating Channel...' : 'Create Channel'}
+              </button>
+            </form>
+          </KickModal>
+        )}
+
+        {/* Private Room Passcode Verification Modal */}
+        {modal === 'privateLock' && selectedPrivateRoom && (
+          <KickModal onClose={() => setModal(null)}>
+            <div style={{ textAlign: 'center', padding: '8px 0' }}>
+              <div style={{
+                width: 56, height: 56, borderRadius: '50%', background: '#3a0a0a', border: '2px solid #ff6b6b',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
+              }}>
+                <Lock size={24} color="#ff6b6b" />
+              </div>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#e8eaed', marginBottom: 6 }}>
+                Private Server Locked
+              </h2>
+              <p style={{ fontSize: 13, color: '#808a93', marginBottom: 20 }}>
+                "{selectedPrivateRoom.name}" requires a passcode or invite authorization to join.
+              </p>
+
+              <form onSubmit={handleVerifyPrivatePasscode} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <input
+                  autoFocus
+                  type="password"
+                  value={privatePasscode}
+                  onChange={(e) => { setPrivatePasscode(e.target.value); setPrivateError('') }}
+                  placeholder="Enter Room Passcode / Key"
+                  style={{ ...kickInputStyle, textAlign: 'center', letterSpacing: '0.1em' }}
+                />
+                {privateError && <p style={{ fontSize: 12, color: '#ff4f4f' }}>{privateError}</p>}
+
+                <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
+                  <button type="submit" className="btn-kick" style={{ flex: 1, padding: 10 }}>
+                    Unlock & Join
+                  </button>
+                  <button type="button" onClick={() => setModal(null)} className="btn-kick-outline" style={{ padding: 10 }}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </KickModal>
+        )}
+
+        {/* Created Room Modal */}
+        {modal === 'created' && createdRoom && (
+          <KickModal onClose={() => setModal(null)}>
+            <div style={{ textAlign: 'center', padding: '8px 0' }}>
+              <div style={{ width: 56, height: 56, borderRadius: 12, background: '#1a3a0a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <Check size={28} color="#53fc18" />
+              </div>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#e8eaed', marginBottom: 6 }}>Channel Created!</h2>
+              <p style={{ fontSize: 13, color: '#808a93', marginBottom: 20 }}>Share invite link to bring friends</p>
+              <div style={{ background: '#0e0f13', border: '1px solid #2a2d33', borderRadius: 8, padding: 14, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: '#e8eaed', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {window.location.origin}/workspace/{createdRoom._id}
+                </span>
+                <button onClick={copyInviteLink} style={{ background: '#1e2228', border: '1px solid #3a4048', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', color: '#53fc18' }}>
+                  {codeCopied ? <Check size={15} /> : <Copy size={15} />}
+                </button>
+              </div>
+              <button className="btn-kick" onClick={() => { setModal(null); navigate(`/workspace/${createdRoom._id}`) }} style={{ width: '100%', padding: 12 }}>
+                Enter Channel Stage
+              </button>
+            </div>
+          </KickModal>
+        )}
+
+        {/* Join Room Modal */}
+        {modal === 'join' && (
+          <KickModal onClose={() => setModal(null)}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e8eaed' }}>Join Channel with Code / Link</h2>
+              <button onClick={() => setModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#808a93' }}>
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleJoinByLink} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <input autoFocus value={joinCode} onChange={(e) => setJoinCode(e.target.value)} placeholder="Paste invite URL or Room ID" style={kickInputStyle} />
+              {joinError && <p style={{ fontSize: 12, color: '#ff4f4f' }}>{joinError}</p>}
+              <button type="submit" className="btn-kick" style={{ width: '100%', padding: 12 }}>
+                Join Channel
+              </button>
+            </form>
+          </KickModal>
         )}
       </AnimatePresence>
 
@@ -685,12 +571,12 @@ export default function Dashboard() {
         open={!!deleteTargetId}
         onClose={() => setDeleteTargetId(null)}
         onConfirm={handleDeleteRoom}
-        title="Delete Room"
-        message="This room will be permanently deleted for you and all members. This cannot be undone."
+        title="Delete Channel"
+        message="Are you sure you want to delete this channel?"
         confirmText="Delete"
         confirmVariant="danger"
         loading={deletingRoom}
       />
-    </motion.div>
+    </div>
   )
 }

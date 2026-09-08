@@ -91,35 +91,35 @@ export default function Flashcards() {
   }
 
   if (loading) return (
-    <div className="min-h-screen bg-surface flex items-center justify-center">
-      <div className="w-8 h-8 border-2 border-primary-container border-t-primary rounded-full animate-spin" />
+    <div className="min-h-screen bg-[#0e0f13] flex items-center justify-center">
+      <div className="w-8 h-8 border-2 border-[#53fc18] border-t-transparent rounded-full animate-spin" />
     </div>
   )
 
   const currentCard = dueCards[currentIdx]
 
   return (
-    <div className="min-h-screen bg-surface text-on-surface p-8">
+    <div className="min-h-screen bg-[#0e0f13] text-[#e8eaed] p-6 lg:p-8">
       <div className="max-w-3xl mx-auto">
-        <h1 className="text-3xl font-bold mb-2">Flashcards</h1>
-        <p className="text-on-surface/60 mb-8">Spaced repetition to help you remember</p>
+        <h1 className="text-3xl font-bold mb-2 text-[#e8eaed]">Flashcards</h1>
+        <p className="text-[#9b9e9e] mb-8 text-sm">Spaced repetition to retain core knowledge efficiently</p>
 
         {stats && (
           <div className="grid grid-cols-3 gap-4 mb-8">
-            <div className="bg-surface-container-low rounded-2xl p-4 text-center border border-outline-variant/20">
-              <BookOpen size={20} className="text-on-surface/40 mx-auto mb-2" />
-              <div className="text-2xl font-bold">{stats.total}</div>
-              <div className="text-sm text-on-surface/60">Total Cards</div>
+            <div className="bg-[#16191e] rounded-2xl p-5 text-center border border-[#2a2d33] shadow-lg">
+              <BookOpen size={22} className="text-[#53fc18] mx-auto mb-2" />
+              <div className="text-2xl font-extrabold text-[#e8eaed]">{stats.total}</div>
+              <div className="text-xs font-semibold text-[#9b9e9e]">Total Cards</div>
             </div>
-            <div className="bg-surface-container-low rounded-2xl p-4 text-center border border-outline-variant/20">
-              <Clock size={20} className="text-orange-500 mx-auto mb-2" />
-              <div className="text-2xl font-bold text-orange-500">{stats.due}</div>
-              <div className="text-sm text-on-surface/60">Due Today</div>
+            <div className="bg-[#16191e] rounded-2xl p-5 text-center border border-[#2a2d33] shadow-lg">
+              <Clock size={22} className="text-amber-400 mx-auto mb-2" />
+              <div className="text-2xl font-extrabold text-amber-400">{stats.due}</div>
+              <div className="text-xs font-semibold text-[#9b9e9e]">Due Today</div>
             </div>
-            <div className="bg-surface-container-low rounded-2xl p-4 text-center border border-outline-variant/20">
-              <Trophy size={20} className="text-success mx-auto mb-2" />
-              <div className="text-2xl font-bold text-success">{stats.mastered}</div>
-              <div className="text-sm text-on-surface/60">Mastered</div>
+            <div className="bg-[#16191e] rounded-2xl p-5 text-center border border-[#2a2d33] shadow-lg">
+              <Trophy size={22} className="text-[#53fc18] mx-auto mb-2" />
+              <div className="text-2xl font-extrabold text-[#53fc18]">{stats.mastered}</div>
+              <div className="text-xs font-semibold text-[#9b9e9e]">Mastered</div>
             </div>
           </div>
         )}
@@ -127,8 +127,8 @@ export default function Flashcards() {
         <div className="flex gap-2 mb-6">
           {['list', 'review', 'create'].map((m) => (
             <button key={m} onClick={() => { setMode(m); setEditId(null); setFront(''); setBack('') }}
-              className={`px-4 py-2 rounded-xl text-sm font-medium capitalize transition ${
-                mode === m ? 'bg-primary text-on-primary' : 'bg-surface-container-low text-on-surface/60 hover:bg-surface-container'
+              className={`px-5 py-2.5 rounded-xl text-xs font-bold capitalize transition-all ${
+                mode === m ? 'bg-[#53fc18] text-black shadow-[0_0_12px_rgba(83,252,24,0.3)]' : 'bg-[#16191e] text-[#9b9e9e] border border-[#2a2d33] hover:bg-[#20242b] hover:text-[#e8eaed]'
               }`}>
               {m === 'create' && editId ? 'Edit Card' : m}
             </button>
@@ -138,26 +138,26 @@ export default function Flashcards() {
         <AnimatePresence mode="wait">
           {mode === 'review' && currentCard && (
             <motion.div key="review" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-              <div className="text-center mb-4 text-sm text-on-surface/60">
+              <div className="text-center mb-4 text-xs font-mono font-bold text-[#9b9e9e]">
                 Card {currentIdx + 1} of {dueCards.length}
               </div>
               <div
-                className="bg-surface-container-low rounded-2xl shadow-sm p-12 min-h-[300px] flex items-center justify-center cursor-pointer select-none mb-6 border border-outline-variant/20"
+                className="bg-[#16191e] rounded-2xl shadow-xl p-12 min-h-[300px] flex items-center justify-center cursor-pointer select-none mb-6 border border-[#2a2d33] hover:border-[#53fc18]/50 transition-colors"
                 onClick={() => setFlipped(!flipped)}
               >
                 <div className="text-center">
-                  <div className="text-xs text-on-surface/40 mb-4 uppercase tracking-wider">{flipped ? 'Answer' : 'Question'}</div>
-                  <div className="text-xl font-medium whitespace-pre-wrap">
+                  <div className="text-xs font-bold text-[#53fc18] mb-4 uppercase tracking-widest">{flipped ? 'Answer' : 'Question'}</div>
+                  <div className="text-2xl font-bold text-[#e8eaed] whitespace-pre-wrap leading-relaxed">
                     {flipped ? currentCard.back : currentCard.front}
                   </div>
-                  {!flipped && <div className="text-sm text-on-surface/40 mt-6">Click to reveal answer</div>}
+                  {!flipped && <div className="text-xs text-[#9b9e9e]/60 mt-8">Click to reveal answer</div>}
                 </div>
               </div>
               {flipped && (
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-6 gap-2">
                   {QUALITY_LABELS.map((q) => (
                     <button key={q.value} onClick={() => reviewCard(q.value)}
-                      className={`py-3 rounded-xl font-medium text-sm transition ${q.color}`}>
+                      className={`py-3 rounded-xl font-bold text-xs transition ${q.color}`}>
                       {q.label}
                     </button>
                   ))}
@@ -168,11 +168,11 @@ export default function Flashcards() {
 
           {mode === 'review' && !currentCard && (
             <motion.div key="empty-review" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-              className="text-center py-16 bg-surface-container-low rounded-2xl border border-outline-variant/20">
-              <RotateCcw size={40} className="text-success mx-auto mb-4" />
-              <div className="text-xl font-bold mb-2">All caught up!</div>
-              <div className="text-on-surface/60">No cards due for review right now.</div>
-              <button onClick={() => setMode('list')} className="mt-4 px-6 py-2 bg-primary text-on-primary rounded-xl font-medium">
+              className="text-center py-16 bg-[#16191e] rounded-2xl border border-[#2a2d33] shadow-xl">
+              <RotateCcw size={40} className="text-[#53fc18] mx-auto mb-4" />
+              <div className="text-xl font-bold text-[#e8eaed] mb-2">All caught up!</div>
+              <div className="text-xs text-[#9b9e9e]">No cards due for review right now.</div>
+              <button onClick={() => setMode('list')} className="mt-6 px-6 py-2.5 bg-[#53fc18] text-black rounded-xl font-bold text-xs hover:bg-[#48de13] transition">
                 Back to Cards
               </button>
             </motion.div>
@@ -180,29 +180,29 @@ export default function Flashcards() {
 
           {mode === 'create' && (
             <motion.div key="create" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-              <div className="bg-surface-container-low rounded-2xl border border-outline-variant/20 p-6">
-                <h2 className="text-lg font-bold mb-4">{editId ? 'Edit Flashcard' : 'New Flashcard'}</h2>
+              <div className="bg-[#16191e] rounded-2xl border border-[#2a2d33] p-6 shadow-xl">
+                <h2 className="text-lg font-bold text-[#e8eaed] mb-4">{editId ? 'Edit Flashcard' : 'New Flashcard'}</h2>
                 <div className="space-y-4">
                   <div>
-                    <label className="text-sm font-medium text-on-surface/60 block mb-1">Front (Question)</label>
+                    <label className="text-xs font-semibold text-[#9b9e9e] block mb-1.5 uppercase tracking-wider">Front (Question)</label>
                     <textarea value={front} onChange={(e) => setFront(e.target.value)}
-                      className="w-full bg-surface border border-outline-variant/30 rounded-xl px-4 py-3 text-on-surface focus:outline-none focus:border-primary h-24 resize-none"
+                      className="w-full bg-[#0e0f13] border border-[#2a2d33] rounded-xl px-4 py-3 text-xs text-[#e8eaed] placeholder:text-[#9b9e9e]/50 focus:outline-none focus:border-[#53fc18] h-24 resize-none transition-colors"
                       placeholder="What do you want to learn?" />
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-on-surface/60 block mb-1">Back (Answer)</label>
+                    <label className="text-xs font-semibold text-[#9b9e9e] block mb-1.5 uppercase tracking-wider">Back (Answer)</label>
                     <textarea value={back} onChange={(e) => setBack(e.target.value)}
-                      className="w-full bg-surface border border-outline-variant/30 rounded-xl px-4 py-3 text-on-surface focus:outline-none focus:border-primary h-24 resize-none"
+                      className="w-full bg-[#0e0f13] border border-[#2a2d33] rounded-xl px-4 py-3 text-xs text-[#e8eaed] placeholder:text-[#9b9e9e]/50 focus:outline-none focus:border-[#53fc18] h-24 resize-none transition-colors"
                       placeholder="The answer is..." />
                   </div>
                   <div className="flex gap-3">
                     <button onClick={saveCard} disabled={!front.trim() || !back.trim()}
-                      className="px-6 py-2 bg-primary text-on-primary rounded-xl font-medium disabled:opacity-50 transition">
-                      {editId ? 'Update' : 'Add Card'}
+                      className="px-6 py-2.5 bg-[#53fc18] text-black rounded-xl font-bold text-xs hover:bg-[#48de13] disabled:opacity-40 transition shadow-md">
+                      {editId ? 'Update Card' : 'Add Card'}
                     </button>
                     {editId && (
                       <button onClick={() => { setEditId(null); setFront(''); setBack(''); setMode('list') }}
-                        className="px-6 py-2 bg-surface-container text-on-surface/60 rounded-xl font-medium hover:bg-surface-container-high transition">
+                        className="px-6 py-2.5 bg-[#0e0f13] text-[#9b9e9e] border border-[#2a2d33] rounded-xl font-bold text-xs hover:bg-[#20242b] hover:text-[#e8eaed] transition">
                         Cancel
                       </button>
                     )}
@@ -216,43 +216,43 @@ export default function Flashcards() {
             <motion.div key="list" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
               {dueCards.length > 0 && (
                 <button onClick={startReview}
-                  className="w-full mb-6 py-4 bg-primary text-on-primary rounded-2xl font-bold text-lg hover:bg-primary/90 transition shadow-lg flex items-center justify-center gap-2">
+                  className="w-full mb-6 py-4 bg-[#53fc18] text-black rounded-2xl font-extrabold text-base hover:bg-[#48de13] transition shadow-[0_0_20px_rgba(83,252,24,0.3)] flex items-center justify-center gap-2">
                   <RotateCcw size={20} />
                   Review {dueCards.length} Due Card{dueCards.length !== 1 ? 's' : ''}
                 </button>
               )}
 
               {flashcards.length === 0 ? (
-                <div className="text-center py-16 bg-surface-container-low rounded-2xl border border-outline-variant/20">
-                  <BookOpen size={40} className="text-on-surface/20 mx-auto mb-4" />
-                  <div className="text-xl font-bold mb-2">No flashcards yet</div>
-                  <div className="text-on-surface/60 mb-4">Create your first flashcard to start learning</div>
-                  <button onClick={() => setMode('create')} className="px-6 py-2 bg-primary text-on-primary rounded-xl font-medium">
+                <div className="text-center py-16 bg-[#16191e] rounded-2xl border border-[#2a2d33] shadow-xl">
+                  <BookOpen size={40} className="text-[#9b9e9e]/30 mx-auto mb-4" />
+                  <div className="text-xl font-bold text-[#e8eaed] mb-2">No flashcards yet</div>
+                  <div className="text-xs text-[#9b9e9e] mb-6">Create your first flashcard to start learning</div>
+                  <button onClick={() => setMode('create')} className="px-6 py-2.5 bg-[#53fc18] text-black rounded-xl font-bold text-xs hover:bg-[#48de13] transition">
                     Create Flashcard
                   </button>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {flashcards.map((card) => (
-                    <div key={card._id} className="bg-surface-container-low rounded-xl p-4 flex items-start justify-between border border-outline-variant/20">
+                    <div key={card._id} className="bg-[#16191e] rounded-2xl p-4 flex items-start justify-between border border-[#2a2d33] shadow-lg">
                       <div className="flex-1 min-w-0 mr-4">
-                        <div className="font-medium text-on-surface truncate">{card.front}</div>
-                        <div className="text-sm text-on-surface/50 truncate">{card.back}</div>
-                        <div className="flex gap-3 mt-1 text-xs text-on-surface/40">
-                          {card.isMastered && <span className="text-success font-medium">Mastered</span>}
+                        <div className="font-bold text-[#e8eaed] truncate text-sm mb-1">{card.front}</div>
+                        <div className="text-xs text-[#9b9e9e] truncate mb-2">{card.back}</div>
+                        <div className="flex gap-3 text-[10px] font-mono text-[#9b9e9e]/70">
+                          {card.isMastered && <span className="text-[#53fc18] font-bold">Mastered</span>}
                           <span>EF: {card.easeFactor.toFixed(1)}</span>
                           <span>Interval: {card.interval}d</span>
                           {card.nextReview && <span>Next: {new Date(card.nextReview).toLocaleDateString()}</span>}
                         </div>
                       </div>
-                      <div className="flex gap-1 shrink-0">
+                      <div className="flex gap-1.5 shrink-0">
                         <button onClick={() => editCard(card)}
-                          className="p-2 hover:bg-surface-container rounded-lg text-on-surface/40 hover:text-on-surface transition">
-                          <Pencil size={14} />
+                          className="p-2 hover:bg-[#20242b] rounded-xl text-[#9b9e9e] hover:text-[#e8eaed] transition">
+                          <Pencil size={15} />
                         </button>
                         <button onClick={() => deleteCard(card._id)}
-                          className="p-2 hover:bg-error/10 rounded-lg text-on-surface/40 hover:text-error transition">
-                          <Trash2 size={14} />
+                          className="p-2 hover:bg-red-500/15 rounded-xl text-[#9b9e9e] hover:text-red-400 transition">
+                          <Trash2 size={15} />
                         </button>
                       </div>
                     </div>
@@ -263,8 +263,8 @@ export default function Flashcards() {
           )}
         </AnimatePresence>
 
-        <Link to="/dashboard" className="inline-flex items-center gap-1 mt-8 text-primary hover:text-primary/80 transition">
-          <ArrowLeft size={16} /> Back to Dashboard
+        <Link to="/dashboard" className="inline-flex items-center gap-2 mt-8 text-xs font-bold text-[#53fc18] hover:underline transition">
+          <ArrowLeft size={14} /> Back to Dashboard
         </Link>
       </div>
     </div>

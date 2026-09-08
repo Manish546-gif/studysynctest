@@ -1,15 +1,14 @@
 import { useEffect, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Bell, Plus, Menu, X, Search, Sun, Moon, Sparkles, CheckCheck, Trash2, Users, Upload, PenTool, MessageSquare } from 'lucide-react'
-import { Link, useLocation } from 'react-router-dom'
+import {
+  Bell, Plus, Menu, X, Search, CheckCheck, Trash2,
+  Users, Upload, PenTool, MessageSquare, Zap, Globe,
+  ChevronLeft, ChevronRight,
+} from 'lucide-react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useNotifications } from '../../contexts/NotificationContext'
-import { applyTheme, getStoredTheme } from '../../utils/appearance'
-
-const navLinks = [
-  { label: 'Dashboard', path: '/dashboard' },
-  { label: 'Home', path: '/' },
-]
+import { useSidebar } from './AppLayout'
 
 const typeIcons = {
   room_joined: Users,
@@ -26,218 +25,307 @@ function timeAgo(date) {
   if (mins < 60) return `${mins}m ago`
   const hours = Math.floor(mins / 60)
   if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
+  return `${Math.floor(hours / 24)}d ago`
 }
 
 export default function TopNavbar({ onToggleSidebar, sidebarOpen }) {
   const { pathname } = useLocation()
+  const navigate = useNavigate()
   const { user } = useAuth()
   const { notifications, unreadCount, markRead, markAllRead, removeNotification } = useNotifications()
-  const [theme, setTheme] = useState(getStoredTheme())
-  const [open, setOpen] = useState(false)
+  const { collapsed, setCollapsed } = useSidebar()
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [searchVal, setSearchVal] = useState('')
   const dropdownRef = useRef(null)
-  const initials = user?.name ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : 'U'
+  const initials = user?.name
+    ? user.name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
+    : 'U'
 
-  useEffect(() => {
-    setTheme(getStoredTheme())
-  }, [])
-
+  // Close notif on outside click
   useEffect(() => {
     function handleClick(e) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setOpen(false)
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setNotifOpen(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  const toggleTheme = () => {
-    const next = theme === 'dark' ? 'light' : 'dark'
-    applyTheme(next)
-    setTheme(next)
+  const handleSearch = (e) => {
+    e.preventDefault()
+    if (searchVal.trim()) navigate(`/dashboard?q=${encodeURIComponent(searchVal.trim())}`)
   }
 
-  const isDark = theme === 'dark'
-
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 h-16 glass border-b border-outline-variant/40">
-      <div className="flex items-center justify-between h-full px-4 lg:px-6">
-        {/* Left */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onToggleSidebar}
-            className="lg:hidden p-2 rounded-xl text-on-surface/70 hover:bg-surface-container-low transition-colors"
-            aria-label="Toggle sidebar"
+    <header
+      style={{
+        position: 'fixed',
+        top: 0, left: 0, right: 0,
+        height: 56,
+        background: '#0e0f13',
+        borderBottom: '1px solid #2a2d33',
+        zIndex: 50,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '0 16px',
+      }}
+    >
+      {/* ── Left: hamburger + logo ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        {/* Desktop collapse toggle */}
+        <button
+          onClick={() => setCollapsed((p) => !p)}
+          className="hidden lg:flex items-center justify-center w-9 h-9 rounded-md text-[#808a93] hover:text-[#e8eaed] hover:bg-[#1e2228] transition-colors"
+          aria-label="Toggle sidebar"
+        >
+          <Menu size={20} />
+        </button>
+
+        {/* Mobile open toggle */}
+        <button
+          onClick={onToggleSidebar}
+          className="lg:hidden flex items-center justify-center w-9 h-9 rounded-md text-[#808a93] hover:text-[#e8eaed] hover:bg-[#1e2228] transition-colors"
+          aria-label="Toggle sidebar"
+        >
+          {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
+
+        {/* Logo */}
+        <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+          <img
+            src="/logo.png"
+            alt="StudySync Logo"
+            style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'contain' }}
+          />
+          <span
+            className="hidden sm:block"
+            style={{ fontWeight: 900, fontSize: 18, color: '#e8eaed', letterSpacing: '-0.02em' }}
           >
-            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+            StudySync
+          </span>
+          <span
+            style={{
+              fontSize: 10, fontWeight: 800,
+              background: '#1e2228',
+              border: '1px solid #3a4048',
+              color: '#53fc18',
+              borderRadius: 4,
+              padding: '1px 6px',
+              letterSpacing: '0.06em',
+            }}
+            className="hidden sm:block"
+          >
+            BETA
+          </span>
+        </Link>
+      </div>
+
+      {/* ── Center: Search bar ── */}
+      <form
+        onSubmit={handleSearch}
+        style={{ flex: 1, maxWidth: 480, margin: '0 auto' }}
+      >
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          background: '#16191e',
+          border: '1px solid #2a2d33',
+          borderRadius: 6,
+          padding: '0 12px',
+          height: 36,
+          transition: 'border-color 0.15s ease',
+        }}
+          className="focus-within:[border-color:#53fc18]"
+        >
+          <Search size={15} color="#808a93" style={{ flexShrink: 0 }} />
+          <input
+            value={searchVal}
+            onChange={(e) => setSearchVal(e.target.value)}
+            placeholder="Search rooms, subjects..."
+            style={{
+              flex: 1, background: 'transparent',
+              border: 'none', outline: 'none',
+              fontSize: 14, color: '#e8eaed',
+            }}
+            className="placeholder:text-[#808a93]"
+          />
+        </div>
+      </form>
+
+      {/* ── Right: actions ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+        {/* Globe (public rooms) */}
+        <Link
+          to="/"
+          style={{ textDecoration: 'none' }}
+          className="hidden md:flex items-center justify-center w-9 h-9 rounded-md text-[#808a93] hover:text-[#e8eaed] hover:bg-[#1e2228] transition-colors"
+          title="Browse public rooms"
+        >
+          <Globe size={18} />
+        </Link>
+
+        {/* Notifications */}
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setNotifOpen(!notifOpen)}
+            className="relative flex items-center justify-center w-9 h-9 rounded-md text-[#808a93] hover:text-[#e8eaed] hover:bg-[#1e2228] transition-colors"
+            aria-label="Notifications"
+          >
+            <Bell size={18} />
+            {unreadCount > 0 && (
+              <span style={{
+                position: 'absolute', top: 6, right: 6,
+                width: 8, height: 8,
+                background: '#53fc18',
+                borderRadius: '50%',
+                border: '2px solid #0e0f13',
+              }} />
+            )}
           </button>
 
-          <Link to="/" className="flex items-center gap-2.5 group">
-            <div className="relative w-9 h-9 rounded-xl bg-primary-container flex items-center justify-center shadow-lg shadow-primary/25 group-hover:shadow-primary/40 transition-shadow">
-              <Sparkles size={16} className="text-on-primary-container" />
-            </div>
-            <div className="hidden sm:flex flex-col leading-none">
-              <span className="font-display text-[15px] font-bold text-on-surface tracking-tight">
-                StudySync
-              </span>
-              <span className="text-[9px] font-medium text-on-surface/40 tracking-[0.18em] uppercase">
-                Learn together
-              </span>
-            </div>
-          </Link>
-
-          <div className="hidden md:flex items-center gap-2 ml-2 w-56 lg:w-72 h-10 px-3 rounded-xl bg-surface-container-low hairline text-on-surface/35 transition-colors focus-within:text-on-surface/60">
-            <Search size={15} className="shrink-0" />
-            <span className="text-sm">Search rooms…</span>
-            <kbd className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-surface-container text-on-surface/45 border border-outline-variant/60">
-              ⌘K
-            </kbd>
-          </div>
-
-          <nav className="hidden lg:flex items-center gap-1 ml-2">
-            {navLinks.map((link) => {
-              const active = pathname === link.path
-              return (
-                <Link
-                  key={link.path}
-                  to={link.path}
-                  className="relative px-4 py-2 rounded-xl text-sm font-medium transition-colors"
-                >
-                  {active && (
-                    <motion.div
-                      layoutId="nav-pill"
-                      className="absolute inset-0 bg-primary-container rounded-xl"
-                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                    />
-                  )}
-                  <span
-                    className={`relative z-10 ${
-                      active ? 'text-on-primary-container font-semibold' : 'text-on-surface/60 hover:text-on-surface'
-                    }`}
-                  >
-                    {link.label}
+          <AnimatePresence>
+            {notifOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+                style={{
+                  position: 'absolute', right: 0, top: '100%', marginTop: 8,
+                  width: 320,
+                  background: '#16191e',
+                  border: '1px solid #2a2d33',
+                  borderRadius: 8,
+                  boxShadow: '0 16px 48px rgba(0,0,0,0.6)',
+                  overflow: 'hidden',
+                  display: 'flex', flexDirection: 'column',
+                  maxHeight: 400,
+                  zIndex: 100,
+                }}
+              >
+                {/* Header */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '12px 16px',
+                  borderBottom: '1px solid #2a2d33',
+                }}>
+                  <span style={{ fontWeight: 700, fontSize: 14, color: '#e8eaed' }}>
+                    Notifications
                   </span>
-                </Link>
-              )
-            })}
-          </nav>
-        </div>
-
-        {/* Right */}
-        <div className="flex items-center gap-2">
-          <Link
-            to="/dashboard"
-            className="press hidden sm:flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-xl text-sm font-semibold shadow-lg shadow-primary/20 hover:shadow-primary/35 transition-shadow"
-          >
-            <Plus size={16} />
-            Create Room
-          </Link>
-
-          <button
-            onClick={toggleTheme}
-            className="p-2.5 rounded-xl text-on-surface/60 hover:text-on-surface hover:bg-surface-container-low transition-colors"
-            aria-label="Toggle theme"
-          >
-            {isDark ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
-
-          {/* Notification bell */}
-          <div className="relative" ref={dropdownRef}>
-            <button
-              onClick={() => setOpen(!open)}
-              className="relative p-2.5 rounded-xl text-on-surface/60 hover:text-on-surface hover:bg-surface-container-low transition-colors"
-              aria-label="Notifications"
-            >
-              <Bell size={18} />
-              {unreadCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 flex items-center justify-center bg-primary text-on-primary text-[9px] font-bold rounded-full ring-2 ring-surface">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </button>
-
-            <AnimatePresence>
-              {open && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                  transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
-                  className="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] max-h-[420px] bg-surface-container-low rounded-2xl shadow-xl shadow-inverse-surface/10 border border-outline-variant/30 overflow-hidden flex flex-col"
-                >
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant/20">
-                    <h3 className="font-display text-sm font-bold text-on-surface">Notifications</h3>
-                    <div className="flex items-center gap-1">
-                      {unreadCount > 0 && (
-                        <button onClick={markAllRead} className="flex items-center gap-1 text-[11px] font-medium text-primary hover:text-primary/80 transition-colors">
-                          <CheckCheck size={12} />
-                          Mark all read
-                        </button>
-                      )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {unreadCount > 0 && (
                       <button
-                        onClick={() => setOpen(false)}
-                        className="ml-2 p-1.5 rounded-lg text-on-surface/40 hover:text-on-surface hover:bg-surface-container transition-colors"
-                        aria-label="Close notifications"
+                        onClick={markAllRead}
+                        style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#53fc18', background: 'none', border: 'none', cursor: 'pointer' }}
                       >
-                        <X size={15} />
+                        <CheckCheck size={12} /> Mark all read
                       </button>
-                    </div>
-                  </div>
-
-                  <div className="overflow-y-auto flex-1">
-                    {notifications.length === 0 ? (
-                      <div className="py-12 text-center">
-                        <Bell size={28} className="mx-auto text-on-surface/15 mb-2" />
-                        <p className="text-sm text-on-surface/35">No notifications yet</p>
-                      </div>
-                    ) : (
-                      notifications.map((n) => {
-                        const Icon = typeIcons[n.type] || Bell
-                        return (
-                          <div
-                            key={n._id}
-                            className={`flex items-start gap-3 px-4 py-3 border-b border-outline-variant/10 transition-colors ${
-                              !n.read ? 'bg-primary/5' : 'hover:bg-surface-container'
-                            }`}
-                            onClick={() => { if (!n.read) markRead(n._id) }}
-                          >
-                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
-                              !n.read ? 'bg-primary-container' : 'bg-surface-container-high'
-                            }`}>
-                              <Icon size={14} className={!n.read ? 'text-on-primary-container' : 'text-on-surface/40'} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className={`text-xs leading-relaxed ${!n.read ? 'font-semibold text-on-surface' : 'text-on-surface/70'}`}>
-                                {n.title}
-                              </p>
-                              {n.body && <p className="text-[11px] text-on-surface/35 mt-0.5">{n.body}</p>}
-                              <p className="text-[10px] text-on-surface/30 mt-1">{timeAgo(n.createdAt)}</p>
-                            </div>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); removeNotification(n._id) }}
-                              className="shrink-0 mt-0.5 p-1 rounded-md text-on-surface/20 hover:text-error hover:bg-error-container/30 transition-colors"
-                            >
-                              <Trash2 size={11} />
-                            </button>
-                          </div>
-                        )
-                      })
                     )}
+                    <button
+                      onClick={() => setNotifOpen(false)}
+                      className="text-[#808a93] hover:text-[#e8eaed] transition-colors"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}
+                    >
+                      <X size={14} />
+                    </button>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+                </div>
 
-          <Link
-            to="/profile"
-            className="press w-9 h-9 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container text-xs font-bold font-display hover:ring-2 hover:ring-primary/40 transition-shadow overflow-hidden"
-          >
-            {user?.avatar ? (
-              <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
-            ) : initials}
-          </Link>
+                {/* List */}
+                <div style={{ overflowY: 'auto', flex: 1 }} className="kick-scrollbar">
+                  {notifications.length === 0 ? (
+                    <div style={{ padding: '40px 16px', textAlign: 'center' }}>
+                      <Bell size={24} color="#3a4048" style={{ margin: '0 auto 8px' }} />
+                      <p style={{ fontSize: 13, color: '#3a4048' }}>No notifications yet</p>
+                    </div>
+                  ) : (
+                    notifications.map((n) => {
+                      const Icon = typeIcons[n.type] || Bell
+                      return (
+                        <div
+                          key={n._id}
+                          onClick={() => { if (!n.read) markRead(n._id) }}
+                          style={{
+                            display: 'flex', alignItems: 'flex-start', gap: 10,
+                            padding: '10px 16px',
+                            borderBottom: '1px solid #2a2d33',
+                            background: !n.read ? 'rgba(83,252,24,0.04)' : 'transparent',
+                            cursor: 'pointer',
+                          }}
+                          className="hover:bg-[#1e2228] transition-colors"
+                        >
+                          <div style={{
+                            width: 32, height: 32, borderRadius: 6,
+                            background: !n.read ? '#1a3a0a' : '#1e2228',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            flexShrink: 0,
+                          }}>
+                            <Icon size={14} color={!n.read ? '#53fc18' : '#808a93'} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{
+                              fontSize: 12, lineHeight: 1.5,
+                              color: !n.read ? '#e8eaed' : '#808a93',
+                              fontWeight: !n.read ? 600 : 400,
+                            }}>{n.title}</p>
+                            {n.body && <p style={{ fontSize: 11, color: '#3a4048', marginTop: 2 }}>{n.body}</p>}
+                            <p style={{ fontSize: 10, color: '#3a4048', marginTop: 4 }}>{timeAgo(n.createdAt)}</p>
+                          </div>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); removeNotification(n._id) }}
+                            className="text-[#3a4048] hover:text-[#ff4f4f] transition-colors"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
+
+        {/* Log in button */}
+        <span
+          className="hidden md:block text-[#e8eaed] text-sm font-medium cursor-pointer hover:text-white transition-colors"
+          style={{ padding: '0 4px' }}
+        >
+          {/* placeholder — user is already logged in */}
+        </span>
+
+        {/* Create Room — volt-green pill (Kick "Sign Up" equivalent) */}
+        <Link
+          to="/dashboard"
+          className="btn-kick press hidden sm:inline-flex"
+          style={{ fontSize: 13, padding: '7px 14px' }}
+        >
+          <Plus size={15} />
+          New Room
+        </Link>
+
+        {/* Avatar */}
+        <Link
+          to="/profile"
+          style={{
+            width: 34, height: 34,
+            borderRadius: '50%',
+            background: '#1a3a0a',
+            border: '2px solid #53fc18',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 12, fontWeight: 700, color: '#53fc18',
+            textDecoration: 'none',
+            overflow: 'hidden',
+            flexShrink: 0,
+            transition: 'box-shadow 0.15s ease',
+          }}
+          className="hover:shadow-[0_0_0_2px_#53fc18] transition-shadow"
+        >
+          {user?.avatar ? (
+            <img src={user.avatar} alt={user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : initials}
+        </Link>
       </div>
     </header>
   )

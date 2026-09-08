@@ -126,6 +126,7 @@ router.get('/', auth, async (req, res) => {
 // Get public rooms
 router.get('/public-rooms', async (req, res) => {
   try {
+    const activeRoomsMap = req.app.get('activeRooms');
     const { subject, search, page = 1 } = req.query;
     const limit = 20;
     const filter = { isPublic: true, isActive: true };
@@ -136,8 +137,21 @@ router.get('/public-rooms', async (req, res) => {
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit);
+
+    const roomsWithLiveStatus = rooms.map((room) => {
+      const roomIdStr = room._id.toString();
+      const activeCount = activeRoomsMap?.get(roomIdStr)?.size || 0;
+      const isLive = activeCount > 0;
+      const rObj = room.toObject();
+      return {
+        ...rObj,
+        activeUsersCount: activeCount,
+        isLive,
+      };
+    });
+
     const total = await Room.countDocuments(filter);
-    res.json({ rooms, total, page: parseInt(page), pages: Math.ceil(total / limit) });
+    res.json({ rooms: roomsWithLiveStatus, total, page: parseInt(page), pages: Math.ceil(total / limit) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

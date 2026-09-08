@@ -5,7 +5,7 @@ import {
   Undo2, Redo2, Zap, ArrowUpRight, Download,
 } from 'lucide-react'
 
-const COLORS = ['#000000', '#e53e3e', '#dd6b20', '#d69e2e', '#38a169', '#3182ce', '#805ad5', '#d53f8c', '#ffffff']
+const COLORS = ['#e8eaed', '#ff4f4f', '#ff9f43', '#ffd32a', '#53fc18', '#3d8bff', '#a78bfa', '#f472b6', '#64748b']
 const STROKE_WIDTHS = [2, 4, 6, 8]
 const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2]
 const LASER_FADE_MS = 1500
@@ -228,7 +228,7 @@ export default function Whiteboard({
   const fileInputRef = useRef(null)
 
   const [activeTool, setActiveTool] = useState('pen')
-  const [color, setColor] = useState('#000000')
+  const [color, setColor] = useState('#e8eaed')
   const [strokeWidth, setStrokeWidth] = useState(4)
   const [zoom, setZoom] = useState(1)
   const [undoStack, setUndoStack] = useState([])
@@ -283,7 +283,7 @@ export default function Whiteboard({
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, cssW, cssH)
-    ctx.fillStyle = '#ffffff'
+    ctx.fillStyle = '#0e0f13'
     ctx.fillRect(0, 0, cssW, cssH)
     ctx.save()
     ctx.translate(panRef.current.x, panRef.current.y)
@@ -777,7 +777,7 @@ export default function Whiteboard({
   ]
 
   return (
-    <div ref={containerRef} className="w-full h-full flex flex-col bg-white">
+    <div ref={containerRef} className="w-full h-full flex flex-col bg-[#0e0f13]">
       {showTextInput && (
         <input
           autoFocus
@@ -785,13 +785,15 @@ export default function Whiteboard({
           onChange={(e) => setTextInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') handleTextSubmit(); if (e.key === 'Escape') setShowTextInput(false) }}
           onBlur={handleTextSubmit}
-          className="absolute z-50 bg-transparent border border-zoom-blue outline-none px-1 py-0.5 text-sm"
+          className="absolute z-50 border border-[#53fc18] outline-none px-2 py-1 rounded text-sm"
           style={{
             left: textPos.x * zoom + panRef.current.x,
             top: textPos.y * zoom + panRef.current.y,
             color,
+            background: 'rgba(14,15,19,0.85)',
             fontSize: `${20 * zoom}px`,
             minWidth: 100,
+            backdropFilter: 'blur(4px)',
           }}
         />
       )}
@@ -859,101 +861,136 @@ export default function Whiteboard({
         />
       </div>
 
+      {/* Bottom Floating Whiteboard Toolbar - Dark Kick Theme */}
       <div
-        className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30
-          flex items-center gap-1 bg-zoom-dark rounded-xl px-2.5 py-1.5 shadow-xl border border-white/8"
+        className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 bg-[#16191e] border border-[#2a2d33] rounded-2xl px-2.5 py-2 shadow-2xl max-w-[95vw] overflow-x-auto touch-pan-x"
+        style={{ backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}
       >
-        <button onClick={handleUndoClick} disabled={!actions.length}
-          title="Undo (Ctrl+Z)"
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
-          <Undo2 size={15} />
-        </button>
-        <button onClick={handleRedoClick} disabled={!redoStack.length}
-          title="Redo (Ctrl+Shift+Z)"
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
-          <Redo2 size={15} />
-        </button>
-
-        <div className="w-px h-5 bg-white/15 mx-0.5" />
-
-        {toolDefs.map(({ key, icon: Icon, label, shortcut }) => (
-          <button key={key} onClick={() => setActiveTool(key)}
-            title={`${label} (${shortcut})`}
-            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
-              activeTool === key ? 'bg-zoom-blue text-white' : 'text-white/60 hover:text-white hover:bg-white/10'
-            }`}>
-            <Icon size={14} />
+        {/* History Controls */}
+        <div className="flex items-center gap-0.5 shrink-0">
+          <button onClick={handleUndoClick} disabled={!actions.length}
+            title="Undo (Ctrl+Z)"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-[#808a93] hover:text-[#e8eaed] hover:bg-[#252b33] transition-all disabled:opacity-25 disabled:cursor-not-allowed shrink-0">
+            <Undo2 size={14} />
           </button>
-        ))}
+          <button onClick={handleRedoClick} disabled={!redoStack.length}
+            title="Redo (Ctrl+Shift+Z)"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-[#808a93] hover:text-[#e8eaed] hover:bg-[#252b33] transition-all disabled:opacity-25 disabled:cursor-not-allowed shrink-0">
+            <Redo2 size={14} />
+          </button>
+        </div>
 
-        <div className="w-px h-5 bg-white/15 mx-0.5" />
+        <div className="w-px h-5 bg-[#2a2d33] mx-1 shrink-0" />
 
-        <div className="flex items-center gap-0.5">
-          {COLORS.map((c) => (
-            <button key={c} onClick={() => setColor(c)} title={c}
-              className={`w-[18px] h-[18px] rounded-full border transition-all ${
-                color === c ? 'border-zoom-blue ring-1 ring-zoom-blue scale-110' : 'border-white/20 hover:border-white/50'
-              }`} style={{ backgroundColor: c }} />
+        {/* Drawing Tools */}
+        <div className="flex items-center gap-0.5 shrink-0">
+          {toolDefs.map(({ key, icon: Icon, label, shortcut }) => (
+            <button key={key} onClick={() => setActiveTool(key)}
+              title={`${label} (${shortcut})`}
+              className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-150 shrink-0 ${
+                activeTool === key
+                  ? 'bg-[#53fc18] text-[#0e0f13] shadow-md shadow-[#53fc18]/20'
+                  : 'text-[#808a93] hover:text-[#e8eaed] hover:bg-[#252b33]'
+              }`}>
+              <Icon size={14} />
+            </button>
           ))}
         </div>
 
+        <div className="w-px h-5 bg-[#2a2d33] mx-1 shrink-0" />
+
+        {/* Color Swatches */}
+        <div className="flex items-center gap-1 shrink-0">
+          {COLORS.map((c) => (
+            <button key={c} onClick={() => setColor(c)} title={c}
+              className={`w-5 h-5 rounded-full border-2 transition-all ${
+                color === c
+                  ? 'border-[#53fc18] scale-125 shadow-md shadow-[#53fc18]/30'
+                  : 'border-transparent hover:border-white/40 hover:scale-110'
+              }`}
+              style={{ backgroundColor: c, outline: c === '#ffffff' ? '1px solid #3a4048' : 'none' }}
+            />
+          ))}
+        </div>
+
+        {/* Stroke Width (only for tools that need it) */}
         {activeTool !== 'laser' && activeTool !== 'text' && activeTool !== 'select' && (
           <>
-            <div className="w-px h-5 bg-white/15 mx-0.5" />
-            <div className="flex items-center gap-0.5">
+            <div className="w-px h-5 bg-[#2a2d33] mx-1 shrink-0" />
+            <div className="flex items-center gap-0.5 shrink-0">
               {STROKE_WIDTHS.map((sw) => (
                 <button key={sw} onClick={() => setStrokeWidth(sw)} title={`${sw}px`}
-                  className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${
-                    strokeWidth === sw ? 'bg-zoom-blue/30 text-zoom-blue' : 'text-white/50 hover:text-white hover:bg-white/10'
+                  className={`w-7 h-7 flex items-center justify-center rounded-lg transition-all ${
+                    strokeWidth === sw
+                      ? 'bg-[#1a3a0a] ring-1 ring-[#53fc18]'
+                      : 'text-[#808a93] hover:bg-[#252b33]'
                   }`}>
-                  <div className="rounded-full bg-current" style={{ width: sw + 2, height: sw + 2 }} />
+                  <div
+                    className="rounded-full"
+                    style={{
+                      width: sw + 2,
+                      height: sw + 2,
+                      backgroundColor: strokeWidth === sw ? '#53fc18' : '#808a93',
+                    }}
+                  />
                 </button>
               ))}
             </div>
           </>
         )}
 
-        <div className="w-px h-5 bg-white/15 mx-0.5" />
+        <div className="w-px h-5 bg-[#2a2d33] mx-1 shrink-0" />
 
-        <button onClick={() => setZoom(z => Math.max(0.1, z - 0.1))} title="Zoom Out (Ctrl+-)"
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors">
-          <Minus size={13} />
-        </button>
-        <span className="text-[10px] text-white/60 font-mono min-w-[36px] text-center select-none">
-          {Math.round(zoom * 100)}%
-        </span>
-        <button onClick={() => setZoom(z => Math.min(3, z + 0.1))} title="Zoom In (Ctrl+=)"
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors">
-          <Plus size={13} />
-        </button>
-
-        <div className="w-px h-5 bg-white/15 mx-0.5" />
-
-        <button onClick={handleExport} title="Export as PNG"
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors">
-          <Download size={13} />
-        </button>
-
-        <input ref={fileInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleImageInsert} />
-        <button onClick={() => fileInputRef.current?.click()} title="Insert Image or PDF"
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
-        </button>
-
-        {onClear && (
-          <button onClick={handleClear} title="Clear Board"
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 hover:text-red-300 hover:bg-white/10 transition-colors">
-            <Trash2 size={13} />
+        {/* Zoom Controls */}
+        <div className="flex items-center gap-0.5 shrink-0">
+          <button onClick={() => setZoom(z => Math.max(0.1, z - 0.1))} title="Zoom Out (Ctrl+-)" 
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-[#808a93] hover:text-[#e8eaed] hover:bg-[#252b33] transition-all shrink-0">
+            <Minus size={12} />
           </button>
-        )}
-
-        {onToggleFullScreen && (
-          <button onClick={onToggleFullScreen} title={fullScreen ? 'Exit Full Screen (Esc)' : 'Full Screen'}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors">
-            {fullScreen ? <Minimize size={13} /> : <Maximize size={13} />}
+          <button
+            onClick={() => { setZoom(1); panRef.current = { x: 0, y: 0 }; renderMain(); }}
+            title="Reset Zoom (Ctrl+0)"
+            className="text-[10px] text-[#808a93] hover:text-[#53fc18] font-mono min-w-[36px] text-center select-none shrink-0 px-1 py-0.5 rounded hover:bg-[#252b33] transition-all"
+          >
+            {Math.round(zoom * 100)}%
           </button>
-        )}
+          <button onClick={() => setZoom(z => Math.min(3, z + 0.1))} title="Zoom In (Ctrl+=)"
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-[#808a93] hover:text-[#e8eaed] hover:bg-[#252b33] transition-all shrink-0">
+            <Plus size={12} />
+          </button>
+        </div>
+
+        <div className="w-px h-5 bg-[#2a2d33] mx-1 shrink-0" />
+
+        {/* Actions */}
+        <div className="flex items-center gap-0.5 shrink-0">
+          <button onClick={handleExport} title="Export as PNG"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-[#808a93] hover:text-[#e8eaed] hover:bg-[#252b33] transition-all shrink-0">
+            <Download size={14} />
+          </button>
+
+          <input ref={fileInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleImageInsert} />
+          <button onClick={() => fileInputRef.current?.click()} title="Insert Image or PDF"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-[#808a93] hover:text-[#e8eaed] hover:bg-[#252b33] transition-all shrink-0">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+          </button>
+
+          {onClear && (
+            <button onClick={handleClear} title="Clear Board"
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-[#ff4f4f] hover:bg-red-500/10 hover:text-red-400 transition-all shrink-0">
+              <Trash2 size={14} />
+            </button>
+          )}
+
+          {onToggleFullScreen && (
+            <button onClick={onToggleFullScreen} title={fullScreen ? 'Exit Full Screen' : 'Full Screen'}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-[#808a93] hover:text-[#53fc18] hover:bg-[#252b33] transition-all shrink-0">
+              {fullScreen ? <Minimize size={14} /> : <Maximize size={14} />}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
 }
+

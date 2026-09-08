@@ -12,13 +12,13 @@ const ICE_SERVERS = {
 };
 
 const SCREEN_VIDEO_ENCODING = {
-  maxBitrate: 15000000,
+  maxBitrate: 30_000_000,   // 30 Mbps — enough for 2K@60fps
   maxFramerate: 60,
-  scaleResolutionDownBy: 1,
+  scaleResolutionDownBy: 1, // never downscale
   networkPriority: 'high',
   priority: 'high',
-  adaptivePtime: true,
-  degradationPreference: 'maintain-resolution',
+  adaptivePtime: false,
+  degradationPreference: 'maintain-framerate',
 };
 
 const AUDIO_ENCODING = {
@@ -337,7 +337,10 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
           if (track.kind === 'video') applyScreenEncoding(existingSender);
           if (track.kind === 'audio') applyAudioEncoding(existingSender);
         } else {
-          pc.addTrack(track, stream);
+          const newSender = pc.addTrack(track, stream);
+          // Apply high-bitrate encoding immediately on the new sender
+          if (track.kind === 'video') applyScreenEncoding(newSender);
+          if (track.kind === 'audio') applyAudioEncoding(newSender);
           renegotiate(remoteId);
         }
       } catch (err) {
@@ -427,9 +430,9 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
     try {
       const disp = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          frameRate: { ideal: 60, max: 120 },
-          width: { ideal: 1920, max: 3840 },
-          height: { ideal: 1080, max: 2160 },
+          frameRate: { ideal: 60, min: 60, max: 120 },
+          width:     { ideal: 2560, max: 3840 },
+          height:    { ideal: 1440, max: 2160 },
           cursor: 'always',
           displaySurface: 'monitor',
         },
@@ -446,6 +449,15 @@ export function useWebRTC(socketRef, roomId, _localUserId) {
 
       const screenTrack = disp.getVideoTracks()[0];
       if (!screenTrack) return null;
+
+      // Hard-lock 60fps after capture (browser may have started lower)
+      try {
+        await screenTrack.applyConstraints({
+          frameRate: { ideal: 60, min: 60 },
+          width:     { ideal: 2560 },
+          height:    { ideal: 1440 },
+        });
+      } catch (_) { /* applyConstraints is best-effort */ }
 
       const dispAudioTrack = disp.getAudioTracks()[0] || null;
 

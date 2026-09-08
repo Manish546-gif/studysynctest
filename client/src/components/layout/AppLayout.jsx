@@ -1,36 +1,54 @@
 import { Outlet, useLocation } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, createContext, useContext } from 'react'
 import TopNavbar from './TopNavbar'
 import Sidebar from './Sidebar'
-import Footer from './Footer'
+
+// Sidebar collapse context — shared between TopNavbar toggle and Sidebar
+export const SidebarContext = createContext({ collapsed: false, setCollapsed: () => {} })
+export const useSidebar = () => useContext(SidebarContext)
 
 export default function AppLayout() {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
   const { pathname } = useLocation()
   const isWorkspace = pathname.startsWith('/workspace')
 
   useEffect(() => {
-    setSidebarOpen(false)
+    setMobileOpen(false)
   }, [pathname])
 
+  const sidebarW = collapsed ? 60 : 240
+
   return (
-    <div className="min-h-screen flex flex-col bg-surface">
-      <TopNavbar
-        onToggleSidebar={() => setSidebarOpen((p) => !p)}
-        sidebarOpen={sidebarOpen}
-      />
+    <SidebarContext.Provider value={{ collapsed, setCollapsed }}>
+      <div className="min-h-screen flex flex-col" style={{ background: '#0e0f13' }}>
+        {/* Fixed 56px top navbar */}
+        <TopNavbar
+          onToggleSidebar={() => setMobileOpen((p) => !p)}
+          sidebarOpen={mobileOpen}
+        />
 
-      <Sidebar
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-      />
+        <div className="flex flex-1" style={{ paddingTop: 56 }}>
+          {/* Sidebar */}
+          <Sidebar
+            open={mobileOpen}
+            onClose={() => setMobileOpen(false)}
+            collapsed={collapsed}
+            onCollapseToggle={() => setCollapsed((p) => !p)}
+          />
 
-      <main id="main-content" className="flex-1 lg:ml-64 pt-16">
-        <div className="min-h-[calc(100vh-4rem)]">
-          <Outlet />
+          {/* Main content shifts with sidebar width */}
+          <main
+            id="main-content"
+            className="flex-1 min-h-[calc(100vh-56px)] transition-all duration-300"
+            style={{
+              marginLeft: typeof window !== 'undefined' && window.innerWidth >= 1024 ? sidebarW : 0,
+            }}
+          >
+            <Outlet />
+          </main>
         </div>
-        {!isWorkspace && <Footer />}
-      </main>
-    </div>
+      </div>
+    </SidebarContext.Provider>
   )
 }

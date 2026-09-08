@@ -28,6 +28,7 @@ router.post('/', auth, async (req, res) => {
 
 router.get('/', auth, async (req, res) => {
   try {
+    const activeRoomsMap = req.app.get('activeRooms');
     const rooms = await Room.find({
       $or: [{ host: req.user._id }, { members: req.user._id }],
     })
@@ -35,7 +36,19 @@ router.get('/', auth, async (req, res) => {
       .populate('members', 'name username email avatar')
       .sort({ updatedAt: -1 });
 
-    res.json({ rooms });
+    const roomsWithLiveStatus = rooms.map((room) => {
+      const roomIdStr = room._id.toString();
+      const activeCount = activeRoomsMap?.get(roomIdStr)?.size || 0;
+      const isLive = activeCount > 0;
+      const rObj = room.toObject();
+      return {
+        ...rObj,
+        activeUsersCount: activeCount,
+        isLive,
+      };
+    });
+
+    res.json({ rooms: roomsWithLiveStatus });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
