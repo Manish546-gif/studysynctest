@@ -53,10 +53,13 @@ import {
   Lock,
   Hash,
   Cog,
+  Music,
+  Palette,
 } from 'lucide-react'
 import { api, getAssetUrl } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
+import { useActiveCall } from '../contexts/ActiveCallContext'
 import { useSocket } from '../hooks/useSocket'
 import { useLiveKit } from '../hooks/useLiveKit'
 import Whiteboard from '../components/whiteboard/Whiteboard'
@@ -78,6 +81,8 @@ import YoutubeWatchPanel from '../components/YoutubeWatchPanel'
 import StickyNotesPanel from '../components/StickyNotesPanel'
 import WaitingRoomPanel from '../components/WaitingRoomPanel'
 import ShortcutOverlay from '../components/ShortcutOverlay'
+import MusicPlayer from '../components/MusicPlayer'
+import ThemePickerModal from '../components/ThemePickerModal'
 import useRoomReactions from '../hooks/useRoomReactions'
 
 const ROOM_TAGS = ['Study', 'Project', 'Review', 'Homework', 'Exam Prep', 'Discussion']
@@ -258,6 +263,7 @@ export default function Workspace() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { toast } = useToast()
+  const { registerSession, updateSession, disconnectActiveCall } = useActiveCall()
   const [room, setRoom] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -311,6 +317,9 @@ export default function Workspace() {
   const [screenSharePickerOpen, setScreenSharePickerOpen] = useState(false)
   const [draggedWaitingId, setDraggedWaitingId] = useState(null)
   const [stageDragActive, setStageDragActive] = useState(false)
+  const [musicOpen, setMusicOpen] = useState(false)
+  const [themePickerOpen, setThemePickerOpen] = useState(false)
+  const [accentColor, setAccentColor] = useState('#53fc18')
   const toastIdRef = useRef(0)
   const pomodoroSessionsRef = useRef(0)
   const sessionStartRef = useRef(Date.now())
@@ -400,6 +409,7 @@ export default function Workspace() {
     emitRoomSetVisibility,
     admitted,
     roomVisibility,
+    explicitDisconnect: explicitDisconnectSocket,
   } = useSocket(roomId)
 
   // Render text with @mentions highlighted
@@ -440,12 +450,34 @@ export default function Workspace() {
     networkQuality,
     connect: connectLiveKit,
     disconnect: disconnectLiveKit,
+    explicitDisconnect: explicitDisconnectLiveKit,
     toggleMic,
     toggleCam,
     toggleScreenShare,
     setPinnedIdentity,
     stopMedia,
   } = useLiveKit(socketRef, roomId, user)
+
+  // Register or update active call session in global context
+  useEffect(() => {
+    if (!roomId) return
+    registerSession({
+      roomId,
+      roomName: room?.name || 'Study Room',
+      roomCode: room?.code || '',
+      roomTag: room?.tag || 'Study',
+      accentColor,
+      isHost: (hostId || room?.host?._id) === user?.id || originalHostId === user?.id,
+      micOn,
+      camOn,
+      toggleMic,
+      toggleCam,
+      disconnect: () => {
+        try { explicitDisconnectLiveKit() } catch {}
+        try { explicitDisconnectSocket() } catch {}
+      },
+    })
+  }, [roomId, room?.name, room?.code, room?.tag, accentColor, hostId, room?.host?._id, user?.id, originalHostId, micOn, camOn, toggleMic, toggleCam, explicitDisconnectLiveKit, explicitDisconnectSocket, registerSession])
 
   // Sync pinned identity with LiveKit subscription management
   // Only sync real participant IDs — skip 'youtube' and 'local' (not LiveKit identities)
@@ -524,6 +556,24 @@ export default function Workspace() {
       socket.off('reaction')
     }
   }, [socketRef])
+
+  // --- Theme sync ---
+  useEffect(() => {
+    if (room?.theme?.accentColor) setAccentColor(room.theme.accentColor)
+  }, [room])
+
+  useEffect(() => {
+    const socket = socketRef.current
+    if (!socket) return
+    const onTheme = ({ accentColor: c }) => {
+      if (c) {
+        setAccentColor(c)
+        toast('Room theme updated', 'info')
+      }
+    }
+    socket.on('room-theme-changed', onTheme)
+    return () => socket.off('room-theme-changed', onTheme)
+  }, [socketRef, toast])
 
   // --- Keyboard shortcuts ---
   useEffect(() => {
@@ -673,6 +723,7 @@ export default function Workspace() {
     try {
       await api.deleteRoom(roomId)
       stopMedia()
+      disconnectActiveCall()
       navigate('/dashboard')
     } catch (err) {
       alert(err.message)
@@ -683,7 +734,7 @@ export default function Workspace() {
   const handleLeaveRoom = () => {
     setLeaveConfirmOpen(false)
     stopMedia()
-    try { disconnectLiveKit() } catch {}
+    disconnectActiveCall()
     toast(`Left room ${room?.name || ''}`.trim() || 'Left room', 'info')
     navigate('/dashboard')
   }
@@ -1370,7 +1421,22 @@ export default function Workspace() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-surface">
+    <div
+      className="flex flex-col h-screen bg-surface transition-colors duration-300"
+      style={{
+        '--theme-accent': accentColor,
+        '--theme-accent-glow': `${accentColor}33`,
+        '--theme-accent-border': `${accentColor}66`,
+      }}
+    >
+      {/* Dynamic theme accent top bar */}
+      <div
+        className="h-[2.5px] w-full shrink-0 transition-colors duration-500 shadow-sm"
+        style={{
+          background: `linear-gradient(90deg, transparent, ${accentColor}, ${accentColor}, transparent)`,
+          boxShadow: `0 0 10px ${accentColor}88`
+        }}
+      />
       <FloatingReactions reactions={floatingReactions} />
       {inviteLinkOpen && (
         <InviteLinkModal
@@ -1386,7 +1452,7 @@ export default function Workspace() {
 
       {/* Top Header */}
       <div className="flex items-center gap-2 px-3 py-2 bg-zoom-dark shrink-0">
-        <button onClick={() => navigate('/dashboard')} className="flex items-center gap-1.5 text-xs text-white/60 hover:text-white transition-colors">
+        <button onClick={() => navigate('/dashboard')} className="flex items-center gap-1.5 text-xs text-white/60 hover:text-white transition-colors" title="Back to dashboard (call stays active in background)">
           <ArrowLeft size={14} />
           <span className="hidden sm:inline">Back</span>
         </button>
@@ -2676,18 +2742,53 @@ export default function Workspace() {
           <SplitSquareHorizontal size={16} />
         </button>
 
+        {/* Music Player Toggle */}
+        <button
+          onClick={() => setMusicOpen(v => !v)}
+          className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
+            musicOpen ? 'text-[#0e0f13] font-bold shadow-md' : 'bg-[#16191e] border border-[#2a2d33] text-[#e8eaed] hover:bg-[#1e2228]'
+          }`}
+          style={musicOpen ? { background: accentColor, boxShadow: `0 0 12px ${accentColor}66` } : {}}
+          title="Study Sound & Music"
+        >
+          <Music size={16} />
+        </button>
+
+        {/* Theme Picker — host only */}
+        {isHost && (
+          <button
+            onClick={() => setThemePickerOpen(v => !v)}
+            className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 border ${
+              themePickerOpen ? 'text-[#0e0f13] font-bold shadow-md' : 'bg-[#16191e] text-[#e8eaed] hover:bg-[#1e2228]'
+            }`}
+            style={{
+              background: themePickerOpen ? accentColor : 'transparent',
+              borderColor: `${accentColor}88`,
+              color: themePickerOpen ? '#0e0f13' : accentColor,
+              boxShadow: themePickerOpen ? `0 0 12px ${accentColor}66` : 'none',
+            }}
+            title={`Room Theme (${accentColor})`}
+          >
+            <Palette size={16} />
+          </button>
+        )}
+
         <div className="relative">
           <button
             onClick={() => { setToolsOpen((v) => !v); setPomodoroOpen(false); setRecorderOpen(false); setFilePreviewOpen(false); setSettingsOpen(false); }}
             className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 ${
-              toolsOpen ? 'bg-[#53fc18] text-[#0e0f13] font-bold' : 'bg-[#16191e] border border-[#2a2d33] text-[#e8eaed] hover:bg-[#1e2228]'
+              toolsOpen ? 'text-[#0e0f13] font-bold' : 'bg-[#16191e] border border-[#2a2d33] text-[#e8eaed] hover:bg-[#1e2228]'
             }`}
+            style={toolsOpen ? { background: accentColor } : {}}
             title="Polls, To-dos & Agenda"
           >
             <ListChecks size={16} />
           </button>
           {Object.keys(raisedHands).length > 0 && (
-            <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-[#53fc18] text-black text-[9px] font-extrabold flex items-center justify-center shadow">
+            <span
+              className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full text-black text-[9px] font-extrabold flex items-center justify-center shadow"
+              style={{ background: accentColor }}
+            >
               {Object.keys(raisedHands).length}
             </span>
           )}
@@ -2715,6 +2816,36 @@ export default function Workspace() {
       </div>
     </div>
 
-    </div>
+    {/* ── Music Player ─────────────────────────────────────── */}
+    <AnimatePresence>
+      <MusicPlayer
+        isOpen={musicOpen}
+        onToggle={() => setMusicOpen(v => !v)}
+        socket={socketRef.current}
+        roomId={room?._id || roomId}
+        isHost={isHost}
+      />
+    </AnimatePresence>
+
+    {/* ── Theme Picker ─────────────────────────────────────── */}
+    <AnimatePresence>
+      {themePickerOpen && (
+        <ThemePickerModal
+          isOpen={themePickerOpen}
+          onClose={(newColor) => {
+            setThemePickerOpen(false)
+            if (newColor) {
+              setAccentColor(newColor)
+              toast(`Theme applied: ${newColor}`, 'success')
+            }
+          }}
+          roomId={room?._id || roomId}
+          currentColor={accentColor}
+          socket={socketRef.current}
+        />
+      )}
+    </AnimatePresence>
+
+  </div>
   )
 }

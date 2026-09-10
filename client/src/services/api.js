@@ -231,4 +231,26 @@ export const api = {
     const q = new URLSearchParams(params).toString()
     return request(`/stats/public-rooms?${q}`)
   },
+
+  // Room Theme
+  setRoomTheme: (roomId, accentColor) => request(`/rooms/${roomId}/theme`, { method: 'PUT', body: JSON.stringify({ accentColor }) }),
+
+  // Friends
+  getFriends: () => request('/friends'),
+  searchFriends: (q) => request(`/friends/search?q=${encodeURIComponent(q)}`),
+  sendFriendRequest: (userId) => request(`/friends/request/${userId}`, { method: 'POST' }),
+  acceptFriendRequest: (userId) => request(`/friends/accept/${userId}`, { method: 'POST' }),
+  declineFriendRequest: (userId) => request(`/friends/decline/${userId}`, { method: 'POST' }),
+  unfriend: (userId) => request(`/friends/${userId}`, { method: 'DELETE' }),
+
+  // Scheduled Sessions
+  getSessions: () => request('/sessions'),
+  getUpcomingSessions: () => request('/sessions/upcoming'),
+  createSession: (body) => request('/sessions', { method: 'POST', body: JSON.stringify(body) }),
+  updateSession: (id, body) => request(`/sessions/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteSession: (id) => request(`/sessions/${id}`, { method: 'DELETE' }),
+
+  // Music API
+  searchMusic: (q, limit = 25) => request(`/music/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+  getTrendingMusic: (category = 'lofi') => request(`/music/trending?category=${encodeURIComponent(category)}`),
 };

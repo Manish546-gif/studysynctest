@@ -104,6 +104,9 @@ const roomSchema = new mongoose.Schema({
   locked: { type: Boolean, default: false },
   spotlightedUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   mutedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  theme: {
+    accentColor: { type: String, default: '#53fc18' },
+  },
 }, { timestamps: true });
 
 roomSchema.index({ host: 1 });

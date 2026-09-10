@@ -6,6 +6,39 @@ import {
   VideoPresets,
 } from 'livekit-client';
 
+// Global persistent active session
+const activeLiveKitSession = {
+  roomId: null,
+  room: null,
+  isExplicitLeave: false,
+};
+
+export function getActiveLiveKitRoom() {
+  return activeLiveKitSession.room;
+}
+
+export function explicitDisconnectLiveKit() {
+  console.log('[LiveKit] explicitDisconnectLiveKit triggered');
+  activeLiveKitSession.isExplicitLeave = true;
+  if (activeLiveKitSession.room) {
+    try {
+      activeLiveKitSession.room.disconnect();
+    } catch (e) {
+      console.warn('[LiveKit] disconnect error:', e);
+    }
+    activeLiveKitSession.room = null;
+    activeLiveKitSession.roomId = null;
+  }
+  if (typeof document !== 'undefined') {
+    document.querySelectorAll('[data-livekit-audio]').forEach((el) => {
+      try {
+        el.pause?.();
+        el.remove();
+      } catch {}
+    });
+  }
+}
+
 function buildMediaStream(tracks) {
   const mediaTracks = tracks
     .filter((t) => t && t.mediaStreamTrack)
@@ -24,6 +57,40 @@ const isMobileDevice = () => {
     (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
 };
 
+function attachAudioTrackToDOM(track, identity) {
+  if (!track || track.kind !== Track.Kind.Audio || typeof document === 'undefined') return;
+  try {
+    let el = document.querySelector(`audio[data-livekit-audio="${identity}"]`);
+    if (!el) {
+      el = track.attach();
+      el.setAttribute('data-livekit-audio', identity);
+      el.autoplay = true;
+      el.playsInline = true;
+      el.style.display = 'none';
+      document.body.appendChild(el);
+      el.play().catch(() => {});
+    }
+  } catch (e) {
+    console.warn('[LiveKit] attachAudioTrackToDOM error:', e);
+  }
+}
+
+function removeAudioTrackFromDOM(track, identity) {
+  if (typeof document === 'undefined') return;
+  try {
+    if (track) {
+      try { track.detach(); } catch {}
+    }
+    const elements = document.querySelectorAll(`audio[data-livekit-audio="${identity}"]`);
+    elements.forEach((el) => {
+      try {
+        el.pause?.();
+        el.remove();
+      } catch {}
+    });
+  } catch (e) {}
+}
+
 function subscribeToAllTracks(room, video = false) {
   if (!room) return;
   const participants = room.remoteParticipants;
@@ -31,6 +98,9 @@ function subscribeToAllTracks(room, video = false) {
   participants.forEach((p) => {
     if (!p.trackPublications) return;
     p.trackPublications.forEach((pub) => {
+      if (pub.track && pub.track.kind === Track.Kind.Audio) {
+        attachAudioTrackToDOM(pub.track, p.identity);
+      }
       if (pub.isSubscribed || pub.track) return;
       const isVideo = pub.source === Track.Source.Camera;
       if (isVideo && !video) return;
@@ -216,9 +286,122 @@ export function useLiveKit(socketRef, roomId, user) {
     setScreenStream(tracks.length > 0 ? buildMediaStream(tracks) : null);
   }, []);
 
+  const attachRoomListeners = useCallback((room) => {
+    if (!room) return;
+    // Remove previous listeners if any to avoid duplicate handlers
+    room.removeAllListeners();
+
+    room.on(RoomEvent.Connected, () => {
+      logTag('CONNECTED');
+      connectedRef.current = true;
+    });
+
+    room.on(RoomEvent.NetworkQualityChanged, (quality, prevQuality) => {
+      logTag('NetworkQuality:', quality, 'prev:', prevQuality);
+      setNetworkQuality(quality);
+    });
+
+    room.on(RoomEvent.ParticipantConnected, (participant) => {
+      logTag('participant joined:', participant.identity);
+      setTimeout(() => {
+        subscribeToAllTracks(room);
+        rebuildParticipant(participant);
+      }, 500);
+    });
+
+    room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+      logTag('participant left:', participant.identity);
+      removeAudioTrackFromDOM(null, participant.identity);
+      setRemoteStreams((prev) => { const n = { ...prev }; delete n[participant.identity]; return n; });
+      setRemoteScreenStreams((prev) => { const n = { ...prev }; delete n[participant.identity]; return n; });
+    });
+
+    room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
+      logTag('TrackSubscribed:', track.kind, 'from', participant.identity, 'source:', pub.source);
+      if (track.kind === Track.Kind.Audio) {
+        attachAudioTrackToDOM(track, participant.identity);
+      }
+      rebuildParticipant(participant);
+    });
+
+    room.on(RoomEvent.TrackUnsubscribed, (track, pub, participant) => {
+      logTag('TrackUnsubscribed:', track.kind, 'from', participant.identity, 'source:', pub.source);
+      if (track.kind === Track.Kind.Audio) {
+        removeAudioTrackFromDOM(track, participant.identity);
+      }
+      rebuildParticipant(participant);
+    });
+
+    room.on(RoomEvent.LocalTrackPublished, (pub) => {
+      logTag('LocalTrackPublished:', pub.source, 'simulcast layers:', pub.simulcastLayers?.length || 0);
+      if (pub.source === Track.Source.Camera || pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) {
+        rebuildLocalStream();
+        rebuildLocalScreen();
+      }
+    });
+
+    room.on(RoomEvent.LocalTrackUnpublished, (pub) => {
+      logTag('LocalTrackUnpublished:', pub.source);
+      if (pub.source === Track.Source.Camera) {
+        setLocalStream(null);
+      } else if (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) {
+        setScreenStream(null);
+      }
+    });
+
+    room.on(RoomEvent.Disconnected, () => {
+      logTag('disconnected');
+      connectedRef.current = false;
+      roomRef.current = null;
+      activeLiveKitSession.room = null;
+      activeLiveKitSession.roomId = null;
+      setLocalStream(null);
+      setRemoteStreams({});
+      setRemoteScreenStreams({});
+      setMicOn(false);
+      setCamOn(false);
+      setScreenSharing(false);
+      setScreenStream(null);
+    });
+  }, [rebuildParticipant, rebuildLocalStream, rebuildLocalScreen]);
+
+  // If there is an already connected room for this roomId, reuse it immediately
+  useEffect(() => {
+    if (activeLiveKitSession.room && activeLiveKitSession.roomId === roomId && activeLiveKitSession.room.state === 'connected') {
+      logTag('Reusing existing active LiveKit room for:', roomId);
+      const room = activeLiveKitSession.room;
+      roomRef.current = room;
+      connectedRef.current = true;
+      activeLiveKitSession.isExplicitLeave = false;
+      attachRoomListeners(room);
+      subscribeToAllTracks(room);
+      rebuild();
+      rebuildLocalStream();
+      rebuildLocalScreen();
+      const micPub = room.localParticipant?.getTrackPublication(Track.Source.Microphone);
+      setMicOn(!!micPub && !micPub.isMuted);
+      const camPub = room.localParticipant?.getTrackPublication(Track.Source.Camera);
+      setCamOn(!!camPub && !camPub.isMuted);
+    } else if (activeLiveKitSession.room && activeLiveKitSession.roomId && activeLiveKitSession.roomId !== roomId) {
+      explicitDisconnectLiveKit();
+    }
+  }, [roomId, rebuild, rebuildLocalStream, rebuildLocalScreen, attachRoomListeners]);
+
   const connect = useCallback(async (token, url) => {
-    if (roomRef.current) {
+    if (roomRef.current && connectedRef.current) {
       logTag('already connected, skipping');
+      return;
+    }
+
+    if (activeLiveKitSession.room && activeLiveKitSession.roomId === roomId && activeLiveKitSession.room.state === 'connected') {
+      logTag('already connected in active session, re-binding');
+      roomRef.current = activeLiveKitSession.room;
+      connectedRef.current = true;
+      attachRoomListeners(roomRef.current);
+      subscribeToAllTracks(roomRef.current);
+      rebuild();
+      rebuildLocalStream();
+      rebuildLocalScreen();
       return;
     }
 
@@ -279,61 +462,34 @@ export function useLiveKit(socketRef, roomId, user) {
       },
     });
 
-    room.on(RoomEvent.Connected, () => {
-      logTag('CONNECTED');
-      connectedRef.current = true;
-    });
+    attachRoomListeners(room);
 
-    room.on(RoomEvent.NetworkQualityChanged, (quality, prevQuality) => {
-      logTag('NetworkQuality:', quality, 'prev:', prevQuality);
-      setNetworkQuality(quality);
-    });
+    roomRef.current = room;
 
-    room.on(RoomEvent.ParticipantConnected, (participant) => {
-      logTag('participant joined:', participant.identity);
-      setTimeout(() => {
-        subscribeToAllTracks(room);
-        rebuildParticipant(participant);
-      }, 500);
-    });
+    await room.connect(serverUrl, token, { autoSubscribe: true });
+    logTag('room.connect() resolved');
 
-    room.on(RoomEvent.ParticipantDisconnected, (participant) => {
-      logTag('participant left:', participant.identity);
-      setRemoteStreams((prev) => { const n = { ...prev }; delete n[participant.identity]; return n; });
-      setRemoteScreenStreams((prev) => { const n = { ...prev }; delete n[participant.identity]; return n; });
-    });
+    activeLiveKitSession.room = room;
+    activeLiveKitSession.roomId = roomId;
+    activeLiveKitSession.isExplicitLeave = false;
 
-    room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
-      logTag('TrackSubscribed:', track.kind, 'from', participant.identity, 'source:', pub.source);
-      rebuildParticipant(participant);
-    });
+    subscribeToAllTracks(room);
+    rebuild();
 
-    room.on(RoomEvent.TrackUnsubscribed, (track, pub, participant) => {
-      logTag('TrackUnsubscribed:', track.kind, 'from', participant.identity, 'source:', pub.source);
-      rebuildParticipant(participant);
-    });
+    const names = [...(room.remoteParticipants?.keys() || [])];
+    logTag('existing participants:', names.join(', ') || 'none');
+  }, [roomId, rebuild, rebuildLocalStream, rebuildLocalScreen, attachRoomListeners]);
 
-    room.on(RoomEvent.LocalTrackPublished, (pub) => {
-      logTag('LocalTrackPublished:', pub.source, 'simulcast layers:', pub.simulcastLayers?.length || 0);
-      if (pub.source === Track.Source.Camera || pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) {
-        rebuildLocalStream();
-        rebuildLocalScreen();
-      }
-    });
-
-    room.on(RoomEvent.LocalTrackUnpublished, (pub) => {
-      logTag('LocalTrackUnpublished:', pub.source);
-      if (pub.source === Track.Source.Camera) {
-        setLocalStream(null);
-      } else if (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) {
-        setScreenStream(null);
-      }
-    });
-
-    room.on(RoomEvent.Disconnected, () => {
-      logTag('disconnected');
-      connectedRef.current = false;
+  const disconnect = useCallback((isExplicit = false) => {
+    if (isExplicit) {
+      explicitDisconnectLiveKit();
+    }
+    if (roomRef.current && isExplicit) {
+      try { roomRef.current.disconnect(); } catch {}
       roomRef.current = null;
+    }
+    if (isExplicit) {
+      connectedRef.current = false;
       setLocalStream(null);
       setRemoteStreams({});
       setRemoteScreenStreams({});
@@ -341,33 +497,7 @@ export function useLiveKit(socketRef, roomId, user) {
       setCamOn(false);
       setScreenSharing(false);
       setScreenStream(null);
-    });
-
-    roomRef.current = room;
-
-    await room.connect(serverUrl, token, { autoSubscribe: true });
-    logTag('room.connect() resolved');
-
-    subscribeToAllTracks(room);
-    rebuild();
-
-    const names = [...(room.remoteParticipants?.keys() || [])];
-    logTag('existing participants:', names.join(', ') || 'none');
-  }, [rebuild, rebuildParticipant, rebuildLocalStream, rebuildLocalScreen]);
-
-  const disconnect = useCallback(() => {
-    if (roomRef.current) {
-      roomRef.current.disconnect();
-      roomRef.current = null;
     }
-    connectedRef.current = false;
-    setLocalStream(null);
-    setRemoteStreams({});
-    setRemoteScreenStreams({});
-    setMicOn(false);
-    setCamOn(false);
-    setScreenSharing(false);
-    setScreenStream(null);
   }, []);
 
   const toggleMic = useCallback(async () => {
@@ -548,8 +678,14 @@ export function useLiveKit(socketRef, roomId, user) {
   }, []);
 
   useEffect(() => {
-    return () => disconnect();
-  }, [disconnect]);
+    return () => {
+      if (activeLiveKitSession.room && activeLiveKitSession.roomId === roomId && !activeLiveKitSession.isExplicitLeave) {
+        logTag('Workspace unmounted, preserving active call in background for room:', roomId);
+      } else {
+        disconnect(true);
+      }
+    };
+  }, [roomId, disconnect]);
 
   return {
     localStream,
@@ -565,6 +701,7 @@ export function useLiveKit(socketRef, roomId, user) {
     networkQuality,
     connect,
     disconnect,
+    explicitDisconnect: explicitDisconnectLiveKit,
     toggleMic,
     toggleCam,
     toggleScreenShare,

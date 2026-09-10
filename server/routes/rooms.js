@@ -1,8 +1,30 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const Room = require('../models/Room');
 const User = require('../models/User');
 const auth = require('../middleware/auth');
+
+const findRoomByIdOrCode = async (idOrCode) => {
+  if (!idOrCode) return null;
+  const str = String(idOrCode).trim();
+  if (mongoose.Types.ObjectId.isValid(str)) {
+    const room = await Room.findById(str);
+    if (room) return room;
+  }
+  return Room.findOne({ code: str.toUpperCase() });
+};
+
+const findPopulatedRoom = async (idOrCode) => {
+  if (!idOrCode) return null;
+  const str = String(idOrCode).trim();
+  const query = mongoose.Types.ObjectId.isValid(str)
+    ? { _id: str }
+    : { code: str.toUpperCase() };
+  return Room.findOne(query)
+    .populate('host', 'name username email avatar')
+    .populate('members', 'name username email avatar');
+};
 
 router.post('/', auth, async (req, res) => {
   try {
@@ -56,10 +78,7 @@ router.get('/', auth, async (req, res) => {
 
 router.get('/:id', auth, async (req, res) => {
   try {
-    const room = await Room.findById(req.params.id)
-      .populate('host', 'name username email avatar')
-      .populate('members', 'name username email avatar');
-
+    const room = await findPopulatedRoom(req.params.id);
     if (!room) return res.status(404).json({ error: 'Room not found' });
     res.json({ room });
   } catch (err) {
@@ -72,7 +91,7 @@ router.post('/:id/invite', auth, async (req, res) => {
     const { username } = req.body;
     if (!username) return res.status(400).json({ error: 'Username is required' });
 
-    const room = await Room.findById(req.params.id);
+    const room = await findRoomByIdOrCode(req.params.id);
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
     if (room.host.toString() !== req.user._id.toString()) {
@@ -104,7 +123,7 @@ router.post('/:id/invite', auth, async (req, res) => {
 
 router.post('/:id/join', auth, async (req, res) => {
   try {
-    const room = await Room.findById(req.params.id);
+    const room = await findRoomByIdOrCode(req.params.id);
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
     if (!room.members.includes(req.user._id)) {
@@ -121,7 +140,7 @@ router.post('/:id/join', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const room = await Room.findById(req.params.id);
+    const room = await findRoomByIdOrCode(req.params.id);
     if (!room) return res.status(404).json({ error: 'Room not found' });
     if (room.host.toString() !== req.user._id.toString()) {
       return res.status(403).json({ error: 'Only the host can update this room' });
@@ -146,14 +165,33 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const room = await Room.findById(req.params.id);
+    const room = await findRoomByIdOrCode(req.params.id);
     if (!room) return res.status(404).json({ error: 'Room not found' });
     if (room.host.toString() !== req.user._id.toString()) {
       return res.status(403).json({ error: 'Only the host can delete this room' });
     }
 
-    await Room.findByIdAndDelete(req.params.id);
+    await Room.findByIdAndDelete(room._id);
     res.json({ message: 'Room deleted' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/:id/theme', auth, async (req, res) => {
+  try {
+    const room = await findRoomByIdOrCode(req.params.id);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    if (room.host.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: 'Only the host can change the theme' });
+    }
+    const { accentColor } = req.body;
+    if (!accentColor || !/^#[0-9a-fA-F]{6}$/.test(accentColor)) {
+      return res.status(400).json({ error: 'Invalid accent color (must be hex, e.g. #53fc18)' });
+    }
+    room.theme = { accentColor };
+    await room.save();
+    res.json({ theme: room.theme, success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

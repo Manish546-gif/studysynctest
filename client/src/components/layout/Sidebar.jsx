@@ -3,9 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Home, Compass, Heart, Users, Settings,
   LogOut, ChevronDown, ChevronRight, Zap, History,
-  Calendar, PenTool, BarChart3, BookOpen, Hash, Volume2, Plus, Video, Radio, Mic
+  Calendar, PenTool, BarChart3, BookOpen, Hash, Volume2, Plus, Video, Radio, Mic,
+  MicOff, PhoneOff, Maximize2, ExternalLink, Music
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
+import { useActiveCall } from '../../contexts/ActiveCallContext'
 import { useState, useEffect } from 'react'
 import { api } from '../../services/api'
 
@@ -43,6 +45,7 @@ const BOTTOM_NAV = [
 function SidebarContent({ onClose, collapsed }) {
   const { pathname } = useLocation()
   const { user, logout } = useAuth()
+  const { activeCall, isInRoomWorkspace, toggleMic, disconnectActiveCall, returnToCall } = useActiveCall()
   const navigate = useNavigate()
   const [rooms, setRooms] = useState([])
   const [expandedRooms, setExpandedRooms] = useState({})
@@ -370,6 +373,221 @@ function SidebarContent({ onClose, collapsed }) {
           )
         })}
       </div>
+
+      {/* ── Discord-Style Active Room Call Bar ───────────────── */}
+      {activeCall && !isInRoomWorkspace && (
+        <div
+          style={{
+            margin: collapsed ? '0 6px 8px' : '0 8px 8px',
+            background: '#13161c',
+            border: '1px solid #1f2d1e',
+            borderLeft: '3px solid #53fc18',
+            borderRadius: 10,
+            overflow: 'hidden',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          {collapsed ? (
+            /* Collapsed sidebar: compact vertical pill */
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 0', gap: 6 }}>
+              <button
+                onClick={returnToCall}
+                title={`Voice Connected: ${activeCall.roomName} (Click to return)`}
+                style={{
+                  position: 'relative',
+                  width: 34, height: 34, borderRadius: 8,
+                  background: '#1a3a0a',
+                  border: '1px solid #53fc18',
+                  color: '#53fc18',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer',
+                }}
+              >
+                <Volume2 size={16} />
+                <span style={{
+                  position: 'absolute', top: -3, right: -3,
+                  width: 8, height: 8, borderRadius: '50%',
+                  background: '#53fc18',
+                  boxShadow: '0 0 6px #53fc18',
+                }} className="animate-pulse" />
+              </button>
+              <button
+                onClick={toggleMic}
+                title={activeCall.micOn ? 'Mute microphone' : 'Unmute microphone'}
+                style={{
+                  width: 28, height: 28, borderRadius: 6,
+                  background: activeCall.micOn ? 'rgba(83, 252, 24, 0.15)' : 'rgba(255, 79, 79, 0.15)',
+                  border: `1px solid ${activeCall.micOn ? 'rgba(83, 252, 24, 0.3)' : 'rgba(255, 79, 79, 0.3)'}`,
+                  color: activeCall.micOn ? '#53fc18' : '#ff4f4f',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer',
+                }}
+              >
+                {activeCall.micOn ? <Mic size={13} /> : <MicOff size={13} />}
+              </button>
+              <button
+                onClick={disconnectActiveCall}
+                title="Disconnect call"
+                style={{
+                  width: 28, height: 28, borderRadius: 6,
+                  background: 'rgba(255, 79, 79, 0.2)',
+                  border: '1px solid rgba(255, 79, 79, 0.4)',
+                  color: '#ff4f4f',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer',
+                }}
+              >
+                <PhoneOff size={13} />
+              </button>
+            </div>
+          ) : (
+            /* Expanded sidebar: Full Discord-style Voice Card */
+            <div style={{ padding: '8px 10px' }}>
+              {/* Top row: connection status & disconnect button */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{
+                    width: 7, height: 7, borderRadius: '50%',
+                    background: '#53fc18',
+                    boxShadow: '0 0 8px #53fc18',
+                  }} className="animate-pulse" />
+                  <div>
+                    <p style={{
+                      fontSize: 11, fontWeight: 700, color: '#53fc18',
+                      lineHeight: 1.2, letterSpacing: '0.02em',
+                    }}>
+                      Voice Connected
+                    </p>
+                    <p style={{ fontSize: 9, color: '#808a93', lineHeight: 1 }}>
+                      RTC Connected / StudySync
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={disconnectActiveCall}
+                  title="Disconnect from room"
+                  style={{
+                    width: 24, height: 24, borderRadius: 6,
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#808a93',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                  className="hover:bg-[#3a0a0a] hover:text-[#ff4f4f]"
+                >
+                  <PhoneOff size={14} />
+                </button>
+              </div>
+
+              {/* Middle row: Room Name - Click to return */}
+              <div
+                onClick={returnToCall}
+                title="Click to return to room workspace"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 7,
+                  padding: '6px 8px',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  margin: '4px 0 6px',
+                  transition: 'background 0.15s, border-color 0.15s',
+                }}
+                className="hover:bg-[#1a2517] hover:border-[#53fc18]/40 group"
+              >
+                <Volume2 size={14} style={{ color: '#53fc18', flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{
+                    fontSize: 12, fontWeight: 600, color: '#e8eaed',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {activeCall.roomName}
+                  </p>
+                  <span style={{ fontSize: 10, color: '#808a93' }}>
+                    Click to open room
+                  </span>
+                </div>
+                <ExternalLink
+                  size={12}
+                  style={{ color: '#808a93', opacity: 0.7 }}
+                  className="group-hover:text-[#53fc18] group-hover:opacity-100 transition-colors"
+                />
+              </div>
+
+              {/* Music playing indicator in room */}
+              {activeCall.currentMusicTitle && (
+                <div
+                  onClick={returnToCall}
+                  title={`Playing: ${activeCall.currentMusicTitle}`}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '4px 8px',
+                    background: 'rgba(83, 252, 24, 0.08)',
+                    border: '1px solid rgba(83, 252, 24, 0.2)',
+                    borderRadius: 6,
+                    marginBottom: 6,
+                    cursor: 'pointer',
+                  }}
+                  className="hover:bg-[#1f3a14] transition-colors"
+                >
+                  <Music size={12} style={{ color: '#53fc18', flexShrink: 0 }} className={activeCall.isMusicPlaying ? 'animate-pulse' : ''} />
+                  <span style={{
+                    fontSize: 10, color: '#53fc18', fontWeight: 600,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {activeCall.currentMusicTitle}
+                  </span>
+                </div>
+              )}
+
+              {/* Bottom controls: Mic toggle & Return button */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  onClick={toggleMic}
+                  style={{
+                    flex: 1,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                    padding: '4px 8px',
+                    borderRadius: 6,
+                    background: activeCall.micOn ? 'rgba(83, 252, 24, 0.12)' : 'rgba(255, 79, 79, 0.12)',
+                    border: `1px solid ${activeCall.micOn ? 'rgba(83, 252, 24, 0.25)' : 'rgba(255, 79, 79, 0.25)'}`,
+                    color: activeCall.micOn ? '#53fc18' : '#ff4f4f',
+                    fontSize: 11, fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                  title={activeCall.micOn ? 'Mute mic' : 'Unmute mic'}
+                >
+                  {activeCall.micOn ? <Mic size={12} /> : <MicOff size={12} />}
+                  <span>{activeCall.micOn ? 'Mute' : 'Unmuted'}</span>
+                </button>
+
+                <button
+                  onClick={returnToCall}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                    padding: '4px 10px',
+                    borderRadius: 6,
+                    background: '#53fc18',
+                    border: 'none',
+                    color: '#0e0f13',
+                    fontSize: 11, fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'opacity 0.15s',
+                  }}
+                  className="hover:opacity-90"
+                >
+                  <span>Return</span>
+                  <Maximize2 size={11} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Bottom: user card ───────────────────────────────── */}
       <div style={{

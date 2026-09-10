@@ -23,6 +23,12 @@ const userSchema = new mongoose.Schema({
   avatar: { type: String, default: '' },
   googleId: { type: String, default: '' },
   rooms: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Room' }],
+  friends: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  friendRequests: [{
+    from: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    sentAt: { type: Date, default: Date.now },
+  }],
+  sentRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 }, { timestamps: true });
 
 userSchema.pre('save', async function () {

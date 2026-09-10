@@ -2,13 +2,14 @@ import { useEffect, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Bell, Plus, Menu, X, Search, CheckCheck, Trash2,
-  Users, Upload, PenTool, MessageSquare, Zap, Globe,
+  Users, Upload, PenTool, MessageSquare, Zap, Globe, UserPlus,
   ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useNotifications } from '../../contexts/NotificationContext'
 import { useSidebar } from './AppLayout'
+import FriendsPanel from '../FriendsPanel'
 
 const typeIcons = {
   room_joined: Users,
@@ -35,6 +36,8 @@ export default function TopNavbar({ onToggleSidebar, sidebarOpen }) {
   const { notifications, unreadCount, markRead, markAllRead, removeNotification } = useNotifications()
   const { collapsed, setCollapsed } = useSidebar()
   const [notifOpen, setNotifOpen] = useState(false)
+  const [friendsOpen, setFriendsOpen] = useState(false)
+  const [pendingRequests, setPendingRequests] = useState(0)
   const [searchVal, setSearchVal] = useState('')
   const dropdownRef = useRef(null)
   const initials = user?.name
@@ -56,6 +59,7 @@ export default function TopNavbar({ onToggleSidebar, sidebarOpen }) {
   }
 
   return (
+    <>
     <header
       style={{
         position: 'fixed',
@@ -153,6 +157,18 @@ export default function TopNavbar({ onToggleSidebar, sidebarOpen }) {
 
       {/* ── Right: actions ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+        {/* Friends */}
+        <button
+          onClick={() => setFriendsOpen(f => !f)}
+          className="hidden md:flex items-center justify-center w-9 h-9 rounded-md text-[#808a93] hover:text-[#e8eaed] hover:bg-[#1e2228] transition-colors relative"
+          title="Friends"
+        >
+          <Users size={18} />
+          {pendingRequests > 0 && (
+            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#53fc18] border border-[#0e0f13]" />
+          )}
+        </button>
+
         {/* Globe (public rooms) */}
         <Link
           to="/"
@@ -328,5 +344,16 @@ export default function TopNavbar({ onToggleSidebar, sidebarOpen }) {
         </Link>
       </div>
     </header>
+
+    <AnimatePresence>
+      {friendsOpen && (
+        <FriendsPanel
+          isOpen={friendsOpen}
+          onClose={() => setFriendsOpen(false)}
+          socket={null}
+        />
+      )}
+    </AnimatePresence>
+    </>
   )
 }

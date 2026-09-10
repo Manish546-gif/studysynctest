@@ -24,7 +24,39 @@ const notificationRoutes = require('./routes/notifications');
 const flashcardRoutes = require('./routes/flashcards');
 const statsRoutes = require('./routes/stats');
 const livekitRoutes = require('./routes/livekit');
+const friendsRoutes = require('./routes/friends');
+const sessionsRoutes = require('./routes/sessions');
+const musicRoutes = require('./routes/music');
 const { setSocketIO, notify } = require('./notify');
+const rateLimit = require('express-rate-limit');
+
+// ── Rate Limiters ────────────────────────────────────────────────────────────
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts, please try again in 15 minutes.' },
+});
+
+const roomCreateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Room creation limit reached. Try again in an hour.' },
+  keyGenerator: (req) => req.headers.authorization || req.ip,
+});
+
+const fileUploadLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'File upload limit reached. Try again in an hour.' },
+  keyGenerator: (req) => req.headers.authorization || req.ip,
+});
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function ensureUserUsername(user) {
   if (!user || (user.username && user.username.trim())) return user;
@@ -70,7 +102,7 @@ setSocketIO(io);
 app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: '10mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/giphy', giphyRoutes);
 app.use('/api/rooms', roomRoutes);
@@ -81,6 +113,9 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/flashcards', flashcardRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/livekit', livekitRoutes);
+app.use('/api/friends', friendsRoutes);
+app.use('/api/sessions', sessionsRoutes);
+app.use('/api/music', musicRoutes);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const clientBuild = path.join(__dirname, '..', 'client', 'dist');
@@ -120,6 +155,8 @@ const activeRooms = new Map();
 app.set('activeRooms', activeRooms);
 // roomId -> Map(userId -> userName) of active screen sharers
 const roomScreenShares = new Map();
+// roomId -> synchronized music state
+const roomMusicState = new Map();
 
 function setScreenShareState(roomId, userId, userName, sharing) {
   if (!roomScreenShares.has(roomId)) {
@@ -229,6 +266,19 @@ io.on('connection', (socket) => {
       socket.emit('todo-state', room.todos || []);
       socket.emit('agenda-state', room.agenda || []);
       socket.emit('sticky-state', { notes: room.stickyNotes || [] });
+
+      // Synchronize active music playback for joining / returning user
+      const currentMusic = roomMusicState.get(roomId);
+      if (currentMusic && (currentMusic.track || currentMusic.stationId)) {
+        let currentSec = currentMusic.pauseOffset || 0;
+        if (currentMusic.playing && currentMusic.startedAt) {
+          currentSec = Math.max(0, (Date.now() - currentMusic.startedAt) / 1000);
+        }
+        socket.emit('music-sync', {
+          ...currentMusic,
+          currentTime: currentSec,
+        });
+      }
 
       // Late joiners screen-share state
       const shares = roomScreenShares.get(roomId);
@@ -1414,6 +1464,123 @@ io.on('connection', (socket) => {
       }
     }
     console.log(`User disconnected: ${socket.user.name}`);
+  });
+
+  // ── Room Theme ──────────────────────────────────────────────────────────────
+  socket.on('set-room-theme', async ({ roomId, accentColor }) => {
+    try {
+      if (!roomId || !accentColor) return;
+      const str = String(roomId).trim();
+      const room = mongoose.Types.ObjectId.isValid(str)
+        ? await Room.findById(str)
+        : await Room.findOne({ code: str.toUpperCase() });
+      if (!room) return;
+      const isHost = room.host.toString() === socket.user._id.toString();
+      const isOriginalHost = room.originalHost && room.originalHost.toString() === socket.user._id.toString();
+      if (!isHost && !isOriginalHost) return;
+      if (!/^#[0-9a-fA-F]{6}$/.test(accentColor)) return;
+      room.theme = { accentColor };
+      await room.save();
+      io.to(roomId).emit('room-theme-changed', { accentColor });
+      if (room._id.toString() !== roomId) {
+        io.to(room._id.toString()).emit('room-theme-changed', { accentColor });
+      }
+    } catch (e) { console.error('set-room-theme error:', e.message); }
+  });
+
+  // ── Music Player Sync (Discord Bot Style Synchronized Room Audio) ─────────
+  socket.on('music-play', ({ roomId, stationId, track, currentTime = 0, mode }) => {
+    if (!roomId) return;
+    const currentSec = typeof currentTime === 'number' ? currentTime : 0;
+    const state = {
+      playing: true,
+      mode: mode || (track ? 'track' : 'theme'),
+      track: track || null,
+      stationId: stationId || null,
+      startedAt: Date.now() - (currentSec * 1000),
+      pauseOffset: currentSec,
+      updatedBy: socket.user ? socket.user.name : 'A member',
+    };
+    roomMusicState.set(roomId, state);
+    io.to(roomId).emit('music-sync', {
+      ...state,
+      currentTime: currentSec,
+    });
+  });
+
+  socket.on('music-pause', ({ roomId, currentTime }) => {
+    if (!roomId) return;
+    const current = roomMusicState.get(roomId) || {};
+    const currentSec = typeof currentTime === 'number' ? currentTime : (current.pauseOffset || 0);
+    const state = {
+      ...current,
+      playing: false,
+      pauseOffset: currentSec,
+      startedAt: null,
+      updatedBy: socket.user ? socket.user.name : 'A member',
+    };
+    roomMusicState.set(roomId, state);
+    io.to(roomId).emit('music-sync', {
+      ...state,
+      currentTime: currentSec,
+    });
+  });
+
+  socket.on('music-seek', ({ roomId, currentTime = 0 }) => {
+    if (!roomId) return;
+    const current = roomMusicState.get(roomId) || {};
+    const currentSec = typeof currentTime === 'number' ? currentTime : 0;
+    const state = {
+      ...current,
+      startedAt: Date.now() - (currentSec * 1000),
+      pauseOffset: currentSec,
+      updatedBy: socket.user ? socket.user.name : 'A member',
+    };
+    roomMusicState.set(roomId, state);
+    io.to(roomId).emit('music-seek', {
+      currentTime: currentSec,
+      by: socket.user ? socket.user.name : 'A member',
+    });
+  });
+
+  socket.on('music-stop', ({ roomId }) => {
+    if (!roomId) return;
+    roomMusicState.delete(roomId);
+    io.to(roomId).emit('music-sync', {
+      playing: false,
+      track: null,
+      stationId: null,
+      currentTime: 0,
+    });
+  });
+
+  socket.on('music-request-sync', ({ roomId }) => {
+    if (!roomId) return;
+    const currentMusic = roomMusicState.get(roomId);
+    if (currentMusic && (currentMusic.track || currentMusic.stationId)) {
+      let currentSec = currentMusic.pauseOffset || 0;
+      if (currentMusic.playing && currentMusic.startedAt) {
+        currentSec = Math.max(0, (Date.now() - currentMusic.startedAt) / 1000);
+      }
+      socket.emit('music-sync', {
+        ...currentMusic,
+        currentTime: currentSec,
+      });
+    }
+  });
+
+  // ── Friends ──────────────────────────────────────────────────────────────────
+  socket.on('friend-request-sent', ({ targetUserId }) => {
+    if (!targetUserId) return;
+    io.to(`user:${targetUserId}`).emit('friend-request-received', {
+      from: { _id: socket.user._id, name: socket.user.name, username: socket.user.username, avatar: socket.user.avatar },
+    });
+  });
+  socket.on('friend-request-accepted', ({ targetUserId }) => {
+    if (!targetUserId) return;
+    io.to(`user:${targetUserId}`).emit('friend-request-accepted', {
+      by: { _id: socket.user._id, name: socket.user.name, username: socket.user.username, avatar: socket.user.avatar },
+    });
   });
 });
 

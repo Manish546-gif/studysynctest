@@ -3,6 +3,34 @@ import { io } from 'socket.io-client';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || '';
 
+// Global persistent active socket session
+const activeSocketSession = {
+  roomId: null,
+  socket: null,
+  isExplicitLeave: false,
+};
+
+export function getActiveSocket() {
+  return activeSocketSession.socket;
+}
+
+export function explicitDisconnectSocket() {
+  console.log('[Socket] explicitDisconnectSocket triggered');
+  activeSocketSession.isExplicitLeave = true;
+  if (activeSocketSession.socket) {
+    try {
+      if (activeSocketSession.roomId) {
+        activeSocketSession.socket.emit('leave-room', activeSocketSession.roomId);
+      }
+      activeSocketSession.socket.disconnect();
+    } catch (e) {
+      console.warn('[Socket] disconnect error:', e);
+    }
+    activeSocketSession.socket = null;
+    activeSocketSession.roomId = null;
+  }
+}
+
 export function useSocket(roomId) {
   const socketRef = useRef(null);
   const [connected, setConnected] = useState(false);
@@ -41,8 +69,36 @@ export function useSocket(roomId) {
     const token = localStorage.getItem('token');
     if (!token || !roomId) return;
 
-    const socket = io(SOCKET_URL, { auth: { token } });
+    if (activeSocketSession.socket && activeSocketSession.roomId && activeSocketSession.roomId !== roomId) {
+      explicitDisconnectSocket();
+    }
+
+    let socket = activeSocketSession.socket;
+    let isReusing = false;
+
+    if (socket && socket.connected && activeSocketSession.roomId === roomId) {
+      isReusing = true;
+      activeSocketSession.isExplicitLeave = false;
+    } else {
+      socket = io(SOCKET_URL, { auth: { token } });
+      activeSocketSession.socket = socket;
+      activeSocketSession.roomId = roomId;
+      activeSocketSession.isExplicitLeave = false;
+    }
+
     socketRef.current = socket;
+
+    const listeners = [];
+    const origOn = socket.on.bind(socket);
+    socket.on = (event, handler) => {
+      listeners.push([event, handler]);
+      return origOn(event, handler);
+    };
+
+    if (isReusing) {
+      setConnected(true);
+      socket.emit('join-room', roomId);
+    }
 
     socket.on('connect', () => {
       setConnected(true);
@@ -290,21 +346,34 @@ export function useSocket(roomId) {
     });
 
     return () => {
-      socket.emit('leave-room', roomId);
-      socket.disconnect();
-      setConnected(false);
-      setRoomUsers([]);
-      setRemoteCursors({});
-      setRemoteActions([]);
-      setLivePaths({});
-      setMessages([]);
-      setRoomFiles([]);
-      setTypingUsers([]);
-      setScreenSharers({});
-      setTabVisibility({});
-      setSpeakerLevels({});
-      setActivityLog([]);
-      setScreenCursors({});
+      socket.on = origOn;
+      listeners.forEach(([event, handler]) => {
+        try { socket.off(event, handler); } catch {}
+      });
+
+      if (activeSocketSession.isExplicitLeave || activeSocketSession.roomId !== roomId) {
+        try {
+          socket.emit('leave-room', roomId);
+          socket.disconnect();
+        } catch {}
+        activeSocketSession.socket = null;
+        activeSocketSession.roomId = null;
+        setConnected(false);
+        setRoomUsers([]);
+        setRemoteCursors({});
+        setRemoteActions([]);
+        setLivePaths({});
+        setMessages([]);
+        setRoomFiles([]);
+        setTypingUsers([]);
+        setScreenSharers({});
+        setTabVisibility({});
+        setSpeakerLevels({});
+        setActivityLog([]);
+        setScreenCursors({});
+      } else {
+        console.log('[Socket] Preserving socket connection in background for room:', roomId);
+      }
     };
   }, [roomId]);
 
@@ -569,5 +638,6 @@ export function useSocket(roomId) {
     admitted,
     roomVisibility,
     setAdmitted,
+    explicitDisconnect: explicitDisconnectSocket,
   };
 }

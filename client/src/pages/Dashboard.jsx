@@ -309,14 +309,15 @@ export default function Dashboard() {
               {rooms.map((room, idx) => {
                 const isHost = room.host?._id === user?.id
                 const isPublic = room.isPublic !== false
+                const accent = room.theme?.accentColor || '#53fc18'
 
                 return (
                   <div
                     key={room._id}
-                    className="kick-card group"
+                    className="kick-card group transition-all duration-200 hover:-translate-y-0.5"
                     style={{
                       background: '#16191e',
-                      border: '1px solid #2a2d33',
+                      border: `1px solid ${room.theme?.accentColor ? `${accent}44` : '#2a2d33'}`,
                       borderRadius: 10,
                       overflow: 'hidden',
                       display: 'flex', flexDirection: 'column',
@@ -325,7 +326,10 @@ export default function Dashboard() {
                     {/* Card Thumbnail Header */}
                     <div style={{
                       height: 80,
-                      background: ROOM_GRADS[idx % ROOM_GRADS.length],
+                      background: room.theme?.accentColor
+                        ? `linear-gradient(135deg, ${accent}40 0%, #16191e 100%)`
+                        : ROOM_GRADS[idx % ROOM_GRADS.length],
+                      borderTop: `3px solid ${accent}`,
                       padding: 12,
                       display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
                       position: 'relative',
