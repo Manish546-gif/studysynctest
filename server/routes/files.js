@@ -1,9 +1,27 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
+const mongoose = require('mongoose');
 const Room = require('../models/Room');
 const auth = require('../middleware/auth');
 const { getBucket, uploadToGridFS, findGridFSFile, deleteFromGridFS } = require('../gridfs');
+
+const findRoomByIdOrCode = async (idOrCode) => {
+  if (!idOrCode) return null;
+  const str = String(idOrCode).trim();
+  if (mongoose.Types.ObjectId.isValid(str)) {
+    const room = await Room.findById(str);
+    if (room) return room;
+  }
+  return Room.findOne({
+    $or: [
+      { code: str.toUpperCase() },
+      { code: str.toLowerCase() },
+      { code: str },
+      { name: new RegExp(`^${str}$`, 'i') },
+    ],
+  });
+};
 
 const fileFilter = (req, file, cb) => {
   const allowedMimes = [
@@ -45,9 +63,9 @@ router.post('/:roomId/upload', auth, (req, res, next) => {
 }, async (req, res) => {
   try {
     const { roomId } = req.params;
-    const room = await Room.findById(roomId);
+    const room = await findRoomByIdOrCode(roomId);
     if (!room) return res.status(404).json({ error: 'Room not found' });
-    if (!room.members.includes(req.user._id)) {
+    if (!room.members.some((m) => m.toString() === req.user._id.toString()) && room.host.toString() !== req.user._id.toString()) {
       return res.status(403).json({ error: 'Not a member of this room' });
     }
 
@@ -68,7 +86,7 @@ router.post('/:roomId/upload', auth, (req, res, next) => {
       size: req.file.size,
       uploadedBy: req.user._id,
       uploadedByName: req.user.name,
-      url: `/api/files/${roomId}/download/${storedName}`,
+      url: `/api/files/${room._id}/download/${storedName}`,
       createdAt: new Date(),
     };
 
@@ -84,7 +102,7 @@ router.post('/:roomId/upload', auth, (req, res, next) => {
 
 router.get('/:roomId', auth, async (req, res) => {
   try {
-    const room = await Room.findById(req.params.roomId).select('files');
+    const room = await findRoomByIdOrCode(req.params.roomId);
     if (!room) return res.status(404).json({ error: 'Room not found' });
     res.json({ files: room.files || [] });
   } catch (err) {
@@ -94,10 +112,10 @@ router.get('/:roomId', auth, async (req, res) => {
 
 router.get('/:roomId/download/:storedName', auth, async (req, res) => {
   try {
-    const room = await Room.findById(req.params.roomId).select('files');
+    const room = await findRoomByIdOrCode(req.params.roomId);
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
-    const file = room.files.find((f) => f.storedName === req.params.storedName);
+    const file = (room.files || []).find((f) => f.storedName === req.params.storedName);
     if (!file) return res.status(404).json({ error: 'File not found' });
 
     const gfsFile = await findGridFSFile(req.params.storedName);
@@ -107,6 +125,9 @@ router.get('/:roomId/download/:storedName', auth, async (req, res) => {
     res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
     res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(file.fileName)}"`);
     res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.removeHeader('X-Frame-Options');
 
     const bucket = getBucket();
 
@@ -146,24 +167,46 @@ router.get('/:roomId/download/:storedName', auth, async (req, res) => {
 
 router.delete('/:roomId/:fileId', auth, async (req, res) => {
   try {
-    const room = await Room.findById(req.params.roomId);
+    const room = await findRoomByIdOrCode(req.params.roomId);
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
-    const file = room.files.id(req.params.fileId);
-    if (!file) return res.status(404).json({ error: 'File not found' });
+    const fileIdStr = String(req.params.fileId);
+    let targetFile = null;
+    if (room.files && typeof room.files.id === 'function' && mongoose.Types.ObjectId.isValid(fileIdStr)) {
+      targetFile = room.files.id(fileIdStr);
+    }
+    if (!targetFile) {
+      targetFile = (room.files || []).find(
+        (f) => String(f._id) === fileIdStr || f.storedName === fileIdStr
+      );
+    }
+    if (!targetFile) return res.status(404).json({ error: 'File not found' });
 
-    if (file.uploadedBy.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ error: 'Only uploader can delete' });
+    const userIdStr = req.user._id.toString();
+    const isHost = room.host && (room.host.toString() === userIdStr || room.host._id?.toString() === userIdStr);
+    const isUploader = targetFile.uploadedBy && (targetFile.uploadedBy.toString() === userIdStr || targetFile.uploadedBy._id?.toString() === userIdStr);
+    const isMember = Array.isArray(room.members) && room.members.some(
+      (m) => m.toString() === userIdStr || m._id?.toString() === userIdStr
+    );
+
+    if (!isHost && !isUploader && !isMember) {
+      return res.status(403).json({ error: 'Only room members or uploader can delete this file' });
     }
 
-    if (file.url) {
-      try { await deleteFromGridFS(file.storedName); } catch (e) { console.error('GridFS delete failed:', e.message); }
+    if (targetFile.storedName) {
+      try {
+        await deleteFromGridFS(targetFile.storedName);
+      } catch (e) {
+        console.error('GridFS delete failed:', e.message);
+      }
     }
 
-    room.files.pull(req.params.fileId);
+    room.files = (room.files || []).filter(
+      (f) => String(f._id) !== String(targetFile._id) && f.storedName !== targetFile.storedName
+    );
     await room.save();
 
-    res.json({ message: 'File deleted' });
+    res.json({ message: 'File deleted', fileId: String(targetFile._id) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

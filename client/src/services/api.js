@@ -25,7 +25,7 @@ async function parseRes(res) {
   return data;
 }
 
-const NEVER_QUEUE = ['/auth/register', '/auth/login', '/auth/google'];
+const NEVER_QUEUE = ['/auth', '/files', '/rooms', '/giphy', '/livekit', '/stats', '/notifications'];
 const canQueue = (path) => !NEVER_QUEUE.some((p) => path.startsWith(p));
 
 const genId = () =>
@@ -137,6 +137,26 @@ export const api = {
   updateRoom: (id, body) => request(`/rooms/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteRoom: (id) => request(`/rooms/${id}`, { method: 'DELETE' }),
 
+  // Room Files API
+  uploadRoomFile: async (roomId, file) => {
+    const token = localStorage.getItem('token');
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch(`${API_URL}/files/${roomId}/upload`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: fd,
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'File upload failed');
+    }
+    return res.json();
+  },
+  getRoomFiles: (roomId) => request(`/files/${roomId}`),
+  deleteRoomFile: (roomId, fileId) => request(`/files/${roomId}/${fileId}`, { method: 'DELETE' }),
+  getFileUrl: (roomId, storedName) => `${API_URL}/files/${roomId}/download/${storedName}`,
+
   getWhiteboards: () => request('/whiteboards'),
   getWhiteboard: (id) => request(`/whiteboards/${id}`),
   createWhiteboard: (body) => request('/whiteboards', { method: 'POST', body: JSON.stringify(body) }),
@@ -161,42 +181,6 @@ export const api = {
   createNotebook: (name) => request('/notebooks', { method: 'POST', body: JSON.stringify({ name }) }),
   renameNotebook: (id, name) => request(`/notebooks/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
   deleteNotebook: (id) => request(`/notebooks/${id}`, { method: 'DELETE' }),
-
-  getRoomFiles: (roomId) => request(`/files/${roomId}`),
-  uploadRoomFile: async (roomId, file) => {
-    const token = localStorage.getItem('token');
-    const path = `/files/${roomId}/upload`;
-
-    const queueFile = () => {
-      const id = genId();
-      enqueueOp({ id, method: 'POST', path, file })
-        .then(refreshQueueCount)
-        .catch(() => {});
-      return { file: { _id: id, name: file.name, size: file.size, pending: true } };
-    };
-
-    if (canQueue(path) && typeof navigator !== 'undefined' && navigator.onLine === false) {
-      return queueFile();
-    }
-
-    const formData = new FormData();
-    formData.append('file', file);
-    try {
-      const res = await fetch(`${API_URL}/files/${roomId}/upload`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-      const data = await parseRes(res);
-      if (!res.ok) throw new Error(data.error || 'Upload failed');
-      return data;
-    } catch (err) {
-      if (isNetworkError(err) && canQueue(path)) return queueFile();
-      throw err;
-    }
-  },
-  deleteRoomFile: (roomId, fileId) => request(`/files/${roomId}/${fileId}`, { method: 'DELETE' }),
-  getFileUrl: (roomId, storedName) => `${API_URL}/files/${roomId}/download/${storedName}`,
 
   getNotifications: (skip = 0, limit = 30) => request(`/notifications?skip=${skip}&limit=${limit}`),
   markNotificationRead: (id) => request(`/notifications/${id}/read`, { method: 'PUT' }),
@@ -253,4 +237,15 @@ export const api = {
   // Music API
   searchMusic: (q, limit = 25) => request(`/music/search?q=${encodeURIComponent(q)}&limit=${limit}`),
   getTrendingMusic: (category = 'lofi') => request(`/music/trending?category=${encodeURIComponent(category)}`),
+
+  // Custom Playlists
+  getPlaylists: () => request('/playlists'),
+  createPlaylist: (body) => request('/playlists', { method: 'POST', body: JSON.stringify(body) }),
+  getPlaylist: (id) => request(`/playlists/${id}`),
+  updatePlaylist: (id, body) => request(`/playlists/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  addTrackToPlaylist: (id, track) => request(`/playlists/${id}/tracks`, { method: 'POST', body: JSON.stringify({ track }) }),
+  removeTrackFromPlaylist: (id, trackId) => request(`/playlists/${id}/tracks/${trackId}`, { method: 'DELETE' }),
+  deletePlaylist: (id) => request(`/playlists/${id}`, { method: 'DELETE' }),
 };
+
+export default api;

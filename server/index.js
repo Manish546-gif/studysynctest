@@ -27,6 +27,7 @@ const livekitRoutes = require('./routes/livekit');
 const friendsRoutes = require('./routes/friends');
 const sessionsRoutes = require('./routes/sessions');
 const musicRoutes = require('./routes/music');
+const playlistRoutes = require('./routes/playlists');
 const { setSocketIO, notify } = require('./notify');
 const rateLimit = require('express-rate-limit');
 
@@ -45,7 +46,8 @@ const roomCreateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Room creation limit reached. Try again in an hour.' },
-  keyGenerator: (req) => req.headers.authorization || req.ip,
+  keyGenerator: (req) => req.headers.authorization || req.socket?.remoteAddress || 'ip',
+  validate: { default: false, keyGeneratorIpFallback: false },
 });
 
 const fileUploadLimiter = rateLimit({
@@ -54,7 +56,8 @@ const fileUploadLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'File upload limit reached. Try again in an hour.' },
-  keyGenerator: (req) => req.headers.authorization || req.ip,
+  keyGenerator: (req) => req.headers.authorization || req.socket?.remoteAddress || 'ip',
+  validate: { default: false, keyGeneratorIpFallback: false },
 });
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -116,6 +119,7 @@ app.use('/api/livekit', livekitRoutes);
 app.use('/api/friends', friendsRoutes);
 app.use('/api/sessions', sessionsRoutes);
 app.use('/api/music', musicRoutes);
+app.use('/api/playlists', playlistRoutes);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const clientBuild = path.join(__dirname, '..', 'client', 'dist');
@@ -157,6 +161,10 @@ app.set('activeRooms', activeRooms);
 const roomScreenShares = new Map();
 // roomId -> synchronized music state
 const roomMusicState = new Map();
+// roomId -> { mode: 'open' | 'approval', queue: [...], pending: [...] }
+const roomJukeboxState = new Map();
+// roomId -> { fileUrl, fileName, pageCount, currentPage, presenterId, presenterName, highlights: [...], notes: [...] }
+const roomPdfState = new Map();
 
 function setScreenShareState(roomId, userId, userName, sharing) {
   if (!roomScreenShares.has(roomId)) {
@@ -178,7 +186,21 @@ io.on('connection', (socket) => {
 
   socket.on('join-room', async (roomId) => {
     try {
-      const room = await Room.findById(roomId);
+      let room = null;
+      if (roomId && mongoose.Types.ObjectId.isValid(String(roomId).trim())) {
+        room = await Room.findById(String(roomId).trim());
+      }
+      if (!room && roomId) {
+        const str = String(roomId).trim();
+        room = await Room.findOne({
+          $or: [
+            { code: str.toUpperCase() },
+            { code: str.toLowerCase() },
+            { code: str },
+            { name: new RegExp(`^${str}$`, 'i') },
+          ],
+        });
+      }
       if (!room) return socket.emit('error', 'Room not found');
 
       // Banned users cannot re-join.
@@ -195,7 +217,11 @@ io.on('connection', (socket) => {
 
       socket.roomHost = isHost || isOriginalHost;
       socket.roomId = roomId;
+      socket.roomDbId = room._id ? room._id.toString() : null;
       socket.join(roomId);
+      if (room._id) {
+        socket.join(room._id.toString());
+      }
 
       let admitted = false;
 
@@ -266,6 +292,7 @@ io.on('connection', (socket) => {
       socket.emit('todo-state', room.todos || []);
       socket.emit('agenda-state', room.agenda || []);
       socket.emit('sticky-state', { notes: room.stickyNotes || [] });
+      socket.emit('room-files', room.files || []);
 
       // Synchronize active music playback for joining / returning user
       const currentMusic = roomMusicState.get(roomId);
@@ -793,7 +820,7 @@ io.on('connection', (socket) => {
   socket.on('file-uploaded', async (data) => {
     const roomId = socket.roomId;
     if (!roomId) return;
-    io.to(roomId).emit('new-file', {
+    const payload = {
       _id: data._id,
       fileName: data.fileName,
       storedName: data.storedName,
@@ -803,10 +830,14 @@ io.on('connection', (socket) => {
       uploadedByName: data.uploadedByName,
       url: data.url,
       createdAt: data.createdAt,
-    });
+    };
+    io.to(roomId).emit('new-file', payload);
+    if (socket.roomDbId && socket.roomDbId !== roomId) {
+      io.to(socket.roomDbId).emit('new-file', payload);
+    }
 
     try {
-      const room = await Room.findById(roomId).select('host');
+      const room = await Room.findById(socket.roomDbId || roomId).select('host');
       if (room && room.host.toString() !== socket.user._id.toString()) {
         notify(room.host, {
           type: 'file_uploaded',
@@ -825,6 +856,9 @@ io.on('connection', (socket) => {
     const roomId = socket.roomId;
     if (!roomId) return;
     io.to(roomId).emit('file-removed', { fileId: data.fileId });
+    if (socket.roomDbId && socket.roomDbId !== roomId) {
+      io.to(socket.roomDbId).emit('file-removed', { fileId: data.fileId });
+    }
   });
 
   socket.on('screen-share-changed', (data) => {
@@ -1502,7 +1536,7 @@ io.on('connection', (socket) => {
       updatedBy: socket.user ? socket.user.name : 'A member',
     };
     roomMusicState.set(roomId, state);
-    io.to(roomId).emit('music-sync', {
+    socket.to(roomId).emit('music-sync', {
       ...state,
       currentTime: currentSec,
     });
@@ -1520,7 +1554,7 @@ io.on('connection', (socket) => {
       updatedBy: socket.user ? socket.user.name : 'A member',
     };
     roomMusicState.set(roomId, state);
-    io.to(roomId).emit('music-sync', {
+    socket.to(roomId).emit('music-sync', {
       ...state,
       currentTime: currentSec,
     });
@@ -1537,7 +1571,8 @@ io.on('connection', (socket) => {
       updatedBy: socket.user ? socket.user.name : 'A member',
     };
     roomMusicState.set(roomId, state);
-    io.to(roomId).emit('music-seek', {
+    // Use socket.to() so seek events aren't echoed back to the sender
+    socket.to(roomId).emit('music-seek', {
       currentTime: currentSec,
       by: socket.user ? socket.user.name : 'A member',
     });
@@ -1546,7 +1581,7 @@ io.on('connection', (socket) => {
   socket.on('music-stop', ({ roomId }) => {
     if (!roomId) return;
     roomMusicState.delete(roomId);
-    io.to(roomId).emit('music-sync', {
+    socket.to(roomId).emit('music-sync', {
       playing: false,
       track: null,
       stationId: null,
@@ -1567,6 +1602,244 @@ io.on('connection', (socket) => {
         currentTime: currentSec,
       });
     }
+  });
+
+  // ── Collaborative Jukebox & Request Queue ─────────────────────────────────
+  socket.on('jukebox-add', ({ roomId, track }) => {
+    if (!roomId || !track) return;
+    if (!roomJukeboxState.has(roomId)) {
+      roomJukeboxState.set(roomId, { mode: 'open', queue: [], pending: [] });
+    }
+    const state = roomJukeboxState.get(roomId);
+    const trackItem = {
+      ...track,
+      queueId: `jq_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      requestedBy: {
+        _id: socket.user._id,
+        name: socket.user.name,
+        avatar: socket.user.avatar,
+      },
+      upvotes: [socket.user._id.toString()],
+      downvotes: [],
+      score: 1,
+      addedAt: Date.now(),
+    };
+
+    if (state.mode === 'approval' && !socket.roomHost) {
+      state.pending.push(trackItem);
+      io.to(roomId).emit('jukebox-update', state);
+      io.to(roomId).emit('activity-log', {
+        message: `requested "${track.title}" (pending approval)`,
+        userName: socket.user.name,
+        timestamp: Date.now(),
+      });
+    } else {
+      state.queue.push(trackItem);
+      state.queue.sort((a, b) => (b.score || 0) - (a.score || 0));
+      io.to(roomId).emit('jukebox-update', state);
+      io.to(roomId).emit('activity-log', {
+        message: `added "${track.title}" to the room jukebox`,
+        userName: socket.user.name,
+        timestamp: Date.now(),
+      });
+    }
+  });
+
+  socket.on('jukebox-vote', ({ roomId, queueId, vote }) => {
+    if (!roomId || !queueId) return;
+    const state = roomJukeboxState.get(roomId);
+    if (!state) return;
+    const track = state.queue.find((t) => t.queueId === queueId);
+    if (!track) return;
+
+    const uid = socket.user._id.toString();
+    track.upvotes = (track.upvotes || []).filter((id) => id !== uid);
+    track.downvotes = (track.downvotes || []).filter((id) => id !== uid);
+
+    if (vote === 1) track.upvotes.push(uid);
+    else if (vote === -1) track.downvotes.push(uid);
+
+    track.score = (track.upvotes.length) - (track.downvotes.length);
+    state.queue.sort((a, b) => (b.score || 0) - (a.score || 0));
+    io.to(roomId).emit('jukebox-update', state);
+  });
+
+  socket.on('jukebox-settings', ({ roomId, mode }) => {
+    if (!roomId) return;
+    if (!roomJukeboxState.has(roomId)) {
+      roomJukeboxState.set(roomId, { mode: 'open', queue: [], pending: [] });
+    }
+    const state = roomJukeboxState.get(roomId);
+    if (mode === 'open' || mode === 'approval') {
+      state.mode = mode;
+      io.to(roomId).emit('jukebox-update', state);
+    }
+  });
+
+  socket.on('jukebox-approve', ({ roomId, queueId }) => {
+    if (!roomId || !queueId) return;
+    const state = roomJukeboxState.get(roomId);
+    if (!state) return;
+    const idx = state.pending.findIndex((t) => t.queueId === queueId);
+    if (idx !== -1) {
+      const [approvedTrack] = state.pending.splice(idx, 1);
+      state.queue.push(approvedTrack);
+      state.queue.sort((a, b) => (b.score || 0) - (a.score || 0));
+      io.to(roomId).emit('jukebox-update', state);
+      io.to(roomId).emit('activity-log', {
+        message: `approved "${approvedTrack.title}" for the jukebox`,
+        userName: socket.user.name,
+        timestamp: Date.now(),
+      });
+    }
+  });
+
+  socket.on('jukebox-remove', ({ roomId, queueId, isPending }) => {
+    if (!roomId || !queueId) return;
+    const state = roomJukeboxState.get(roomId);
+    if (!state) return;
+    if (isPending) {
+      state.pending = state.pending.filter((t) => t.queueId !== queueId);
+    } else {
+      state.queue = state.queue.filter((t) => t.queueId !== queueId);
+    }
+    io.to(roomId).emit('jukebox-update', state);
+  });
+
+  socket.on('jukebox-next', ({ roomId }) => {
+    if (!roomId) return;
+    const state = roomJukeboxState.get(roomId);
+    if (!state || state.queue.length === 0) return;
+    const nextTrack = state.queue.shift();
+    io.to(roomId).emit('jukebox-update', state);
+
+    const musicState = {
+      playing: true,
+      mode: 'track',
+      track: nextTrack,
+      stationId: null,
+      startedAt: Date.now(),
+      pauseOffset: 0,
+      updatedBy: socket.user ? socket.user.name : 'Jukebox',
+    };
+    roomMusicState.set(roomId, musicState);
+    io.to(roomId).emit('music-sync', {
+      ...musicState,
+      currentTime: 0,
+    });
+  });
+
+  socket.on('jukebox-get-state', ({ roomId }) => {
+    if (!roomId) return;
+    const state = roomJukeboxState.get(roomId) || { mode: 'open', queue: [], pending: [] };
+    socket.emit('jukebox-update', state);
+  });
+
+  // ── Collaborative PDF Co-Reader ───────────────────────────────────────────
+  socket.on('pdf-open', ({ roomId, fileUrl, fileName, pageCount }) => {
+    if (!roomId || !fileUrl) return;
+    const state = {
+      fileUrl,
+      fileName: fileName || 'Document.pdf',
+      pageCount: pageCount || 1,
+      currentPage: 1,
+      presenterId: socket.user._id.toString(),
+      presenterName: socket.user.name,
+      highlights: [],
+      notes: [],
+      updatedAt: Date.now(),
+    };
+    roomPdfState.set(roomId, state);
+    if (socket.roomDbId) roomPdfState.set(socket.roomDbId, state);
+    if (socket.roomId) roomPdfState.set(socket.roomId, state);
+
+    io.to(roomId).emit('pdf-state', state);
+    if (socket.roomId && socket.roomId !== roomId) io.to(socket.roomId).emit('pdf-state', state);
+    if (socket.roomDbId && socket.roomDbId !== roomId) io.to(socket.roomDbId).emit('pdf-state', state);
+
+    io.to(roomId).emit('activity-log', {
+      message: `opened PDF "${state.fileName}" in Co-Reader`,
+      userName: socket.user.name,
+      timestamp: Date.now(),
+    });
+  });
+
+  socket.on('pdf-update-page-count', ({ roomId, pageCount }) => {
+    if (!roomId || !pageCount) return;
+    const state = roomPdfState.get(roomId) || (socket.roomDbId && roomPdfState.get(socket.roomDbId));
+    if (state && pageCount > (state.pageCount || 1)) {
+      state.pageCount = pageCount;
+      io.to(roomId).emit('pdf-state', state);
+      if (socket.roomId && socket.roomId !== roomId) io.to(socket.roomId).emit('pdf-state', state);
+      if (socket.roomDbId && socket.roomDbId !== roomId) io.to(socket.roomDbId).emit('pdf-state', state);
+    }
+  });
+
+  socket.on('pdf-page-change', ({ roomId, pageNumber }) => {
+    if (!roomId || !pageNumber) return;
+    const state = roomPdfState.get(roomId) || (socket.roomDbId && roomPdfState.get(socket.roomDbId));
+    if (!state) return;
+    state.currentPage = pageNumber;
+    state.presenterId = socket.user._id.toString();
+    state.presenterName = socket.user.name;
+    const syncData = {
+      currentPage: pageNumber,
+      presenterId: state.presenterId,
+      presenterName: state.presenterName,
+    };
+    socket.to(roomId).emit('pdf-page-sync', syncData);
+    if (socket.roomId && socket.roomId !== roomId) socket.to(socket.roomId).emit('pdf-page-sync', syncData);
+    if (socket.roomDbId && socket.roomDbId !== roomId) socket.to(socket.roomDbId).emit('pdf-page-sync', syncData);
+  });
+
+  socket.on('pdf-highlight', ({ roomId, highlight }) => {
+    if (!roomId || !highlight) return;
+    const state = roomPdfState.get(roomId) || (socket.roomDbId && roomPdfState.get(socket.roomDbId));
+    if (!state) return;
+    const highlightItem = {
+      ...highlight,
+      id: `hl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      by: socket.user.name,
+      userId: socket.user._id.toString(),
+    };
+    state.highlights.push(highlightItem);
+    io.to(roomId).emit('pdf-highlight-added', highlightItem);
+    if (socket.roomId && socket.roomId !== roomId) io.to(socket.roomId).emit('pdf-highlight-added', highlightItem);
+    if (socket.roomDbId && socket.roomDbId !== roomId) io.to(socket.roomDbId).emit('pdf-highlight-added', highlightItem);
+  });
+
+  socket.on('pdf-note', ({ roomId, note }) => {
+    if (!roomId || !note) return;
+    const state = roomPdfState.get(roomId) || (socket.roomDbId && roomPdfState.get(socket.roomDbId));
+    if (!state) return;
+    const noteItem = {
+      ...note,
+      id: `pn_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      author: socket.user.name,
+      avatar: socket.user.avatar,
+      userId: socket.user._id.toString(),
+      createdAt: Date.now(),
+    };
+    state.notes.push(noteItem);
+    io.to(roomId).emit('pdf-note-added', noteItem);
+    if (socket.roomId && socket.roomId !== roomId) io.to(socket.roomId).emit('pdf-note-added', noteItem);
+    if (socket.roomDbId && socket.roomDbId !== roomId) io.to(socket.roomDbId).emit('pdf-note-added', noteItem);
+  });
+
+  socket.on('pdf-close', ({ roomId }) => {
+    if (!roomId) return;
+    roomPdfState.delete(roomId);
+    if (socket.roomDbId) roomPdfState.delete(socket.roomDbId);
+    if (socket.roomId) roomPdfState.delete(socket.roomId);
+    io.to(roomId).emit('pdf-state', null);
+    if (socket.roomId && socket.roomId !== roomId) io.to(socket.roomId).emit('pdf-state', null);
+    if (socket.roomDbId && socket.roomDbId !== roomId) io.to(socket.roomDbId).emit('pdf-state', null);
+  });
+
+  socket.on('pdf-get-state', ({ roomId }) => {
+    if (!roomId) return;
+    const state = roomPdfState.get(roomId) || (socket.roomDbId && roomPdfState.get(socket.roomDbId)) || (socket.roomId && roomPdfState.get(socket.roomId)) || null;
+    socket.emit('pdf-state', state);
   });
 
   // ── Friends ──────────────────────────────────────────────────────────────────

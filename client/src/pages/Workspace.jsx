@@ -83,6 +83,7 @@ import WaitingRoomPanel from '../components/WaitingRoomPanel'
 import ShortcutOverlay from '../components/ShortcutOverlay'
 import MusicPlayer from '../components/MusicPlayer'
 import ThemePickerModal from '../components/ThemePickerModal'
+import PdfCoReaderPanel from '../components/PdfCoReaderPanel'
 import useRoomReactions from '../hooks/useRoomReactions'
 
 const ROOM_TAGS = ['Study', 'Project', 'Review', 'Homework', 'Exam Prep', 'Discussion']
@@ -319,6 +320,8 @@ export default function Workspace() {
   const [stageDragActive, setStageDragActive] = useState(false)
   const [musicOpen, setMusicOpen] = useState(false)
   const [themePickerOpen, setThemePickerOpen] = useState(false)
+  const [pdfReaderOpen, setPdfReaderOpen] = useState(false)
+  const [activePdfFile, setActivePdfFile] = useState(null)
   const [accentColor, setAccentColor] = useState('#53fc18')
   const toastIdRef = useRef(0)
   const pomodoroSessionsRef = useRef(0)
@@ -2411,13 +2414,30 @@ export default function Workspace() {
       <AnimatePresence>
         {filePreviewOpen && (
           <FilePreview
-            roomId={roomId}
+            roomId={room?._id || roomId}
             files={roomFiles}
             setFiles={setRoomFiles}
             emitFileUploaded={emitFileUploaded}
             emitFileDeleted={emitFileDeleted}
             isOpen={filePreviewOpen}
             onToggle={() => setFilePreviewOpen(false)}
+            onOpenPdfCoReader={(pdfFile) => {
+              setFilePreviewOpen(false)
+              setActivePdfFile(pdfFile)
+              setPdfReaderOpen(true)
+              if (socketRef.current && pdfFile) {
+                const token = localStorage.getItem('token')
+                const fileUrl = pdfFile.url || ''
+                const remoteUrl = fileUrl.startsWith('http')
+                  ? fileUrl
+                  : `${fileUrl}${fileUrl.includes('?') ? '&' : '?'}token=${token}`
+                socketRef.current.emit('pdf-open', {
+                  roomId: room?._id || roomId,
+                  fileUrl: remoteUrl,
+                  fileName: pdfFile.fileName,
+                })
+              }
+            }}
           />
         )}
       </AnimatePresence>
@@ -2824,6 +2844,7 @@ export default function Workspace() {
         socket={socketRef.current}
         roomId={room?._id || roomId}
         isHost={isHost}
+        currentUser={user}
       />
     </AnimatePresence>
 
@@ -2845,6 +2866,21 @@ export default function Workspace() {
         />
       )}
     </AnimatePresence>
+
+    {/* ── PDF Co-Reader ─────────────────────────────────────── */}
+    <PdfCoReaderPanel
+      isOpen={pdfReaderOpen}
+      onClose={() => {
+        setPdfReaderOpen(false)
+        setActivePdfFile(null)
+      }}
+      initialFile={activePdfFile}
+      socket={socketRef.current}
+      roomId={room?._id || roomId}
+      isHost={isHost}
+      currentUser={user}
+      roomFiles={roomFiles}
+    />
 
   </div>
   )

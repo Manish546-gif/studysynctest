@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { WifiOff, CloudUpload, RefreshCw } from 'lucide-react';
+import { WifiOff, CloudUpload, RefreshCw, X } from 'lucide-react';
 import { useSyncStore, flushSync, refreshQueueCount, isNetworkError } from '../../services/sync';
+import { clearOps } from '../../services/syncQueue';
 
 function describeError(err) {
   const status = /Replay failed: (\d+)/.exec(err?.message || '')?.[1];
@@ -71,6 +72,17 @@ export default function SyncBanner() {
                 <CloudUpload size={13} /> Sync now
               </button>
             )}
+            <button
+              onClick={async () => {
+                await clearOps().catch(() => {});
+                await refreshQueueCount();
+                useSyncStore.getState().setLastError(null);
+              }}
+              className="w-6 h-6 rounded-lg flex items-center justify-center text-inverse-primary/60 hover:text-inverse-primary hover:bg-white/10 transition-colors ml-1"
+              title="Dismiss"
+            >
+              <X size={14} />
+            </button>
           </motion.div>
         )}
       </AnimatePresence>

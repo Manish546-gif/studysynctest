@@ -131,6 +131,7 @@ export function useSocket(roomId) {
     socket.on('poll-update', (data) => setPolls(Array.isArray(data?.polls) ? data.polls : []));
     socket.on('todo-update', (data) => setTodos(Array.isArray(data?.todos) ? data.todos : []));
     socket.on('agenda-update', (data) => setAgenda(Array.isArray(data?.agenda) ? data.agenda : []));
+    socket.on('room-files', (files) => setRoomFiles(Array.isArray(files) ? files : []));
 
     socket.on('youtube-state', (data) => setYoutubeState(data || null));
     socket.on('sticky-update', (data) => setStickyNotes(Array.isArray(data?.notes) ? data.notes : []));

@@ -18,25 +18,34 @@ function uploadToGridFS(buffer, { filename, contentType }) {
   });
 }
 
-function findGridFSFile(filename) {
-  return new Promise((resolve, reject) => {
-    getBucket().find({ filename }).toArray((err, docs) => {
-      if (err) return reject(err);
-      resolve(docs[0] || null);
-    });
-  });
+async function findGridFSFile(identifier) {
+  if (!identifier) return null;
+  const bucket = getBucket();
+  const nameStr = String(identifier).trim();
+
+  // Try finding by filename first
+  const byName = await bucket.find({ filename: nameStr }).toArray();
+  if (byName && byName.length > 0) return byName[0];
+
+  // If valid ObjectId, try finding by _id
+  if (mongoose.Types.ObjectId.isValid(nameStr)) {
+    const byId = await bucket.find({ _id: new mongoose.Types.ObjectId(nameStr) }).toArray();
+    if (byId && byId.length > 0) return byId[0];
+  }
+
+  return null;
 }
 
-function deleteFromGridFS(filename) {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const file = await findGridFSFile(filename);
-      if (!file) return resolve();
-      getBucket().delete(file._id, (err) => (err ? reject(err) : resolve()));
-    } catch (err) {
-      reject(err);
-    }
-  });
+async function deleteFromGridFS(identifier) {
+  if (!identifier) return;
+  try {
+    const file = await findGridFSFile(identifier);
+    if (!file) return;
+    const bucket = getBucket();
+    await bucket.delete(file._id);
+  } catch (err) {
+    console.error('deleteFromGridFS error:', err.message);
+  }
 }
 
 module.exports = { getBucket, uploadToGridFS, findGridFSFile, deleteFromGridFS };

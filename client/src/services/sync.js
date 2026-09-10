@@ -60,18 +60,17 @@ export async function flushSync() {
       }
       try {
         const res = await replayOp(op)
-        if (!res.ok) throw new Error(`Replay failed: ${res.status}`)
+        if (!res.ok) {
+          // Drop non-2xx failures rather than blocking the queue indefinitely
+          await removeOp(op.id)
+          continue
+        }
         await removeOp(op.id)
       } catch (err) {
-        if (isNetworkError(err) || err?.message?.startsWith('Replay failed: 5') || err?.message === 'Replay failed: 429') {
-          useSyncStore.getState().setLastError({ path: op.path, message: err.message, attempts: attempts + 1 })
-          break
-        }
-        const nextAttempts = attempts + 1
-        if (nextAttempts >= 4) {
+        if (attempts >= 1) {
           await removeOp(op.id)
         } else {
-          await bumpAttempt(op.id, nextAttempts)
+          await bumpAttempt(op.id)
         }
       }
       const remaining = await countOps()
@@ -86,7 +85,9 @@ export async function flushSync() {
 export async function refreshQueueCount() {
   if (typeof indexedDB === 'undefined') return
   try {
-    useSyncStore.getState().setQueueCount(await countOps())
+    const count = await countOps()
+    useSyncStore.getState().setQueueCount(count)
+    if (count === 0) useSyncStore.getState().setLastError(null)
   } catch {
     useSyncStore.getState().setQueueCount(0)
   }
@@ -97,7 +98,18 @@ async function purgeStaleOps() {
     const ops = await getOps()
     const now = Date.now()
     for (const op of ops) {
-      if ((op.attempts || 0) >= 4 || (op.createdAt && now - op.createdAt > 24 * 60 * 60 * 1000)) {
+      if (
+        !op.path ||
+        op.file ||
+        op.path.includes('/files') ||
+        op.path.includes('/rooms') ||
+        op.path.includes('/auth') ||
+        op.path.includes('/download') ||
+        op.path.includes('/upload') ||
+        (op.attempts || 0) >= 1 ||
+        !op.createdAt ||
+        now - op.createdAt > 5 * 60 * 1000
+      ) {
         await removeOp(op.id)
       }
     }
