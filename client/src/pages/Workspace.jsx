@@ -94,8 +94,9 @@ function VideoTile({ stream, name, avatar, isLocal, muted, mirror, presenting, o
   const isSpeaking = speakerLevel > 0.15
 
   useEffect(() => {
-    if (videoRef.current && stream && hasVideo) {
-      const el = videoRef.current
+    const el = videoRef.current
+    if (!el) return
+    if (stream && hasVideo) {
       el.srcObject = stream
       if (!isLocal && !el.muted) {
         el.muted = true
@@ -106,6 +107,11 @@ function VideoTile({ stream, name, avatar, isLocal, muted, mirror, presenting, o
         el.addEventListener('playing', onPlaying)
       }
       el.play?.().catch(() => {})
+    } else {
+      // Clear srcObject to prevent frozen-frame overlay when camera is off
+      if (el.srcObject) {
+        el.srcObject = null
+      }
     }
   }, [stream, isLocal, muted, hasVideo])
 
@@ -298,7 +304,16 @@ export default function Workspace() {
   const chatGifInputRef = useRef(null)
   const [mentionQuery, setMentionQuery] = useState(null)
   const [mentionIndex, setMentionIndex] = useState(0)
-  const [chatTab, setChatTab] = useState('chat') // 'chat' | 'activity'
+  const [chatTab, setChatTab] = useState('chat') // 'chat' | 'activity' | 'pinned'
+  // Discord-like chat extras
+  const [chatSearch, setChatSearch] = useState('')
+  const [chatSearchOpen, setChatSearchOpen] = useState(false)
+  const [hoveredMsgId, setHoveredMsgId] = useState(null)
+  const [emojiPickerMsgId, setEmojiPickerMsgId] = useState(null)
+  const [msgReactions, setMsgReactions] = useState({}) // { msgId: { emoji: [userId,...] } }
+  const [replyTo, setReplyTo] = useState(null) // { _id, username, text }
+  const [chatScrollAtBottom, setChatScrollAtBottom] = useState(true)
+  const emojiPickerRef = useRef(null)
   const [pomodoroOpen, setPomodoroOpen] = useState(false)
   const [recorderOpen, setRecorderOpen] = useState(false)
   const [filePreviewOpen, setFilePreviewOpen] = useState(false)
@@ -904,10 +919,45 @@ export default function Workspace() {
   }
 
   useEffect(() => {
-    if (chatScrollRef.current) {
-      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
+    const el = chatScrollRef.current
+    if (!el) return
+    if (chatScrollAtBottom) {
+      el.scrollTop = el.scrollHeight
     }
-  }, [messages, chatOpen])
+  }, [messages, chatOpen, chatScrollAtBottom])
+
+  const handleChatScroll = useCallback(() => {
+    const el = chatScrollRef.current
+    if (!el) return
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+    setChatScrollAtBottom(atBottom)
+  }, [])
+
+  const handleScrollToBottom = () => {
+    const el = chatScrollRef.current
+    if (el) { el.scrollTop = el.scrollHeight }
+    setChatScrollAtBottom(true)
+  }
+
+  // Toggle emoji reaction on a message (client-side, per session)
+  const handleToggleReaction = useCallback((msgId, emoji) => {
+    setMsgReactions((prev) => {
+      const msg = prev[msgId] || {}
+      const users = msg[emoji] || []
+      const myId = user?.id
+      const hasReacted = users.includes(myId)
+      return {
+        ...prev,
+        [msgId]: {
+          ...msg,
+          [emoji]: hasReacted ? users.filter((u) => u !== myId) : [...users, myId],
+        },
+      }
+    })
+    setEmojiPickerMsgId(null)
+  }, [user?.id])
+
+  const QUICK_EMOJIS = ['👍','❤️','😂','😮','😢','🔥','🎉','✅','💯','🤔']
 
   const memberColors = [    'bg-tertiary', 'bg-blue-500', 'bg-green-500', 'bg-purple-500',
     'bg-orange-500', 'bg-pink-500', 'bg-teal-500', 'bg-red-500',
@@ -1098,263 +1148,432 @@ export default function Workspace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [youtubeState?.videoId, isRoomHost])
 
-  const renderChatPage = ({ onClose = null, banner = null } = {}) => (
-    <div className="flex flex-col h-full min-h-0 bg-zoom-darker">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-zoom-dark shrink-0">
-        <div className="flex items-center gap-2">
-          <Hash size={16} className="text-white/40" />
-          <span className="text-white font-semibold text-sm">general</span>
-          <span className="text-white/30 text-xs hidden sm:inline">— {room?.name}</span>
-        </div>
-        <div className="flex items-center gap-1">
-          {['chat', 'activity'].map((tab) => (
+  const renderChatPage = ({ onClose = null, banner = null } = {}) => {
+    const pinnedMsgs = messages.filter((m) => m && m._id && pinnedMessageIds.includes(m._id))
+    const togglePin = (msgId, pinned) => {
+      emitPinMessage(msgId, pinned)
+      if (!pinned) toast('Message pinned to chat', 'success')
+    }
+    const filteredMessages = chatSearch.trim()
+      ? messages.filter((m) => (m.text || '').toLowerCase().includes(chatSearch.toLowerCase()) ||
+          (m.username || m.name || '').toLowerCase().includes(chatSearch.toLowerCase()))
+      : messages
+    const groupedItems = []
+    let lastDate = null, lastUserId = null, lastMsgTime = null
+    filteredMessages.forEach((msg, idx) => {
+      const msgDate = msg.createdAt ? new Date(msg.createdAt).toDateString() : null
+      if (msgDate && msgDate !== lastDate) {
+        groupedItems.push({ type: 'date', date: msg.createdAt, key: `date-${idx}` })
+        lastDate = msgDate; lastUserId = null; lastMsgTime = null
+      }
+      const msgMs = msg.createdAt ? new Date(msg.createdAt).getTime() : 0
+      const isGrouped = lastUserId === msg.userId && lastMsgTime && (msgMs - lastMsgTime) < 5 * 60 * 1000
+      groupedItems.push({ type: 'msg', msg, isGrouped, key: msg._id || `${msg.createdAt}-${msg.userId}-${idx}` })
+      lastUserId = msg.userId; lastMsgTime = msgMs
+    })
+    const TABS = [
+      { id: 'chat', label: '# general' },
+      { id: 'pinned', label: `📌 Pinned${pinnedMsgs.length ? ` (${pinnedMsgs.length})` : ''}` },
+      { id: 'activity', label: '📋 Activity' },
+    ]
+    return (
+      <div className="flex flex-col h-full min-h-0" style={{ background: '#0e1015' }}>
+        {/* Header */}
+        <div className="shrink-0 flex items-center justify-between px-4 py-2.5 border-b border-white/[0.07]" style={{ background: '#13161e' }}>
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 rounded-md bg-[#53fc18]/15 flex items-center justify-center shrink-0">
+              <Hash size={14} className="text-[#53fc18]" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-white font-bold text-[13px] leading-none truncate">general</p>
+              <p className="text-white/35 text-[10px] mt-0.5 truncate hidden sm:block">{room?.name}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
             <button
-              key={tab}
-              onClick={() => setChatTab(tab)}
-              className={`px-2.5 py-1 rounded text-[11px] font-medium transition-all ${
-                chatTab === tab
-                  ? 'bg-zoom-blue text-white'
-                  : 'text-white/40 hover:text-white/60'
-              }`}
+              onClick={() => { setChatSearchOpen(v => !v); if (chatSearchOpen) setChatSearch('') }}
+              className={`w-7 h-7 rounded flex items-center justify-center transition-colors ${chatSearchOpen ? 'bg-[#53fc18]/20 text-[#53fc18]' : 'text-white/40 hover:text-white hover:bg-white/10'}`}
+              title="Search messages"
             >
-              {tab === 'chat' ? 'Chat' : 'Activity'}
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            </button>
+            <div className="flex items-center gap-1 px-2 py-1 rounded bg-white/5 text-white/40">
+              <Users size={11} />
+              <span className="text-[10px] font-medium">{roomUsers.length}</span>
+            </div>
+            {onClose && (
+              <button onClick={onClose} className="w-7 h-7 rounded flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors" title="Back">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="shrink-0 flex items-center gap-0.5 px-3 pt-2 pb-0 border-b border-white/[0.07]" style={{ background: '#13161e' }}>
+          {TABS.map((t) => (
+            <button key={t.id} onClick={() => setChatTab(t.id)}
+              className={`px-3 py-1.5 text-[11px] font-semibold rounded-t transition-all border-b-2 ${chatTab === t.id ? 'border-[#53fc18] text-[#53fc18] bg-[#53fc18]/5' : 'border-transparent text-white/40 hover:text-white/70 hover:bg-white/5'}`}>
+              {t.label}
             </button>
           ))}
-          {onClose && (
-            <button onClick={onClose} className="w-6 h-6 rounded flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors" title="Back to room">
-              <ArrowLeft size={14} />
-            </button>
-          )}
         </div>
-      </div>
-      {banner && (
-        <div className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 shrink-0">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-[11px] text-amber-400">
-              <Loader2 size={12} className="animate-spin" />
-              <span>Waiting for host approval</span>
+
+        {/* Search bar */}
+        {chatSearchOpen && chatTab === 'chat' && (
+          <div className="shrink-0 px-3 py-2 border-b border-white/[0.07]" style={{ background: '#13161e' }}>
+            <div className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-1.5 border border-white/10">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white/40 shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <input autoFocus value={chatSearch} onChange={(e) => setChatSearch(e.target.value)} placeholder="Search messages..." className="flex-1 bg-transparent text-xs text-white placeholder:text-white/30 outline-none" />
+              {chatSearch && <button onClick={() => setChatSearch('')} className="text-white/40 hover:text-white/80"><X size={11} /></button>}
             </div>
-            <button onClick={() => navigate('/dashboard')} className="px-3 py-1 rounded bg-red-500/90 text-white text-[11px] font-medium hover:bg-red-600 transition-colors">
-              Leave Room
-            </button>
+            {chatSearch && <p className="text-[10px] text-white/30 mt-1 px-1">{filteredMessages.length} result{filteredMessages.length !== 1 ? 's' : ''}</p>}
           </div>
-        </div>
-      )}
-      <div ref={chatScrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-2.5 max-w-4xl w-full mx-auto">
-        {chatTab === 'activity' ? (
-          activityLog.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <FileText size={24} className="text-white/15 mb-2" />
-              <p className="text-xs text-white/40">No activity yet</p>
-            </div>
-          ) : (
-            activityLog.map((entry, i) => (
-              <div key={i} className="flex items-center gap-1.5 px-1">
-                <div className="w-1 h-1 rounded-full bg-zoom-blue shrink-0" />
-                <span className="text-[10px] font-medium text-white/60">{entry.userName}</span>
-                <span className="text-[10px] text-white/35 truncate">{entry.message}</span>
+        )}
+
+        {/* Waiting banner */}
+        {banner && (
+          <div className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 shrink-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-[11px] text-amber-400">
+                <Loader2 size={12} className="animate-spin" />
+                <span>Waiting for host approval</span>
               </div>
-            ))
-          )
-        ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <MessageCircle size={24} className="text-white/15 mb-2" />
-            <p className="text-xs text-white/40">No messages yet</p>
-            <p className="text-[10px] text-white/25 mt-1">Say hello to your study group</p>
+              <button onClick={() => navigate('/dashboard')} className="px-3 py-1 rounded bg-red-500/90 text-white text-[11px] font-medium hover:bg-red-600 transition-colors">Leave Room</button>
+            </div>
           </div>
-        ) : (
-          (() => {
-            const pinnedMsgs = messages.filter((m) => m && m._id && pinnedMessageIds.includes(m._id))
-            const togglePin = (msgId, pinned) => {
-              emitPinMessage(msgId, pinned)
-              if (!pinned) toast('Message pinned to chat', 'success')
-            }
-            return (
+        )}
+
+        {/* Pinned Tab */}
+        {chatTab === 'pinned' && (
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {pinnedMsgs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <Pin size={28} className="text-white/10 mb-3" />
+                <p className="text-sm font-semibold text-white/30">No pinned messages</p>
+                <p className="text-[11px] text-white/20 mt-1">Hover a message and click the pin icon</p>
+              </div>
+            ) : (
               <>
-                {pinnedMsgs.length > 0 && (
-                  <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-2 space-y-2">
-                    <div className="flex items-center gap-1 text-yellow-400/90">
-                      <Pin size={11} />
-                      <span className="text-[10px] font-semibold uppercase tracking-wide">Pinned</span>
-                      {isHost && (
-                        <button
-                          onClick={() => pinnedMsgs.forEach((m) => emitPinMessage(m._id, false))}
-                          className="ml-auto text-[10px] text-yellow-400/70 hover:text-yellow-300 transition-colors"
-                        >
-                          Unpin all
-                        </button>
-                      )}
-                    </div>
-                    {pinnedMsgs.map((msg) => {
-                      const pOwn = msg.userId === user?.id
-                      return (
-                        <div key={msg._id} className="flex items-start gap-2">
-                          <div className={`w-6 h-6 rounded-full overflow-hidden flex items-center justify-center shrink-0 ${pOwn ? 'bg-zoom-blue text-white' : 'bg-white/10 text-white/60'}`}>
-                            {msg.avatar ? (
-                              <img src={getAssetUrl(msg.avatar)} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none' }} />
-                            ) : (
-                              <span className="text-[9px] font-semibold">{(msg.username || msg.name || '?').trim()[0]?.toUpperCase()}</span>
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-baseline gap-1.5">
-                              <span className="text-[11px] font-medium text-white/80">@{msg.username || msg.name}{pOwn ? ' (You)' : ''}</span>
-                            </div>
-                            <p className="text-xs text-white/60 leading-relaxed break-words">{renderMentions(msg.text, roomUsers)}</p>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-                {messages.map((msg) => {
-                  const initials = (msg.username || msg.name || '?')
-                    .split(' ')
-                    .map((n) => n[0])
-                    .join('')
-                    .toUpperCase()
-                    .slice(0, 2)
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-semibold text-white/50 uppercase tracking-wider">{pinnedMsgs.length} pinned</span>
+                  {isHost && <button onClick={() => pinnedMsgs.forEach((m) => emitPinMessage(m._id, false))} className="text-[10px] text-red-400/70 hover:text-red-300 transition-colors">Unpin all</button>}
+                </div>
+                {pinnedMsgs.map((msg) => {
                   const isOwn = msg.userId === user?.id
-                  const time = formatMessageTime(msg.createdAt)
-                  const isPinned = msg._id && pinnedMessageIds.includes(msg._id)
                   return (
-                    <div key={msg._id || `${msg.createdAt}-${msg.userId}-${msg.text}`} className={`flex items-start gap-2 ${isPinned ? 'opacity-70' : ''}`}>
-                      <div className={`w-6 h-6 rounded-full overflow-hidden flex items-center justify-center shrink-0 ${
-                        isOwn ? 'bg-zoom-blue text-white' : 'bg-white/10 text-white/60'
-                      }`}>
-                        {msg.avatar ? (
-                          <img src={getAssetUrl(msg.avatar)} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none' }} />
-                        ) : (
-                          <span className="text-[9px] font-semibold">{initials}</span>
-                        )}
+                    <div key={msg._id} className="flex items-start gap-3 p-3 rounded-xl border border-yellow-500/20 bg-yellow-500/5 hover:bg-yellow-500/10 transition-colors group">
+                      <div className={`w-8 h-8 rounded-full overflow-hidden flex items-center justify-center shrink-0 text-[11px] font-bold ${isOwn ? 'bg-[#53fc18] text-[#0e0f13]' : 'bg-white/10 text-white/60'}`}>
+                        {msg.avatar ? <img src={getAssetUrl(msg.avatar)} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none' }} /> : (msg.username || msg.name || '?')[0]?.toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-baseline gap-1.5 mb-0.5">
-                          <span className="text-[11px] font-medium text-white/80">@{msg.username || msg.name}{isOwn ? ' (You)' : ''}</span>
-                          <span className="text-[9px] text-white/25">{time}</span>
+                        <div className="flex items-baseline gap-2 mb-0.5">
+                          <span className="text-[12px] font-bold text-white">{msg.username || msg.name}</span>
+                          <span className="text-[10px] text-white/30">{formatMessageTime(msg.createdAt)}</span>
+                          <Pin size={9} className="text-yellow-400/60 ml-auto shrink-0" />
                         </div>
-                        {msg.gif && msg.gif.url && (
-                          <img
-                            src={msg.gif.preview || msg.gif.url}
-                            alt={msg.gif.title || 'GIF'}
-                            loading="lazy"
-                            className="rounded-lg max-w-[220px] mb-0.5 border border-white/10"
-                            style={msg.gif.width ? { aspectRatio: `${msg.gif.width} / ${Math.max(msg.gif.height, 1)}` } : undefined}
-                            onClick={() => window.open(msg.gif.url, '_blank')}
-                          />
-                        )}
-                        {msg.file && (
-                          <a
-                            href={getChatFileUrl(roomId, msg.file)}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(e) => { if (getChatFileUrl(roomId, msg.file) === '#') e.preventDefault() }}
-                            className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 mb-0.5 hover:border-zoom-blue/50 hover:bg-white/10 transition-colors max-w-full"
-                          >
-                            <span className="w-7 h-7 rounded bg-zoom-blue/20 text-zoom-blue flex items-center justify-center shrink-0">
-                              <FileIcon size={13} />
-                            </span>
-                            <span className="min-w-0">
-                              <span className="block text-[11px] font-medium text-white/80 truncate">{msg.file.fileName || 'file'}</span>
-                              <span className="block text-[9px] text-white/30">{formatBytes(msg.file.size)}</span>
-                            </span>
-                          </a>
-                        )}
-                        <div className="flex items-start gap-2 group/message">
-                          <p className="text-xs text-white/60 leading-relaxed break-words">{renderMentions(msg.text, roomUsers)}</p>
-                          <div className="flex items-center opacity-0 group-hover/message:opacity-100 transition-opacity shrink-0">
-                            {isHost && msg._id && (
-                              <button
-                                onClick={() => togglePin(msg._id, !isPinned)}
-                                className={`p-1 rounded transition-colors ${isPinned ? 'text-yellow-400' : 'text-white/30 hover:text-white/70 hover:bg-white/5'}`}
-                                title={isPinned ? 'Unpin message' : 'Pin message'}
-                              >
-                                <Pin size={11} />
-                              </button>
-                            )}
-                          </div>
-                        </div>
+                        <p className="text-[12px] text-white/70 leading-relaxed break-words">{renderMentions(msg.text, roomUsers)}</p>
                       </div>
+                      {isHost && <button onClick={() => emitPinMessage(msg._id, false)} className="opacity-0 group-hover:opacity-100 text-white/30 hover:text-red-400 transition-all p-1 rounded shrink-0"><X size={12} /></button>}
                     </div>
                   )
                 })}
               </>
-            )
-          })()
+            )}
+          </div>
+        )}
+
+        {/* Activity Tab */}
+        {chatTab === 'activity' && (
+          <div className="flex-1 overflow-y-auto p-4">
+            {activityLog.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <FileText size={28} className="text-white/10 mb-3" />
+                <p className="text-sm font-semibold text-white/30">No activity yet</p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {activityLog.map((entry, i) => (
+                  <div key={i} className="flex items-start gap-2.5 py-1.5 px-2 rounded-lg hover:bg-white/5 transition-colors group">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#53fc18]/60 mt-1.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[11px] font-semibold text-white/70">{entry.userName}</span>
+                      <span className="text-[11px] text-white/40"> {entry.message}</span>
+                    </div>
+                    {entry.time && <span className="text-[10px] text-white/20 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">{formatMessageTime(entry.time)}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Main Chat Tab */}
+        {chatTab === 'chat' && (
+          <div className="flex-1 flex flex-col min-h-0 relative">
+            {/* Messages area */}
+            <div
+              ref={chatScrollRef}
+              onScroll={handleChatScroll}
+              className="flex-1 overflow-y-auto py-4"
+              style={{ scrollbarWidth: 'thin', scrollbarColor: '#2a2d33 transparent' }}
+            >
+              {filteredMessages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center px-4">
+                  <div className="w-16 h-16 rounded-2xl bg-[#53fc18]/10 flex items-center justify-center mb-4 border border-[#53fc18]/20">
+                    <MessageCircle size={28} className="text-[#53fc18]/60" />
+                  </div>
+                  <p className="text-sm font-bold text-white/40">{chatSearch ? 'No results found' : 'Start the conversation!'}</p>
+                  <p className="text-[11px] text-white/20 mt-1">{chatSearch ? `No messages matching "${chatSearch}"` : `This is the beginning of #general in ${room?.name || 'this room'}`}</p>
+                </div>
+              ) : (
+                <div>
+                  {groupedItems.map((item) => {
+                    if (item.type === 'date') {
+                      const d = new Date(item.date)
+                      const now = new Date()
+                      const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1)
+                      const dateLabel = d.toDateString() === now.toDateString() ? 'Today'
+                        : d.toDateString() === yesterday.toDateString() ? 'Yesterday'
+                        : d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })
+                      return (
+                        <div key={item.key} className="flex items-center gap-3 px-4 py-3">
+                          <div className="flex-1 h-px bg-white/[0.07]" />
+                          <span className="text-[10px] font-semibold text-white/30 uppercase tracking-wider whitespace-nowrap px-2 py-0.5 rounded bg-white/5 border border-white/[0.07]">{dateLabel}</span>
+                          <div className="flex-1 h-px bg-white/[0.07]" />
+                        </div>
+                      )
+                    }
+                    const { msg, isGrouped } = item
+                    const isOwn = msg.userId === user?.id
+                    const isPinned = msg._id && pinnedMessageIds.includes(msg._id)
+                    const isHovered = hoveredMsgId === item.key
+                    const reactions = msgReactions[msg._id] || {}
+                    const hasReactions = Object.keys(reactions).some(e => reactions[e]?.length > 0)
+                    const initials = (msg.username || msg.name || '?').slice(0, 2).toUpperCase()
+                    const time = formatMessageTime(msg.createdAt)
+                    return (
+                      <div
+                        key={item.key}
+                        onMouseEnter={() => setHoveredMsgId(item.key)}
+                        onMouseLeave={() => setHoveredMsgId(null)}
+                        className={`relative group flex items-start gap-3 px-4 transition-colors ${isGrouped ? 'pt-0.5 pb-0.5' : 'pt-3 pb-0.5'} ${isPinned ? 'bg-yellow-500/5 border-l-2 border-yellow-500/40' : isHovered ? 'bg-white/[0.03]' : ''}`}
+                      >
+                        {/* Avatar gutter */}
+                        <div className="w-9 shrink-0 flex justify-center">
+                          {isGrouped ? (
+                            <span className="text-[9px] text-white/20 pt-1 opacity-0 group-hover:opacity-100 transition-opacity select-none">
+                              {new Date(msg.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                            </span>
+                          ) : (
+                            <div className={`w-9 h-9 rounded-full overflow-hidden flex items-center justify-center text-[11px] font-bold shrink-0 ${isOwn ? 'bg-[#53fc18] text-[#0e0f13]' : 'bg-gradient-to-br from-[#232a3a] to-[#1a1e2a] text-white/70 border border-white/10'}`}>
+                              {msg.avatar ? <img src={getAssetUrl(msg.avatar)} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none' }} /> : initials}
+                            </div>
+                          )}
+                        </div>
+                        {/* Content */}
+                        <div className="flex-1 min-w-0">
+                          {!isGrouped && (
+                            <div className="flex items-baseline gap-2 mb-0.5">
+                              <span className={`text-[13px] font-bold leading-none ${isOwn ? 'text-[#53fc18]' : 'text-white'}`}>
+                                {msg.username || msg.name}
+                                {isOwn && <span className="text-[10px] font-normal text-white/30 ml-1">(You)</span>}
+                              </span>
+                              {isHost && msg.userId === room?.host?._id && (
+                                <span className="text-[9px] font-bold text-yellow-400 bg-yellow-400/10 px-1.5 py-0.5 rounded uppercase tracking-wide">Host</span>
+                              )}
+                              <span className="text-[10px] text-white/25 font-normal">{time}</span>
+                              {isPinned && <Pin size={9} className="text-yellow-400/50" />}
+                            </div>
+                          )}
+                          {/* Reply preview */}
+                          {msg.replyTo && (
+                            <div className="flex items-center gap-1.5 mb-1 pl-2 border-l-2 border-white/20">
+                              <span className="text-[10px] text-white/40 truncate">
+                                <span className="font-semibold text-white/60">{msg.replyTo.username}</span>
+                                {' '}{msg.replyTo.text?.slice(0, 60)}{msg.replyTo.text?.length > 60 ? '...' : ''}
+                              </span>
+                            </div>
+                          )}
+                          {/* GIF */}
+                          {msg.gif?.url && (
+                            <img src={msg.gif.preview || msg.gif.url} alt={msg.gif.title || 'GIF'} loading="lazy"
+                              className="rounded-xl max-w-[260px] mb-1 border border-white/10 cursor-pointer hover:opacity-90 transition-opacity"
+                              style={msg.gif.width ? { aspectRatio: `${msg.gif.width} / ${Math.max(msg.gif.height, 1)}` } : undefined}
+                              onClick={() => window.open(msg.gif.url, '_blank')} />
+                          )}
+                          {/* File */}
+                          {msg.file && (
+                            <a href={getChatFileUrl(roomId, msg.file)} target="_blank" rel="noreferrer"
+                              onClick={(e) => { if (getChatFileUrl(roomId, msg.file) === '#') e.preventDefault() }}
+                              className="inline-flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 mb-1 hover:border-[#53fc18]/40 hover:bg-[#53fc18]/5 transition-all group/file max-w-[280px]">
+                              <div className="w-9 h-9 rounded-lg bg-[#53fc18]/15 text-[#53fc18] flex items-center justify-center shrink-0"><FileIcon size={16} /></div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[12px] font-semibold text-white/80 truncate group-hover/file:text-white transition-colors">{msg.file.fileName || 'file'}</p>
+                                <p className="text-[10px] text-white/30">{formatBytes(msg.file.size)}</p>
+                              </div>
+                            </a>
+                          )}
+                          {/* Text */}
+                          {msg.text && (
+                            <p className={`text-[13px] leading-relaxed break-words ${isOwn ? 'text-white/90' : 'text-white/80'}`}>
+                              {renderMentions(msg.text, roomUsers)}
+                            </p>
+                          )}
+                          {/* Reactions */}
+                          {hasReactions && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {Object.entries(reactions).filter(([, u]) => u.length > 0).map(([emoji, users]) => {
+                                const iMine = users.includes(user?.id)
+                                return (
+                                  <button key={emoji} onClick={() => handleToggleReaction(msg._id, emoji)}
+                                    className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] border transition-all ${iMine ? 'bg-[#53fc18]/15 border-[#53fc18]/40 text-white' : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10 hover:border-white/20'}`}
+                                    title={`${users.length} reaction${users.length !== 1 ? 's' : ''}`}>
+                                    <span>{emoji}</span><span className="text-[10px] font-semibold">{users.length}</span>
+                                  </button>
+                                )
+                              })}
+                              <button onClick={() => setEmojiPickerMsgId(emojiPickerMsgId === msg._id ? null : msg._id)}
+                                className="px-2 py-0.5 rounded-full border border-white/10 bg-white/5 text-white/30 hover:text-white/60 hover:bg-white/10 text-[11px] transition-all">+</button>
+                            </div>
+                          )}
+                        </div>
+                        {/* Hover toolbar */}
+                        {isHovered && (
+                          <div className="absolute top-1 right-3 z-20 flex items-center gap-0.5 bg-[#1a1e2a] border border-white/10 rounded-lg shadow-2xl p-0.5">
+                            {QUICK_EMOJIS.slice(0, 3).map(emoji => (
+                              <button key={emoji} onClick={() => msg._id && handleToggleReaction(msg._id, emoji)}
+                                className="w-7 h-7 rounded-md flex items-center justify-center text-[13px] hover:bg-white/10 transition-colors" title={emoji}>{emoji}</button>
+                            ))}
+                            <button onClick={() => setEmojiPickerMsgId(emojiPickerMsgId === msg._id ? null : msg._id)}
+                              className="w-7 h-7 rounded-md flex items-center justify-center text-[11px] hover:bg-white/10 transition-colors" title="React">😊</button>
+                            <button onClick={() => setReplyTo({ _id: msg._id, username: msg.username || msg.name, text: msg.text })}
+                              className="w-7 h-7 rounded-md flex items-center justify-center text-white/40 hover:text-white/80 hover:bg-white/10 transition-colors" title="Reply">
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9,17 4,12 9,7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+                            </button>
+                            {isHost && msg._id && (
+                              <button onClick={() => togglePin(msg._id, !isPinned)}
+                                className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors ${isPinned ? 'text-yellow-400 bg-yellow-400/10' : 'text-white/40 hover:text-white/80 hover:bg-white/10'}`}
+                                title={isPinned ? 'Unpin' : 'Pin'}><Pin size={12} /></button>
+                            )}
+                          </div>
+                        )}
+                        {/* Emoji picker */}
+                        {emojiPickerMsgId === msg._id && (
+                          <div className="absolute right-3 z-30 p-2 rounded-xl border border-white/10 shadow-2xl grid grid-cols-5 gap-1" style={{ background: '#1a1e2a', bottom: '100%', marginBottom: 4 }}>
+                            {QUICK_EMOJIS.map(emoji => (
+                              <button key={emoji} onClick={() => msg._id && handleToggleReaction(msg._id, emoji)}
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-lg hover:bg-white/10 transition-colors">{emoji}</button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Scroll to bottom */}
+            {!chatScrollAtBottom && (
+              <div className="absolute bottom-20 right-4 z-20">
+                <button onClick={handleScrollToBottom}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold shadow-lg border border-white/10 transition-all hover:scale-105"
+                  style={{ background: '#1a1e2a', color: '#53fc18' }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6,9 12,15 18,9"/></svg>
+                  New messages
+                </button>
+              </div>
+            )}
+
+            {/* Input */}
+            <div className="shrink-0 px-3 pb-4 pt-2" style={{ background: '#0e1015' }}>
+              {replyTo && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-t-xl border-t border-x border-white/10 bg-white/[0.03]">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-[#53fc18] shrink-0"><polyline points="9,17 4,12 9,7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+                  <p className="flex-1 text-[11px] text-white/50 truncate">
+                    <span className="font-semibold text-white/70">@{replyTo.username}</span>
+                    {' '}{replyTo.text?.slice(0, 80)}{replyTo.text?.length > 80 ? '...' : ''}
+                  </p>
+                  <button onClick={() => setReplyTo(null)} className="text-white/30 hover:text-white/70 shrink-0"><X size={12} /></button>
+                </div>
+              )}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (!chatInput.trim()) return
+                  clearTimeout(typingTimeoutRef.current)
+                  if (isTypingRef.current) { isTypingRef.current = false; emitTypingStop() }
+                  emitMessage(chatInput.trim(), null, null, replyTo ? { _id: replyTo._id, username: replyTo.username, text: replyTo.text } : undefined)
+                  setChatInput('')
+                  setMentionQuery(null)
+                  setReplyTo(null)
+                  setTimeout(handleScrollToBottom, 50)
+                }}
+                className="relative"
+              >
+                <div className={`flex items-center gap-2 px-3 py-2.5 border transition-all ${replyTo ? 'rounded-b-xl rounded-t-none' : 'rounded-xl'}`}
+                  style={{ background: '#1a1e2a', borderColor: 'rgba(255,255,255,0.1)' }}>
+                  <input ref={chatFileInputRef} type="file" className="hidden" onChange={handleChatAttach} />
+                  <button type="button" onClick={() => chatFileInputRef.current?.click()} disabled={chatAttaching}
+                    className="text-white/40 hover:text-white/80 p-1.5 rounded-lg hover:bg-white/10 transition-colors disabled:opacity-50 shrink-0" title="Attach file">
+                    {chatAttaching ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />}
+                  </button>
+                  <input value={chatInput} onChange={handleChatInputChange}
+                    onKeyDown={(e) => { handleChatKeyDown(e); if (e.key === 'Escape') setReplyTo(null) }}
+                    placeholder={replyTo ? `Reply to @${replyTo.username}...` : 'Message #general'}
+                    className="flex-1 bg-transparent text-[13px] text-white placeholder:text-white/25 outline-none" />
+                  <button type="button" onClick={() => { setGifPickerOpen((v) => !v); if (!gifQuery) setGifQuery('') }}
+                    className={`px-2 py-1 rounded-lg text-[10px] font-extrabold transition-all shrink-0 ${gifPickerOpen ? 'bg-[#53fc18]/20 text-[#53fc18]' : 'text-white/40 hover:text-white/70 hover:bg-white/10'}`}
+                    title="Send a GIF">GIF</button>
+                  <button type="submit" disabled={!chatInput.trim()}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0 disabled:opacity-30"
+                    style={chatInput.trim() ? { background: '#53fc18', color: '#0e0f13' } : { background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.3)' }}>
+                    <Send size={14} />
+                  </button>
+                </div>
+                <GifPicker open={gifPickerOpen} onClose={() => setGifPickerOpen(false)} onSelect={handleSendGif}
+                  query={gifQuery} onQueryChange={handleGifQueryChange} results={gifResults}
+                  searching={gifSearching} error={gifError} onTrending={loadTrendingGifs} />
+                {typingLabel && (
+                  <div className="flex items-center gap-1.5 mt-1.5 px-1">
+                    <div className="flex gap-0.5">
+                      {[0,1,2].map((i) => (
+                        <div key={i} className="w-1 h-1 rounded-full bg-[#53fc18]/70"
+                          style={{ animation: `bounce 1.2s ${i * 0.2}s ease-in-out infinite` }} />
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-white/40 italic">{typingLabel}</p>
+                  </div>
+                )}
+                {mentionQuery !== null && mentionUsers.length > 0 && (
+                  <div className="absolute bottom-full left-0 right-0 mb-2 rounded-xl border border-white/10 shadow-2xl overflow-hidden z-50" style={{ background: '#1a1e2a' }}>
+                    <div className="px-3 py-1.5 border-b border-white/[0.07]">
+                      <span className="text-[10px] font-semibold text-white/30 uppercase tracking-wider">Members</span>
+                    </div>
+                    {mentionUsers.map((u, i) => (
+                      <button key={u._id || u.socketId} type="button" onClick={() => handleMentionSelect(u.name)}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-white/10 transition-colors ${i === mentionIndex ? 'bg-white/10' : ''}`}>
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#232a3a] to-[#1a1e2a] border border-white/10 flex items-center justify-center text-[11px] font-bold text-white/60 shrink-0 overflow-hidden">
+                          {u.avatar ? <img src={getAssetUrl(u.avatar)} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none' }} /> : (u.name || '?')[0]?.toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[12px] font-semibold text-white truncate">{u.name}</p>
+                          {u.username && <p className="text-[10px] text-white/40 truncate">@{u.username}</p>}
+                        </div>
+                        <div className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </form>
+            </div>
+          </div>
         )}
       </div>
-      {chatTab === 'chat' && (
-        <form onSubmit={handleSendChat} className="p-2 border-t border-white/10 relative">
-          <div className="flex items-center gap-1.5 bg-white/5 rounded px-2.5 py-1.5 border border-white/10">
-            <input
-              ref={chatFileInputRef}
-              type="file"
-              className="hidden"
-              onChange={handleChatAttach}
-            />
-            <button
-              type="button"
-              onClick={() => chatFileInputRef.current?.click()}
-              disabled={chatAttaching}
-              className="text-white/40 hover:text-white/80 p-1 rounded transition-colors disabled:opacity-50"
-              title="Attach file"
-            >
-              {chatAttaching ? <Loader2 size={13} className="animate-spin" /> : <Paperclip size={13} />}
-            </button>
-            <input
-              value={chatInput}
-              onChange={handleChatInputChange}
-              onKeyDown={handleChatKeyDown}
-              placeholder="Type a message... (@ to mention)"
-              className="flex-1 bg-transparent text-xs text-white placeholder:text-white/30 outline-none"
-            />
-            <button
-              type="button"
-              onClick={() => { setGifPickerOpen((v) => !v); if (!gifQuery) setGifQuery(''); }}
-              className={`text-white/40 hover:text-white/80 p-1 rounded transition-colors ${gifPickerOpen ? 'text-zoom-blue bg-zoom-blue/10' : ''}`}
-              title="Send a GIF"
-            >
-              <span className="text-[11px] font-bold">GIF</span>
-            </button>
-            <button type="submit" className="text-zoom-blue p-1 hover:bg-zoom-blue/10 rounded transition-colors">
-              <Send size={13} />
-            </button>
-          </div>
-          <GifPicker
-            open={gifPickerOpen}
-            onClose={() => setGifPickerOpen(false)}
-            onSelect={handleSendGif}
-            query={gifQuery}
-            onQueryChange={handleGifQueryChange}
-            results={gifResults}
-            searching={gifSearching}
-            error={gifError}
-            onTrending={loadTrendingGifs}
-          />
-          {typingLabel && (
-            <p className="text-white/30 text-[10px] italic mt-1 px-1">{typingLabel}</p>
-          )}
-          {mentionQuery !== null && mentionUsers.length > 0 && (
-            <div className="absolute bottom-full left-0 right-0 mb-1 bg-zoom-dark border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
-              {mentionUsers.map((u, i) => (
-                <button
-                  key={u._id || u.socketId}
-                  type="button"
-                  onClick={() => handleMentionSelect(u.name)}
-                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-white/10 transition ${i === mentionIndex ? 'bg-white/10 text-white' : 'text-white/70'}`}
-                >
-                  <span className="w-5 h-5 rounded bg-white/10 flex items-center justify-center text-[9px] font-semibold text-white/50 shrink-0">
-                    {(u.name || '?')[0]?.toUpperCase()}
-                  </span>
-                  {u.name}
-                </button>
-              ))}
-            </div>
-          )}
-        </form>
-      )}
-    </div>
-  )
+    )
+  }
+
 
   if (loading) {
     return (

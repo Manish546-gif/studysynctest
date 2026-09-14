@@ -114,20 +114,29 @@ router.get('/search', async (req, res) => {
   }
 });
 
-// Trending / Curated Playlists with full length songs
+// Trending & Curated Genres according to user preference
 const CURATED_SEARCHES = {
-  lofi: 'lofi hip hop radio beats to study to chill',
-  chill: 'chillhop essentials study focus',
-  classical: 'chopin nocturnes mozart study focus classical',
-  pop: 'pop hits billboard study clean playlist',
-  synthwave: 'synthwave chillwave retro focus',
-  ghibli: 'studio ghibli piano collection chill',
+  pop: 'top global billboard pop hits songs playlist',
+  hiphop: 'top trending hip hop rap hits songs playlist',
+  bollywood: 'latest bollywood hindi hit songs playlist',
+  punjabi: 'top punjabi hits trending songs playlist',
+  rnb: 'best r&b and soul hits songs playlist',
+  rock: 'greatest rock anthems hits songs playlist',
+  edm: 'top edm electronic dance music hits playlist',
+  kpop: 'top kpop hits viral songs playlist',
+  indie: 'best indie alternative songs playlist',
+  gaming: 'popular gaming phonk synthwave music songs playlist',
+  anime: 'top anime opening theme songs ost',
+  acoustic: 'acoustic pop unplugged songs playlist',
+  latin: 'top latin reggaeton hits songs playlist',
+  classical: 'chopin mozart greatest classical piano masterpieces',
+  lofi: 'chill lofi beats aesthetic songs playlist',
 };
 
 router.get('/trending', async (req, res) => {
   try {
-    const category = req.query.category || 'lofi';
-    const query = CURATED_SEARCHES[category] || CURATED_SEARCHES.lofi;
+    const category = (req.query.category || 'pop').toLowerCase().trim();
+    const query = CURATED_SEARCHES[category] || `${category} songs playlist`;
     const limit = Math.min(parseInt(req.query.limit) || 15, 25);
 
     const tracks = await searchYouTube(query, limit);
@@ -135,6 +144,43 @@ router.get('/trending', async (req, res) => {
     res.json({
       category,
       tracks,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// User preference personalized recommendations endpoint
+router.get('/recommendations', async (req, res) => {
+  try {
+    const preferencesParam = String(req.query.preferences || '').trim();
+    const genres = preferencesParam ? preferencesParam.split(',').map(g => g.trim().toLowerCase()).filter(Boolean) : ['pop', 'hiphop'];
+    const limitPerGenre = Math.max(3, Math.floor(20 / Math.max(1, genres.length)));
+
+    const searchPromises = genres.slice(0, 4).map(async (genre) => {
+      const q = CURATED_SEARCHES[genre] || `${genre} hit songs playlist`;
+      return searchYouTube(q, limitPerGenre);
+    });
+
+    const resultsByGenre = await Promise.all(searchPromises);
+    const combinedTracks = [];
+    const seenIds = new Set();
+
+    // Interleave tracks so user gets a varied mix from their preferences
+    const maxLen = Math.max(...resultsByGenre.map(arr => arr.length), 0);
+    for (let i = 0; i < maxLen; i++) {
+      for (const list of resultsByGenre) {
+        if (list[i] && !seenIds.has(list[i].videoId || list[i].id)) {
+          seenIds.add(list[i].videoId || list[i].id);
+          combinedTracks.push(list[i]);
+        }
+      }
+    }
+
+    res.json({
+      genres,
+      tracks: combinedTracks,
+      total: combinedTracks.length,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

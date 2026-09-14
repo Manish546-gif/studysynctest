@@ -236,7 +236,9 @@ export const api = {
 
   // Music API
   searchMusic: (q, limit = 25) => request(`/music/search?q=${encodeURIComponent(q)}&limit=${limit}`),
-  getTrendingMusic: (category = 'lofi') => request(`/music/trending?category=${encodeURIComponent(category)}`),
+  getTrendingMusic: (category = 'pop') => request(`/music/trending?category=${encodeURIComponent(category)}`),
+  getPersonalizedMusic: (preferences = []) =>
+    request(`/music/recommendations?preferences=${encodeURIComponent(Array.isArray(preferences) ? preferences.join(',') : preferences)}`),
 
   // Custom Playlists
   getPlaylists: () => request('/playlists'),

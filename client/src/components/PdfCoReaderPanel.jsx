@@ -14,11 +14,21 @@ import {
   X,
   Crown,
   Loader2,
+  Download,
 } from 'lucide-react'
 
 // Configure PDF.js to use local bundled worker with zero CDN network delay
 if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+      'pdfjs-dist/build/pdf.worker.min.mjs',
+      import.meta.url
+    ).toString()
+  } catch (e) {
+    try {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
+    } catch {}
+  }
 }
 
 const PdfPageItem = React.memo(function PdfPageItem({
@@ -202,8 +212,11 @@ export default function PdfCoReaderPanel({
   const [numPages, setNumPages] = useState(0)
   const [scale, setScale] = useState(1.15)
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState('')
+  const [viewMode, setViewMode] = useState('canvas') // 'canvas' | 'native'
   const [fileName, setFileName] = useState('')
   const [fileUrl, setFileUrl] = useState('')
+  const [retryKey, setRetryKey] = useState(0)
 
   // Collaboration State
   const [followPresenter, setFollowPresenter] = useState(true)
@@ -221,16 +234,25 @@ export default function PdfCoReaderPanel({
 
   const containerRef = useRef(null)
 
+  const getEffectiveUrl = (url) => {
+    if (!url) return ''
+    const token = localStorage.getItem('token')
+    let resolved = url
+    if (!resolved.startsWith('http') && !resolved.startsWith('/api') && resolved.startsWith('/')) {
+      resolved = `/api${resolved}`
+    }
+    if (token && !resolved.includes('token=')) {
+      resolved = `${resolved}${resolved.includes('?') ? '&' : '?'}token=${token}`
+    }
+    return resolved
+  }
+
   // Auto-load initial file if passed directly from workspace
   useEffect(() => {
     if (initialFile && isOpen) {
-      const token = localStorage.getItem('token')
       const url = initialFile.url || ''
-      const remoteUrl = url.startsWith('http')
-        ? url
-        : `${url}${url.includes('?') ? '&' : '?'}token=${token}`
       setFileName(initialFile.fileName || 'Document.pdf')
-      setFileUrl(remoteUrl)
+      setFileUrl(getEffectiveUrl(url))
     }
   }, [initialFile, isOpen])
 
@@ -249,7 +271,7 @@ export default function PdfCoReaderPanel({
 
     const onPdfState = (state) => {
       if (state && state.fileUrl) {
-        setFileUrl(state.fileUrl)
+        setFileUrl(getEffectiveUrl(state.fileUrl))
         setFileName(state.fileName || 'Document.pdf')
         if (state.pageCount) {
           setNumPages((prev) => (prev > state.pageCount ? prev : state.pageCount))
@@ -308,9 +330,14 @@ export default function PdfCoReaderPanel({
     if (!fileUrl) return
     let isMounted = true
     setLoading(true)
+    setLoadError('')
+
+    const token = localStorage.getItem('token')
+    const effectiveUrl = getEffectiveUrl(fileUrl)
 
     const loadingTask = pdfjsLib.getDocument({
-      url: fileUrl,
+      url: effectiveUrl,
+      httpHeaders: token ? { Authorization: `Bearer ${token}` } : undefined,
       withCredentials: false,
     })
 
@@ -322,6 +349,7 @@ export default function PdfCoReaderPanel({
           setNumPages(total)
           setCurrentPage(1)
           setLoading(false)
+          setLoadError('')
           if (socket && roomId && total > 1) {
             socket.emit('pdf-update-page-count', { roomId, pageCount: total })
           }
@@ -329,13 +357,16 @@ export default function PdfCoReaderPanel({
       })
       .catch((err) => {
         console.warn('PDF load error:', err.message)
-        if (isMounted) setLoading(false)
+        if (isMounted) {
+          setLoading(false)
+          setLoadError(err?.message || 'Failed to parse PDF document')
+        }
       })
 
     return () => {
       isMounted = false
     }
-  }, [fileUrl, socket, roomId])
+  }, [fileUrl, socket, roomId, retryKey])
 
   // Stable callback when page enters view via scroll
   const handlePageVisible = React.useCallback(
@@ -615,6 +646,31 @@ export default function PdfCoReaderPanel({
             </button>
           </div>
 
+          {/* Mode Switcher & Download */}
+          <button
+            onClick={() => setViewMode((m) => (m === 'canvas' ? 'native' : 'canvas'))}
+            className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-colors cursor-pointer ${
+              viewMode === 'native'
+                ? 'bg-[#53fc18] text-[#0e1117] border-[#53fc18]'
+                : 'bg-white/5 border-white/10 text-white/70 hover:text-white hover:bg-white/10'
+            }`}
+            title="Toggle between Canvas Co-Reader and Browser Native Viewer"
+          >
+            {viewMode === 'native' ? '📄 Native View' : '✏️ Co-Read'}
+          </button>
+
+          {fileUrl && (
+            <a
+              href={fileUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center border border-white/10 transition-colors"
+              title="Open Original / Download"
+            >
+              <Download size={13} />
+            </a>
+          )}
+
           {/* Close Button */}
           <button
             onClick={onClose}
@@ -628,7 +684,7 @@ export default function PdfCoReaderPanel({
       {/* Main Canvas / Multi-Page Continuous Viewer Workspace */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-y-auto overflow-x-auto bg-[#0a0c10] p-6 relative custom-scrollbar flex flex-col items-center"
+        className="flex-1 overflow-y-auto overflow-x-auto bg-[#0a0c10] p-4 sm:p-6 relative custom-scrollbar flex flex-col items-center"
       >
         {!fileUrl ? (
           // Empty State / Upload Screen
@@ -674,8 +730,50 @@ export default function PdfCoReaderPanel({
               </div>
             )}
           </div>
+        ) : viewMode === 'native' ? (
+          // Native Browser PDF Viewer
+          <div className="w-full h-full max-w-6xl mx-auto flex flex-col rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-[#12151c]">
+            <iframe
+              src={`${fileUrl}#toolbar=1&navpanes=0`}
+              className="w-full h-full border-0 bg-[#0e1117]"
+              title={fileName}
+            />
+          </div>
+        ) : loadError && !pdfDoc ? (
+          // Canvas Parse Error with Fallback Actions
+          <div className="max-w-md w-full my-auto text-center p-8 rounded-3xl bg-[#141720] border border-red-500/20 shadow-2xl flex flex-col items-center">
+            <div className="w-14 h-14 rounded-2xl bg-red-500/15 text-red-400 flex items-center justify-center mb-4">
+              <FileText size={28} />
+            </div>
+            <h3 className="text-base font-bold text-white mb-1">Could not render in Canvas</h3>
+            <p className="text-xs text-white/40 mb-6">{loadError}</p>
+            <div className="flex flex-wrap gap-2 justify-center">
+              <button
+                type="button"
+                onClick={() => setRetryKey((k) => k + 1)}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition cursor-pointer"
+              >
+                Retry Canvas
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('native')}
+                className="px-4 py-2 rounded-xl bg-[#53fc18] text-[#0e1117] text-xs font-bold hover:brightness-110 transition cursor-pointer"
+              >
+                Open in Native Viewer
+              </button>
+              <a
+                href={fileUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 text-xs font-medium transition"
+              >
+                Open in New Tab
+              </a>
+            </div>
+          </div>
         ) : (
-          <div className="flex flex-col items-center gap-4 py-2">
+          <div className="flex flex-col items-center gap-4 py-2 w-full">
             {loading && (
               <div className="p-8 text-center text-white/60 flex items-center gap-2">
                 <Loader2 size={20} className="animate-spin text-[#53fc18]" />
@@ -684,7 +782,7 @@ export default function PdfCoReaderPanel({
             )}
 
             {/* Continuous Multi-Page List */}
-            {Array.from({ length: numPages || 1 }, (_, i) => i + 1).map((pageNum) => (
+            {pdfDoc && Array.from({ length: numPages || 1 }, (_, i) => i + 1).map((pageNum) => (
               <div key={pageNum} id={`pdf-page-${pageNum}`} className="relative flex flex-col items-center">
                 <PdfPageItem
                   doc={pdfDoc}

@@ -31,10 +31,12 @@ router.post('/', auth, async (req, res) => {
     const { name, description, tag, isPublic } = req.body;
     if (!name) return res.status(400).json({ error: 'Room name is required' });
 
+    const code = await Room.generateCode();
     const room = await Room.create({
       name,
       description: description || '',
       tag: tag || 'Study',
+      code,
       host: req.user._id,
       originalHost: req.user._id,
       members: [req.user._id],

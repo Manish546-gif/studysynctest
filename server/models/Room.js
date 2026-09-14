@@ -69,7 +69,7 @@ const agendaItemSchema = new mongoose.Schema({
 const roomSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   description: { type: String, default: '' },
-  code: { type: String, default: '', index: true },
+  code: { type: String, unique: true, uppercase: true, trim: true },
   host: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   originalHost: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
@@ -125,5 +125,13 @@ roomSchema.statics.generateCode = async function () {
   }
   return code;
 };
+
+roomSchema.pre('validate', async function () {
+  if (!this.code || typeof this.code !== 'string' || !this.code.trim()) {
+    this.code = await this.constructor.generateCode();
+  } else {
+    this.code = this.code.trim().toUpperCase();
+  }
+});
 
 module.exports = mongoose.model('Room', roomSchema);
